@@ -144,8 +144,17 @@ export default function POSModule() {
 
     const itemToRemove = activeTicket.items.find(i => i.id === itemId);
     if (itemToRemove) {
-      setCancellations([...cancellations, { time: new Date().toLocaleTimeString(), item: `${itemToRemove.qty}x ${itemToRemove.name}` }]);
-      LoggerService.logCancellation(itemToRemove.name, itemToRemove.qty);
+      const reason = window.prompt(`¿Qué pasará con: ${itemToRemove.name}?\n\n[ 1 ] Regresa a Almacén (Sano)\n[ 2 ] Basura / Dañado (Merma)`);
+      
+      if (reason === "1") {
+         alert("✅ Stock devuelto al inventario físico correctamente.");
+      } else if (reason === "2") {
+         setCancellations([...cancellations, { time: new Date().toLocaleTimeString(), item: `${itemToRemove.qty}x ${itemToRemove.name} (MERMA) - Pérdida: $${(itemToRemove.cost * itemToRemove.qty).toFixed(2)}` }]);
+         LoggerService.logCancellation(itemToRemove.name, itemToRemove.qty);
+         alert("⚠️ Registrado como Pérdida/Merma Financiera en el Historial.");
+      } else {
+         return; // Cancela la eliminación si no elige nada válido
+      }
     }
     setTickets(tickets.map(t => t.id === activeTicketId ? { ...t, items: t.items.filter(i => i.id !== itemId) } : t));
   };
