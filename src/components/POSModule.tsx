@@ -5,6 +5,7 @@ import { Html5QrcodeScanner } from "html5-qrcode";
 
 interface POSItem {
   id: string;
+  code?: string;
   name: string;
   price: number;
   cost: number;
@@ -18,6 +19,16 @@ interface Ticket {
   discountPct: number;
 }
 
+// Catálogo Global Mockeado (Debe coincidir con la Base de Datos real)
+const GLOBAL_CATALOG = [
+  { code: "TRU-16", name: "Martillo Truper 16oz", price: 120.5, cost: 80.0, location: "A-1", stock: 12, keywords: ["martillo", "truper", "16oz"] },
+  { code: "CLA-02", name: "Clavo 2 pulg", price: 45.0, cost: 25.0, location: "B-6", stock: 15, keywords: ["clavo", "clavos", "concreto"] },
+  { code: "COM-19", name: "Pintura Blanca 19L", price: 1250.0, cost: 900.0, location: "P-12", stock: 4, keywords: ["pintura", "blanca", "cubeta"] },
+  { code: "TOL-50", name: "Cemento Tolteca 50kg", price: 210.0, cost: 180.0, location: "AAA-100", stock: 200, keywords: ["cemento", "bulto", "tolteca"] },
+  { code: "CAB-12", name: "Cable Calibre 12", price: 15.0, cost: 8.0, location: "E-4", stock: 1500, keywords: ["cable", "calibre", "12"] },
+  { code: "BRO-04", name: "Brocha 4 pulgadas", price: 65.0, cost: 40.0, location: "P-10", stock: 4, keywords: ["brocha", "pulgadas"] }
+];
+
 export default function POSModule() {
   const [tickets, setTickets] = useState<Ticket[]>([{ id: 1, items: [], discountPct: 0 }]);
   const [activeTicketId, setActiveTicketId] = useState(1);
@@ -26,6 +37,7 @@ export default function POSModule() {
   const [isListening, setIsListening] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [securityKeyword, setSecurityKeyword] = useState("erika");
+  const [searchInput, setSearchInput] = useState("");
 
   const activeTicket = tickets.find(t => t.id === activeTicketId) || tickets[0];
 
@@ -34,14 +46,57 @@ export default function POSModule() {
     if (saved) setSecurityKeyword(saved.toLowerCase());
   }, []);
 
+  // --- LECTOR LÁSER USB (Global Key Interceptor) y Atajos F4/F8 ---
   useEffect(() => {
+    let barcodeBuffer = "";
+    let barcodeTimeout: any = null;
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'F4') { e.preventDefault(); applyDiscount("percent"); } 
-      else if (e.key === 'F8') { e.preventDefault(); applyDiscount("fixed"); }
+      // Atajos de Descuento
+      if (e.key === 'F4') { e.preventDefault(); applyDiscount("percent"); return; } 
+      if (e.key === 'F8') { e.preventDefault(); applyDiscount("fixed"); return; }
+
+      // Interceptor Láser: Solo actúa si el usuario NO está escribiendo manual en un input
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+      if (e.key === 'Enter' && barcodeBuffer.length > 2) {
+        e.preventDefault();
+        const scannedCode = barcodeBuffer.toUpperCase();
+        barcodeBuffer = "";
+        
+        const matched = GLOBAL_CATALOG.find(c => c.code === scannedCode);
+        if (matched) {
+          addToCart(matched.name, matched.price, "pz", matched.cost, 1);
+          speak(`Escaneado: ${matched.name}`);
+        } else {
+          speak("Producto no encontrado en catálogo.");
+        }
+      } else if (e.key.length === 1) {
+        barcodeBuffer += e.key;
+        clearTimeout(barcodeTimeout);
+        barcodeTimeout = setTimeout(() => { barcodeBuffer = ""; }, 100);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [tickets, activeTicketId]);
+
+  // Búsqueda Manual
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = searchInput.trim().toUpperCase();
+    if (!q) return;
+    
+    // Busca por código o nombre
+    const matched = GLOBAL_CATALOG.find(c => c.code === q || c.name.toUpperCase().includes(q));
+    if (matched) {
+      addToCart(matched.name, matched.price, "pz", matched.cost, 1);
+      setSearchInput("");
+    } else {
+      alert("No se encontró el producto.");
+    }
+  };
 
   // --- VISIÓN ARTIFICIAL (QR SCANNER) ---
   useEffect(() => {
@@ -52,12 +107,12 @@ export default function POSModule() {
         scanner.clear();
         setShowScanner(false);
         const loc = decodedText.replace("ERIKA-LOC-", "");
-        const matched = GLOBAL_CATALOG.find(c => c.location === loc);
+        const matched = GLOBAL_CATALOG.find(c => c.location === loc || c.code === decodedText);
         if(matched) {
           addToCart(matched.name, matched.price, "pz", matched.cost, 1);
-          speak(`Código detectado. ${matched.name} agregado al carrito.`);
+          speak(`Código de visión detectado. ${matched.name} agregado al carrito.`);
         } else {
-           alert(`📷 Código QR leído (${decodedText}), pero no hay producto asignado en catálogo.`);
+           alert(`📷 Código no mapeado (${decodedText}).`);
         }
       }, () => { /* ignore */ });
     }
@@ -116,16 +171,6 @@ export default function POSModule() {
     setTickets(tickets.map(t => t.id === activeTicketId ? { ...t, discountPct: finalPct } : t));
   };
 
-  // --- IA DE VOZ: VALIDACIÓN DE PALABRA CLAVE ---
-  const GLOBAL_CATALOG = [
-    { name: "Martillo Truper 16oz", price: 120.5, cost: 80.0, location: "A-1", stock: 12, keywords: ["martillo", "truper", "16oz"] },
-    { name: "Clavo 2 pulg", price: 45.0, cost: 25.0, location: "B-6", stock: 15, keywords: ["clavo", "clavos", "concreto"] },
-    { name: "Pintura Blanca 19L", price: 1250.0, cost: 900.0, location: "P-12", stock: 4, keywords: ["pintura", "blanca", "cubeta"] },
-    { name: "Cemento Tolteca 50kg", price: 210.0, cost: 180.0, location: "AAA-100", stock: 200, keywords: ["cemento", "bulto", "tolteca"] },
-    { name: "Cable Calibre 12", price: 15.0, cost: 8.0, location: "E-4", stock: 1500, keywords: ["cable", "calibre", "12"] },
-    { name: "Brocha 4 pulgadas", price: 65.0, cost: 40.0, location: "P-10", stock: 4, keywords: ["brocha", "pulgadas"] }
-  ];
-
   const fuzzyMatchKeywords = (fragment: string, keywords: string[]) => {
     const fWords = fragment.split(/\s+/);
     for (const kw of keywords) {
@@ -161,12 +206,9 @@ export default function POSModule() {
 
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript.toLowerCase();
-      console.log("Voz escuchada (Bruta):", transcript);
       
-      // REGLA DE SEGURIDAD 1: Buscar la palabra clave
       if (!transcript.includes(securityKeyword)) {
-        speak(`Error de autenticación. No escuché la palabra clave ${securityKeyword}.`);
-        alert(`🔒 Comando ignorado por seguridad. Agrega "${securityKeyword}" a tu frase para autorizar la acción por voz.`);
+        speak(`Error de autenticación. No escuché la palabra clave.`);
         return;
       }
 
@@ -188,7 +230,7 @@ export default function POSModule() {
 
         if (matchedProduct) {
           if (qty > matchedProduct.stock) {
-            voiceReply += `Solo hay ${matchedProduct.stock} unidades de ${matchedProduct.name}. Venta bloqueada. `;
+            voiceReply += `Solo hay ${matchedProduct.stock} de ${matchedProduct.name}. `;
           } else {
             addToCart(matchedProduct.name, matchedProduct.price, "pz", matchedProduct.cost, qty);
             voiceReply += `Agregué ${qty} ${matchedProduct.name}. `;
@@ -197,7 +239,7 @@ export default function POSModule() {
         }
       });
 
-      if (nothingFound) speak("No entendí ningún artículo válido en tu orden.");
+      if (nothingFound) speak("No encontré artículos válidos.");
       else speak("Autorizado. " + voiceReply);
     };
 
@@ -224,8 +266,8 @@ export default function POSModule() {
       
       {showScanner && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-          <h2 style={{ color: 'var(--color-primary)' }}>📷 Escáner de Etiquetas de Almacén</h2>
-          <p style={{ color: 'white', marginBottom: '20px' }}>Apunta tu cámara web o celular al código QR impreso.</p>
+          <h2 style={{ color: 'var(--color-primary)' }}>📷 Escáner de Visión Artificial</h2>
+          <p style={{ color: 'white', marginBottom: '20px' }}>Apunta al código QR o Código de Barras (CODE128).</p>
           <div id="qr-reader" style={{ width: '400px', maxWidth: '90%', background: 'white' }}></div>
           <button className="btn-primary" onClick={() => setShowScanner(false)} style={{ marginTop: '20px', background: 'transparent', border: '1px solid var(--color-primary)' }}>Cerrar Cámara</button>
         </div>
@@ -234,10 +276,10 @@ export default function POSModule() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div className="glass-panel" style={{ flex: 1, position: 'relative' }}>
           <div className="flex-between" style={{ marginBottom: '15px' }}>
-            <h2 style={{ color: 'var(--color-primary)', margin: 0 }}>Buscador de Productos</h2>
+            <h2 style={{ color: 'var(--color-primary)', margin: 0 }}>Terminal de Ventas</h2>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={() => setShowScanner(true)} className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--color-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                📷 Escanear QR
+                📷 Visión Web
               </button>
               <button onClick={startVoiceRecognition} className="btn-primary" style={{ background: isListening ? '#ef4444' : 'var(--glass-bg)', border: '1px solid var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', animation: isListening ? 'pulse 1.5s infinite' : 'none' }}>
                 🎤 Dictar
@@ -246,9 +288,16 @@ export default function POSModule() {
             <style>{`@keyframes pulse { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }`}</style>
           </div>
 
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-            <input type="text" placeholder="Buscar producto..." style={{ flex: 1, padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', color: 'white', border: '1px solid var(--color-primary)' }} autoFocus />
-          </div>
+          <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+            <input 
+              type="text" 
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Buscar por Nombre, Código de Barras o Disparar Pistola Láser..." 
+              style={{ flex: 1, padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', color: 'white', border: '1px solid var(--color-primary)' }} 
+            />
+            <button type="submit" className="btn-primary" style={{ background: 'var(--color-secondary)', color: 'black' }}>Agregar</button>
+          </form>
           
           <h3 style={{ color: 'var(--color-secondary)', marginBottom: '10px' }}>Atajos Rápidos (Teclado Numérico)</h3>
           <div className="grid-cols-2" style={{ gap: '10px' }}>

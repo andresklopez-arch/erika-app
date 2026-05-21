@@ -15,6 +15,7 @@ interface InventoryItem {
   supplier?: string;
   location?: string;
   autoPriced?: boolean;
+  priceChanged?: 'up' | 'down'; // <--- Alerta de Inflación
 }
 
 const INVENTORY_DB: InventoryItem[] = [
@@ -47,6 +48,75 @@ export default function InventoryModule() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Inventario_Filtrado");
     XLSX.writeFile(wb, `Exportacion_ERIKA_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const printMassivePDF = () => {
+    const newWindow = window.open("", "_blank");
+    if (!newWindow) return;
+
+    let htmlContent = `
+      <html>
+        <head>
+          <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+          <style>
+            body { font-family: sans-serif; margin: 0; padding: 20px; }
+            h1 { text-align: center; color: #333; margin-bottom: 40px; }
+            .grid-container {
+              display: grid;
+              grid-template-columns: repeat(3, 1fr);
+              gap: 20px;
+            }
+            .label-box {
+              border: 1px dashed #999;
+              padding: 15px;
+              text-align: center;
+              page-break-inside: avoid;
+            }
+            .label-name { font-size: 0.9rem; font-weight: bold; margin-bottom: 10px; max-height: 40px; overflow: hidden; }
+            .label-loc { font-size: 0.8rem; color: #666; margin-bottom: 10px; }
+          </style>
+        </head>
+        <body>
+          <h1>📦 Etiquetas de Almacén Masivas</h1>
+          <div class="grid-container">
+    `;
+
+    items.forEach((item, index) => {
+      if (!item.code) return;
+      htmlContent += `
+        <div class="label-box">
+          <div class="label-name">${item.name}</div>
+          <div class="label-loc">Ubicación: ${item.location || 'N/A'} | Prov: ${item.supplier || 'N/A'}</div>
+          <svg id="barcode-${index}"></svg>
+        </div>
+      `;
+    });
+
+    htmlContent += `
+          </div>
+          <script>
+            window.onload = function() {
+              ${items.map((item, index) => {
+                if (!item.code) return "";
+                return `
+                  JsBarcode("#barcode-${index}", "${item.code}", {
+                    format: "CODE128",
+                    width: 1.5,
+                    height: 50,
+                    displayValue: true,
+                    fontSize: 14
+                  });
+                `;
+              }).join("\n")}
+              setTimeout(() => { window.print(); }, 1500);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    newWindow.document.write(htmlContent);
+    newWindow.document.close();
   };
 
   const printDualLabel = (location: string, productName: string, productCode: string) => {
@@ -115,7 +185,8 @@ export default function InventoryModule() {
           {importHistory.length > 0 && (
             <button className="btn-primary" onClick={undoLastImport} style={{ background: 'transparent', border: '1px solid var(--color-primary)' }}>↩️ Deshacer Importación</button>
           )}
-          <button className="btn-primary" onClick={exportToExcel} style={{ background: 'var(--glass-bg)', border: '1px solid #10b981', color: '#10b981' }}>📥 Exportar Catálogo</button>
+          <button className="btn-primary" onClick={printMassivePDF} style={{ background: 'transparent', border: '1px solid var(--color-primary)' }}>🖨️ Etiquetas (Masivo)</button>
+          <button className="btn-primary" onClick={exportToExcel} style={{ background: 'var(--glass-bg)', border: '1px solid #10b981', color: '#10b981' }}>📥 Exportar</button>
           <button className="btn-primary" onClick={() => setShowImporter(true)} style={{ background: 'linear-gradient(135deg, var(--color-secondary), #059669)' }}>⚡ Carga Inteligente</button>
         </div>
       </div>
@@ -134,11 +205,14 @@ export default function InventoryModule() {
           </thead>
           <tbody>
             {items.map(item => {
+              const rowBg = item.priceChanged === 'up' ? 'rgba(239, 68, 68, 0.15)' : item.autoPriced ? 'rgba(16, 185, 129, 0.1)' : 'transparent';
+              
               return (
-                <tr key={item.id} style={{ borderBottom: '1px solid var(--glass-border)', background: item.autoPriced ? 'rgba(16, 185, 129, 0.1)' : 'transparent' }}>
+                <tr key={item.id} style={{ borderBottom: '1px solid var(--glass-border)', background: rowBg }}>
                   <td style={{ padding: '15px', fontWeight: 'bold', color: 'var(--color-primary)' }}>{item.code || '-'}</td>
                   <td style={{ padding: '15px', fontWeight: 'bold' }}>
                     {item.name}
+                    {item.priceChanged === 'up' && <span style={{ marginLeft: '10px', color: '#ef4444', fontSize: '0.8rem' }}>⚠️ INFLACIÓN (Precio Subió)</span>}
                     <div style={{ fontSize: '0.75rem', color: 'var(--color-secondary)' }}>Prov: {item.supplier || 'N/A'}</div>
                   </td>
                   <td style={{ padding: '15px' }}>
@@ -149,11 +223,11 @@ export default function InventoryModule() {
                       {item.location && (
                         <button 
                           onClick={() => printDualLabel(item.location!, item.name, item.code || item.id)} 
-                          title="Imprimir Etiqueta Dual (QR Bodega + Código Barras Caja)"
+                          title="Imprimir Etiqueta Dual"
                           className="btn-primary"
                           style={{ padding: '4px 8px', fontSize: '0.9rem' }}
                         >
-                          🖨️ Etiqueta
+                          🖨️
                         </button>
                       )}
                     </div>
@@ -163,7 +237,6 @@ export default function InventoryModule() {
                   <td style={{ padding: '15px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span style={{ color: item.autoPriced ? 'var(--color-secondary)' : 'white', fontWeight: 'bold' }}>${item.price.toFixed(2)}</span>
-                      {item.autoPriced && <span title="Precio Asignado Automáticamente" style={{ fontSize: '0.8rem', background: 'var(--color-secondary)', color: 'black', padding: '2px 6px', borderRadius: '4px' }}>AUTO</span>}
                     </div>
                   </td>
                 </tr>
@@ -180,33 +253,38 @@ export default function InventoryModule() {
           onImport={(newProducts) => {
             setImportHistory([...importHistory, items]);
             
-            // 🧠 LÓGICA DE DEDUPLICACIÓN
+            // 🧠 LÓGICA DE DEDUPLICACIÓN CON DETECCIÓN DE INFLACIÓN
             let updatedCount = 0;
             let newCount = 0;
-            const nextItemsList = [...items];
+            const nextItemsList = [...items].map(i => ({...i, priceChanged: undefined})); // Reset alerts
             
             for (const p of newProducts) {
               const existingIndex = nextItemsList.findIndex(i => i.code === p.code && i.code !== "");
               
               if (existingIndex >= 0) {
-                // Producto ya existe: Actualizar stock y costos.
+                const oldItem = nextItemsList[existingIndex];
+                let inflationFlag = undefined;
+                if (p.cost > oldItem.cost) {
+                   inflationFlag = 'up'; // Alerta de proveedor subiendo precio
+                }
+                
                 nextItemsList[existingIndex] = {
-                  ...nextItemsList[existingIndex],
+                  ...oldItem,
                   cost: p.cost,
                   price: p.price,
-                  stock: nextItemsList[existingIndex].stock + p.stock,
-                  supplier: p.supplier || nextItemsList[existingIndex].supplier
+                  stock: oldItem.stock + p.stock,
+                  supplier: p.supplier || oldItem.supplier,
+                  priceChanged: inflationFlag as any
                 };
                 updatedCount++;
               } else {
-                // Producto nuevo
                 nextItemsList.push(p);
                 newCount++;
               }
             }
 
             setItems(nextItemsList);
-            alert(`✅ ERIKA Procesó la Importación.\n\n📊 Se actualizaron precios y sumaron stock a ${updatedCount} productos repetidos (Sin duplicar).\n🆕 Se agregaron ${newCount} productos totalmente nuevos al catálogo.\n\nSe asignaron áreas desde C-1 en adelante.`);
+            alert(`✅ ERIKA Procesó la Importación.\n\n📊 Se actualizaron precios a ${updatedCount} productos.\n🆕 Se agregaron ${newCount} productos nuevos.\n\n⚠️ IMPORTANTE: Si ves productos resaltados en rojo, significa que tu proveedor subió el costo y ERIKA auto-corrigió el precio final para proteger tu utilidad. Reimprime las etiquetas de esos productos.`);
           }} 
         />
       )}
