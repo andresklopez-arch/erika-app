@@ -46,7 +46,7 @@ export default function SmartImporter({ avgMargin, onClose, onImport }: SmartImp
           return str.trim().toLowerCase().replace(/\s+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         };
 
-        const importedProducts = [];
+        const importedProducts: any[] = [];
         for (let i = 1; i < rawData.length; i++) {
           const row = rawData[i];
           if (!row || !row[finalNameIdx]) continue;
