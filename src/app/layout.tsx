@@ -23,8 +23,8 @@ export default function RootLayout({
             </div>
             <nav style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px' }}>
               <a href="/" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>📊 Dashboard</a>
-              <a href="/ventas" style={{ color: 'white', textDecoration: 'none', padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', borderLeft: '3px solid var(--color-primary)' }}>🛒 Punto de Venta</a>
-              <a href="#" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>📦 Inventario</a>
+              <a href="/ventas" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>🛒 Punto de Venta</a>
+              <a href="/inventario" style={{ color: 'white', textDecoration: 'none', padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', borderLeft: '3px solid var(--color-primary)' }}>📦 Inventario</a>
               <a href="#" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>👥 Clientes</a>
               <a href="#" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>🧠 Consejos IA</a>
             </nav>
