@@ -24,9 +24,9 @@ export default function RootLayout({
             <nav style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px' }}>
               <a href="/" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>📊 Dashboard</a>
               <a href="/ventas" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>🛒 Punto de Venta</a>
-              <a href="/inventario" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>📦 Inventario</a>
-              <a href="/usuarios" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>👥 Clientes / Créditos</a>
-              <a href="/reportes" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>🧠 Inteligencia / Facturas</a>
+              <a href="/inventario" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>📦 Almacén e Inventario</a>
+              <a href="/reportes" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>📈 Reportes e Inteligencia</a>
+              <a href="/configuracion" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>⚙️ Configuración</a>
             </nav>
           </aside>
           <main className="main-content" style={{ flex: 1, padding: '20px' }}>
