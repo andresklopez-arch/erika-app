@@ -355,7 +355,26 @@ export default function POSModule() {
           <div className="flex-between" style={{ marginBottom: '20px', fontSize: '1.5rem', fontWeight: 'bold', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '15px' }}>
             <span>TOTAL</span><span style={{ color: 'var(--color-secondary)' }}>${finalTotal.toFixed(2)}</span>
           </div>
-          <button className="btn-primary" style={{ width: '100%', padding: '15px', background: 'transparent', border: '1px solid var(--color-primary)' }}>💰 Cobro PC</button>
+          <button className="btn-primary" style={{ width: '100%', padding: '15px', background: 'transparent', border: '1px solid var(--color-primary)' }} onClick={async () => {
+            if (activeTicket.items.length === 0) return alert("El ticket está vacío.");
+            
+            // Buscar si hay caja abierta
+            const { data: session } = await supabase.from('cash_sessions').select('*').eq('status', 'open').order('opened_at', { ascending: false }).limit(1).single();
+            if (!session) return alert("❌ LA CAJA ESTÁ CERRADA. Ve al menú 'Arqueo de Caja' para iniciar tu turno y declarar el fondo inicial.");
+
+            // Registrar Venta
+            const { error } = await supabase.from('cash_transactions').insert({
+              session_id: session.id,
+              type: 'sale',
+              amount: finalTotal,
+              description: `Venta Ticket #${activeTicket.id}`
+            });
+
+            if (error) return alert("Error al cobrar: " + error.message);
+            
+            alert(`✅ ¡Cobro Exitoso por $${finalTotal.toFixed(2)}!\nEl dinero ha sido ingresado a la Caja Fuerte.`);
+            setTickets(tickets.map(t => t.id === activeTicketId ? { ...t, items: [], discountPct: 0 } : t));
+          }}>💰 Cobro PC</button>
         </div>
       </div>
     </div>
