@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import SmartImporter from "./SmartImporter";
 
 interface InventoryItem {
   id: string;
@@ -8,13 +9,13 @@ interface InventoryItem {
   stock: number;
   minStock: number;
   cost: number;
-  salesIndex: number; // 0-100 indicating how fast it sells
+  salesIndex: number;
 }
 
 const INVENTORY_DB: InventoryItem[] = [
   { id: "1", name: "Martillo Truper 16oz", price: 120.5, cost: 80.0, stock: 12, minStock: 5, salesIndex: 85 },
-  { id: "2", name: "Clavo para concreto 2 pulgadas", price: 45.0, cost: 25.0, stock: 15, minStock: 50, salesIndex: 90 }, // Bajo stock
-  { id: "3", name: "Pintura Blanca 19L Comex", price: 1250.0, cost: 900.0, stock: 4, minStock: 5, salesIndex: 40 }, // Bajo stock
+  { id: "2", name: "Clavo para concreto 2 pulgadas", price: 45.0, cost: 25.0, stock: 15, minStock: 50, salesIndex: 90 },
+  { id: "3", name: "Pintura Blanca 19L Comex", price: 1250.0, cost: 900.0, stock: 4, minStock: 5, salesIndex: 40 },
   { id: "4", name: "Cemento Tolteca 50kg", price: 210.0, cost: 180.0, stock: 200, minStock: 100, salesIndex: 95 },
   { id: "5", name: "Cable Calibre 12 AWG (m)", price: 15.0, cost: 8.0, stock: 1500, minStock: 500, salesIndex: 80 },
 ];
@@ -23,6 +24,7 @@ export default function InventoryModule() {
   const [items, setItems] = useState<InventoryItem[]>(INVENTORY_DB);
   const [bulkAdjustment, setBulkAdjustment] = useState<number>(0);
   const [adjustmentType, setAdjustmentType] = useState<"percentage" | "fixed">("percentage");
+  const [showImporter, setShowImporter] = useState(false);
 
   const applyBulkPriceChange = () => {
     if (bulkAdjustment === 0) return;
@@ -37,7 +39,6 @@ export default function InventoryModule() {
   };
 
   const generateWhatsappOrder = (item: InventoryItem) => {
-    // Cálculo inteligente: pedir el doble del mínimo menos el stock actual
     const qtyToOrder = Math.max((item.minStock * 2) - item.stock, item.minStock); 
     const msg = `Hola, soy ERIKA (Sistema). Necesito hacer un pedido automático de ${qtyToOrder} unidades de *${item.name}*. Mi último precio registrado fue $${item.cost}. ¿Me confirmas existencias y envío?`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
@@ -46,7 +47,6 @@ export default function InventoryModule() {
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '100%' }}>
       
-      {/* Controles Superiores */}
       <div className="glass-panel flex-between" style={{ padding: '20px' }}>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>Ajuste de Precios Masivo</h3>
@@ -67,12 +67,12 @@ export default function InventoryModule() {
           <button className="btn-primary" onClick={applyBulkPriceChange} style={{ padding: '8px 16px', fontSize: '0.9rem' }}>Aplicar a todo</button>
         </div>
         
-        <div>
-          <button className="btn-primary" style={{ background: 'var(--glass-bg)', border: '1px solid var(--color-primary)', padding: '8px 16px' }}>+ Nuevo Producto</button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button className="btn-primary" onClick={() => setShowImporter(true)} style={{ background: 'linear-gradient(135deg, var(--color-secondary), #059669)' }}>⚡ Carga Inteligente</button>
+          <button className="btn-primary" style={{ background: 'var(--glass-bg)', border: '1px solid var(--color-primary)' }}>+ Nuevo Producto</button>
         </div>
       </div>
 
-      {/* Tabla de Inventario */}
       <div className="glass-panel" style={{ flex: 1, overflowY: 'auto', padding: '0' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead style={{ background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid var(--glass-border)' }}>
@@ -118,6 +118,16 @@ export default function InventoryModule() {
           </tbody>
         </table>
       </div>
+
+      {showImporter && (
+        <SmartImporter 
+          onClose={() => setShowImporter(false)} 
+          onImport={(newProducts) => {
+            setItems([...newProducts, ...items]);
+            alert(`✅ ERIKA procesó tu archivo y agregó ${newProducts.length} productos a tu inventario exitosamente.`);
+          }} 
+        />
+      )}
     </div>
   );
 }
