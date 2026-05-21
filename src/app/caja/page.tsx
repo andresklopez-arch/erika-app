@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { useAuth } from "../../components/AuthProvider";
 
 interface Denominations {
   b1000: number; b500: number; b200: number; b100: number; b50: number; b20: number;
@@ -17,6 +18,9 @@ export default function CajaModule() {
     b1000: 0, b500: 0, b200: 0, b100: 0, b50: 0, b20: 0,
     m10: 0, m5: 0, m2: 0, m1: 0, m05: 0
   });
+  const { currentUser } = useAuth();
+  const [showTicket, setShowTicket] = useState(false);
+  const [ticketData, setTicketData] = useState<any>(null);
 
   const fetchSession = async () => {
     setIsLoading(true);
@@ -38,7 +42,7 @@ export default function CajaModule() {
     if (initialBalance < 0) return alert("El fondo inicial no puede ser negativo.");
     const { error } = await supabase.from('cash_sessions').insert({
       initial_balance: initialBalance,
-      opened_by: "ERIKA Admin"
+      opened_by: currentUser?.name || "Desconocido"
     });
     if (error) alert("Error al abrir caja: " + error.message);
     else fetchSession();
@@ -49,6 +53,15 @@ export default function CajaModule() {
     if (!amountStr) return;
     const amount = parseFloat(amountStr);
     if (isNaN(amount) || amount <= 0) return alert("Monto inválido.");
+    
+    // VERIFICACIÓN DE SEGURIDAD (FASE 6)
+    if (type === 'withdrawal' && amount > 2000 && currentUser?.role !== 'admin') {
+      const pin = window.prompt("⚠️ LÍMITE SUPERADO. Este retiro de alto valor requiere PIN de Administrador:");
+      if (!pin) return;
+      const { data: adminCheck } = await supabase.from('users').select('id').eq('role', 'admin').eq('pin', pin).single();
+      if (!adminCheck) return alert("❌ PIN Inválido o sin privilegios de administrador.");
+      alert("✅ Retiro mayor autorizado por Administrador.");
+    }
     const desc = window.prompt("Motivo / Concepto:");
     if (!desc) return alert("Debe especificar un motivo.");
 
@@ -105,7 +118,18 @@ export default function CajaModule() {
         status: 'closed'
       }).eq('id', session.id);
       
-      alert(discrepancy === 0 ? "✅ Corte de caja Perfecto. ¡Excelente trabajo!" : "⚠️ Corte guardado con descuadre. Se notificará a gerencia.");
+      setTicketData({
+        date: new Date().toLocaleString(),
+        cajero: currentUser?.name,
+        fondo: session.initial_balance,
+        ventas: expectedSales,
+        ingresos: expectedDeposits,
+        retiros: expectedWithdrawals,
+        esperado: expectedTotal,
+        fisico: countedTotal,
+        descuadre: discrepancy
+      });
+      setShowTicket(true);
       fetchSession();
       setDenoms({b1000: 0, b500: 0, b200: 0, b100: 0, b50: 0, b20: 0, m10: 0, m5: 0, m2: 0, m1: 0, m05: 0});
     }
@@ -114,7 +138,33 @@ export default function CajaModule() {
   if (isLoading) return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--color-secondary)' }}>☁️ Conectando con la Bóveda...</div>;
 
   return (
-    <div className="animate-fade-in" style={{ padding: '20px' }}>
+    <div className="animate-fade-in" style={{ padding: '20px', position: 'relative' }}>
+      {showTicket && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'white', color: 'black', width: '300px', padding: '20px', fontFamily: 'monospace', borderRadius: '4px', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
+            <h2 style={{ textAlign: 'center', margin: 0 }}>FERRETERÍA</h2>
+            <p style={{ textAlign: 'center', margin: '5px 0', fontSize: '0.8rem' }}>ERIKA Smart POS</p>
+            <p style={{ textAlign: 'center', margin: '5px 0', borderBottom: '1px dashed black', paddingBottom: '10px' }}>TICKET DE CORTE</p>
+            <p><strong>Fecha:</strong> {ticketData.date}</p>
+            <p><strong>Cajero:</strong> {ticketData.cajero}</p>
+            <div style={{ borderBottom: '1px dashed black', margin: '10px 0' }}></div>
+            <p>Fondo Inicial: ${ticketData.fondo}</p>
+            <p>Ventas (+): ${ticketData.ventas}</p>
+            <p>Ingresos (+): ${ticketData.ingresos}</p>
+            <p>Retiros (-): ${ticketData.retiros}</p>
+            <div style={{ borderBottom: '1px dashed black', margin: '10px 0' }}></div>
+            <p>SISTEMA: ${ticketData.esperado.toFixed(2)}</p>
+            <p>FÍSICO: ${ticketData.fisico.toFixed(2)}</p>
+            <div style={{ borderBottom: '1px dashed black', margin: '10px 0' }}></div>
+            <h3 style={{ textAlign: 'center', color: ticketData.descuadre === 0 ? 'black' : 'red' }}>
+              DESCUADRE: ${ticketData.descuadre.toFixed(2)}
+            </h3>
+            <button className="no-print" onClick={() => window.print()} style={{ width: '100%', padding: '10px', background: 'black', color: 'white', marginTop: '20px', border: 'none', cursor: 'pointer' }}>🖨️ IMPRIMIR</button>
+            <button className="no-print" onClick={() => setShowTicket(false)} style={{ width: '100%', padding: '10px', background: '#ccc', color: 'black', marginTop: '10px', border: 'none', cursor: 'pointer' }}>Cerrar</button>
+          </div>
+        </div>
+      )}
+
       <h1 style={{ color: 'var(--color-primary)', marginBottom: '30px' }}>💵 Bóveda y Control de Efectivo</h1>
 
       {!session ? (

@@ -6,6 +6,8 @@ export const metadata: Metadata = {
   description: "Sistema avanzado de administración y punto de venta con IA.",
 };
 
+import AuthProvider from "../components/AuthProvider";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -14,6 +16,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body>
+        <AuthProvider>
         <div className="app-container" style={{ display: 'flex', minHeight: '100vh' }}>
           <aside className="glass-panel" style={{ width: '250px', margin: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div className="flex-center" style={{ flexDirection: 'column', textAlign: 'center' }}>
@@ -25,6 +28,7 @@ export default function RootLayout({
               <a href="/" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>🛒 Punto de Venta</a>
               <a href="/dashboard" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>📊 Dashboard</a>
               <a href="/caja" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>💵 Arqueo de Caja</a>
+              <a href="/equipo" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>👥 Equipo</a>
               <a href="/inventario" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>📦 Almacén e Inventario</a>
               <a href="/reportes" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>📈 Reportes e Inteligencia</a>
               <a href="/configuracion" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>⚙️ Configuración</a>
@@ -34,6 +38,7 @@ export default function RootLayout({
             {children}
           </main>
         </div>
+        </AuthProvider>
       </body>
     </html>
   );
