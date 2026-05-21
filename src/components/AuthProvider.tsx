@@ -6,6 +6,7 @@ interface User {
   id: string;
   name: string;
   role: 'admin' | 'cajero';
+  permissions?: Record<string, boolean>;
 }
 
 interface AuthContextType {
