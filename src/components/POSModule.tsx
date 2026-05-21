@@ -5,6 +5,7 @@ interface POSItem {
   id: string;
   name: string;
   price: number;
+  cost: number;
   qty: number;
   unit: string;
 }
@@ -12,23 +13,25 @@ interface POSItem {
 interface Ticket {
   id: number;
   items: POSItem[];
+  discountPct: number;
 }
 
 export default function POSModule() {
-  const [tickets, setTickets] = useState<Ticket[]>([{ id: 1, items: [] }]);
+  const [tickets, setTickets] = useState<Ticket[]>([{ id: 1, items: [], discountPct: 0 }]);
   const [activeTicketId, setActiveTicketId] = useState(1);
   const [nextTicketId, setNextTicketId] = useState(2);
 
   const activeTicket = tickets.find(t => t.id === activeTicketId) || tickets[0];
 
-  const addToCart = (productName: string, price: number, unit: string = "pz") => {
+  // Agregamos un 'cost' simulado o real al agregar un producto
+  const addToCart = (productName: string, price: number, unit: string = "pz", cost: number = price * 0.7) => {
     setTickets(tickets.map(t => {
       if (t.id === activeTicketId) {
         const existing = t.items.find(i => i.name === productName);
         if (existing) {
           return { ...t, items: t.items.map(i => i.name === productName ? { ...i, qty: i.qty + 1 } : i) };
         }
-        return { ...t, items: [...t.items, { id: Date.now().toString(), name: productName, price, qty: 1, unit }] };
+        return { ...t, items: [...t.items, { id: Date.now().toString(), name: productName, price, cost, qty: 1, unit }] };
       }
       return t;
     }));
@@ -45,6 +48,13 @@ export default function POSModule() {
   };
 
   const removeItem = (itemId: string) => {
+    // 1. REGLA DE SEGURIDAD: Contraseña requerida para eliminar de la nota
+    const pass = window.prompt("🔒 ACCESO RESTRINGIDO: Ingresa la contraseña de Administrador para eliminar este artículo.");
+    if (pass !== "admin123") {
+      alert("❌ Contraseña incorrecta o cancelada. El artículo no fue eliminado.");
+      return;
+    }
+
     setTickets(tickets.map(t => {
       if (t.id === activeTicketId) {
         return { ...t, items: t.items.filter(i => i.id !== itemId) };
@@ -53,35 +63,65 @@ export default function POSModule() {
     }));
   };
 
-  // Motor Inteligente de Venta Cruzada (Cross-Selling)
+  const applyDiscount = () => {
+    // 2. REGLA DE SEGURIDAD: Seguro de utilidad máxima
+    if (activeTicket.items.length === 0) return alert("No hay artículos para descontar.");
+
+    const pctStr = window.prompt("Ingresa el porcentaje de descuento a aplicar al cliente (Ej. 10 para 10%):");
+    if (!pctStr) return;
+    const pct = parseFloat(pctStr);
+    if (isNaN(pct) || pct < 0 || pct > 100) return alert("Porcentaje inválido.");
+
+    const rawTotal = activeTicket.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
+    const proposedTotal = rawTotal * (1 - (pct / 100));
+    
+    // Calculamos el costo real de todo lo que hay en el carrito
+    const totalCost = activeTicket.items.reduce((sum, item) => sum + (item.cost * item.qty), 0);
+    
+    // Límite de seguridad: La venta NUNCA debe ser menor al costo + 5% de utilidad mínima absoluta
+    const safeMinimum = totalCost * 1.05;
+
+    if (proposedTotal < safeMinimum) {
+      // Calcular cuál es el descuento máximo permitido antes de chocar con el límite
+      const maxDiscountAllowed = ((1 - (safeMinimum / rawTotal)) * 100).toFixed(1);
+      alert(`⚠️ SEGURO DE UTILIDAD ACTIVADO ⚠️\n\nAplicar un ${pct}% de descuento pondría la ganancia por debajo del límite seguro (o en números rojos).\n\nEl descuento MÁXIMO permitido para este carrito es de: ${maxDiscountAllowed}%`);
+      return;
+    }
+
+    setTickets(tickets.map(t => t.id === activeTicketId ? { ...t, discountPct: pct } : t));
+    alert(`✅ Descuento del ${pct}% aplicado correctamente.`);
+  };
+
   const getCrossSellSuggestions = () => {
-    const suggestions: { name: string, price: number }[] = [];
+    const suggestions: { name: string, price: number, cost: number }[] = [];
     const itemNames = activeTicket.items.map(i => i.name.toLowerCase());
     
     if (itemNames.some(n => n.includes("pintura"))) {
-      suggestions.push({ name: "Brocha 4 pulgadas", price: 65.0 });
-      suggestions.push({ name: "Cinta Masking Tape", price: 35.0 });
+      suggestions.push({ name: "Brocha 4 pulgadas", price: 65.0, cost: 40.0 });
+      suggestions.push({ name: "Cinta Masking Tape", price: 35.0, cost: 20.0 });
     }
     if (itemNames.some(n => n.includes("cemento"))) {
-      suggestions.push({ name: "Bote de Arena (Bote)", price: 20.0 });
-      suggestions.push({ name: "Paleta Albañil", price: 120.0 });
+      suggestions.push({ name: "Bote de Arena (Bote)", price: 20.0, cost: 10.0 });
+      suggestions.push({ name: "Paleta Albañil", price: 120.0, cost: 80.0 });
     }
     if (itemNames.some(n => n.includes("martillo") || n.includes("taladro") || n.includes("clavo"))) {
-      suggestions.push({ name: "Caja de Taquetes", price: 25.0 });
-      suggestions.push({ name: "Broca para Concreto", price: 55.0 });
+      suggestions.push({ name: "Caja de Taquetes", price: 25.0, cost: 12.0 });
+      suggestions.push({ name: "Broca para Concreto", price: 55.0, cost: 30.0 });
     }
 
     if (suggestions.length === 0) {
-      suggestions.push({ name: "Guantes de Carnaza", price: 45.0 });
-      suggestions.push({ name: "Cúter Truper", price: 30.0 });
+      suggestions.push({ name: "Guantes de Carnaza", price: 45.0, cost: 25.0 });
+      suggestions.push({ name: "Cúter Truper", price: 30.0, cost: 15.0 });
     }
 
     return suggestions.slice(0, 3);
   };
 
-  const total = activeTicket.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
-  const iva = total * 0.16;
-  const subtotal = total - iva;
+  const rawTotal = activeTicket.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
+  const discountAmount = rawTotal * (activeTicket.discountPct / 100);
+  const finalTotal = rawTotal - discountAmount;
+  const iva = finalTotal * 0.16;
+  const subtotal = finalTotal - iva;
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', gap: '20px', height: '100%' }}>
@@ -97,10 +137,10 @@ export default function POSModule() {
           
           <h3 style={{ color: 'var(--color-secondary)', marginBottom: '10px' }}>Atajos Rápidos (Teclado Numérico)</h3>
           <div className="grid-cols-2" style={{ gap: '10px' }}>
-            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Cemento Tolteca 50kg", 210, "bulto")}>[1] Cemento 50kg</button>
-            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Pintura Blanca 19L", 1250, "cubeta")}>[2] Pintura Blanca</button>
-            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Cable Calibre 12", 15, "metro")}>[3] Cable Calibre 12</button>
-            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Clavo 2 pulg", 45, "caja")}>[4] Clavos 2"</button>
+            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Cemento Tolteca 50kg", 210, "bulto", 180)}>[1] Cemento 50kg</button>
+            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Pintura Blanca 19L", 1250, "cubeta", 900)}>[2] Pintura Blanca</button>
+            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Cable Calibre 12", 15, "metro", 8)}>[3] Cable Calibre 12</button>
+            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Clavo 2 pulg", 45, "caja", 25)}>[4] Clavos 2"</button>
           </div>
         </div>
 
@@ -113,7 +153,7 @@ export default function POSModule() {
             {getCrossSellSuggestions().map((sug, idx) => (
               <div key={idx} className="flex-between" style={{ background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px' }}>
                 <span>{sug.name} <strong style={{ color: 'var(--color-primary)' }}>${sug.price}</strong></span>
-                <button className="btn-primary" style={{ padding: '4px 8px', fontSize: '0.8rem' }} onClick={() => addToCart(sug.name, sug.price)}>+ Añadir a la Nota</button>
+                <button className="btn-primary" style={{ padding: '4px 8px', fontSize: '0.8rem' }} onClick={() => addToCart(sug.name, sug.price, "pz", sug.cost)}>+ Añadir a la Nota</button>
               </div>
             ))}
           </div>
@@ -125,7 +165,7 @@ export default function POSModule() {
         <div className="flex-between" style={{ marginBottom: '15px' }}>
           <h2 style={{ margin: 0 }}>🧾 Nota Virtual</h2>
           <button className="btn-primary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => {
-            setTickets([...tickets, { id: nextTicketId, items: [] }]);
+            setTickets([...tickets, { id: nextTicketId, items: [], discountPct: 0 }]);
             setActiveTicketId(nextTicketId);
             setNextTicketId(nextTicketId + 1);
           }}>+ Nueva Nota</button>
@@ -161,7 +201,7 @@ export default function POSModule() {
                       <span style={{ minWidth: '40px', textAlign: 'center' }}>{item.qty} {item.unit}</span>
                       <button style={{ background: 'transparent', border: 'none', color: 'white', cursor: 'pointer', padding: '0 10px' }} onClick={() => updateItemQty(item.id, item.qty + 1)}>+</button>
                     </div>
-                    <button style={{ background: 'var(--color-primary)', border: 'none', color: 'white', cursor: 'pointer', padding: '5px 10px', borderRadius: '6px', fontSize: '0.8rem' }} onClick={() => removeItem(item.id)}>🗑️ Eliminar</button>
+                    <button style={{ background: 'transparent', border: '1px solid var(--color-primary)', color: 'var(--color-primary)', cursor: 'pointer', padding: '5px 10px', borderRadius: '6px', fontSize: '0.8rem' }} onClick={() => removeItem(item.id)}>🔒 Eliminar</button>
                   </div>
                 </li>
               ))}
@@ -170,6 +210,16 @@ export default function POSModule() {
         </div>
 
         <div style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '12px' }}>
+          
+          <div className="flex-between" style={{ marginBottom: '10px' }}>
+            <button onClick={applyDiscount} style={{ background: 'transparent', color: 'var(--color-secondary)', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.9rem' }}>
+              % Aplicar Descuento Especial
+            </button>
+            {activeTicket.discountPct > 0 && (
+              <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>-{activeTicket.discountPct}%</span>
+            )}
+          </div>
+
           <div className="flex-between" style={{ marginBottom: '10px', color: 'rgba(255,255,255,0.6)' }}>
             <span>Subtotal</span>
             <span>${subtotal.toFixed(2)}</span>
@@ -180,7 +230,7 @@ export default function POSModule() {
           </div>
           <div className="flex-between" style={{ marginBottom: '20px', fontSize: '1.5rem', fontWeight: 'bold', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '15px' }}>
             <span>TOTAL</span>
-            <span style={{ color: 'var(--color-secondary)' }}>${total.toFixed(2)}</span>
+            <span style={{ color: 'var(--color-secondary)' }}>${finalTotal.toFixed(2)}</span>
           </div>
           
           <button className="btn-primary" style={{ width: '100%', padding: '15px', fontSize: '1.2rem' }}>
