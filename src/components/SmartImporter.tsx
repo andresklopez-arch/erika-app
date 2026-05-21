@@ -9,7 +9,6 @@ interface SmartImporterProps {
 }
 
 export default function SmartImporter({ avgMargin, onClose, onImport }: SmartImporterProps) {
-  const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState("");
   const [previewData, setPreviewData] = useState<any[] | null>(null);
@@ -30,40 +29,42 @@ export default function SmartImporter({ avgMargin, onClose, onImport }: SmartImp
         
         if (rawData.length < 2) throw new Error("Documento vacío");
 
-        // Extraer los índices de la cabecera (incluso si tienen espacios extra)
         const headers = rawData[0].map(h => String(h).toLowerCase().trim());
         
         const codeIdx = headers.findIndex(h => h.includes("codigo") || h.includes("código"));
         const nameIdx = headers.findIndex(h => h.includes("nombre") || h.includes("descrip"));
-        // Soporta la columna "aa" o "con iva" o "costo"
         const costIdx = headers.findIndex(h => h.includes("costo") || h === "aa" || h.includes("iva") || h.includes("compra"));
-        // Soporta la columna "piezas totales" o "almacen" o "stock"
         const stockIdx = headers.findIndex(h => h.includes("stock") || h.includes("cantidad") || h.includes("totales") || h.includes("almacen"));
 
-        const finalNameIdx = nameIdx >= 0 ? nameIdx : 1; // Asume col B por defecto si falla
-        const finalCostIdx = costIdx >= 0 ? costIdx : 5; // Asume col F (AA) si falla
-        const finalStockIdx = stockIdx >= 0 ? stockIdx : 4; // Asume col E (Piezas totales)
-        const finalCodeIdx = codeIdx >= 0 ? codeIdx : 0; // Asume col A
+        const finalNameIdx = nameIdx >= 0 ? nameIdx : 1; 
+        const finalCostIdx = costIdx >= 0 ? costIdx : 5; 
+        const finalStockIdx = stockIdx >= 0 ? stockIdx : 4; 
+        const finalCodeIdx = codeIdx >= 0 ? codeIdx : 0; 
+
+        // NLP Limpiador: Quitar dobles espacios y capitalizar "tHINNEr" -> "Thinner"
+        const cleanAndCapitalize = (str: string) => {
+          return str.trim().toLowerCase().replace(/\s+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        };
 
         const importedProducts = [];
         for (let i = 1; i < rawData.length; i++) {
           const row = rawData[i];
-          if (!row || !row[finalNameIdx]) continue; // Salta filas vacías
+          if (!row || !row[finalNameIdx]) continue;
           
           let rawCost = Number(row[finalCostIdx]);
-          // A veces los Excel traen strings de moneda Ej. "$58,48"
           if (isNaN(rawCost) && typeof row[finalCostIdx] === 'string') {
             rawCost = Number(row[finalCostIdx].replace(/[^0-9.-]+/g,""));
           }
           if (isNaN(rawCost)) rawCost = 0;
 
           const calculatedPrice = rawCost * (1 + avgMargin);
-          const rawCode = row[finalCodeIdx] ? String(row[finalCodeIdx]) : `SKU-${Date.now()}-${i}`;
+          const rawCode = row[finalCodeIdx] ? String(row[finalCodeIdx]).trim() : `SKU-${Date.now()}-${i}`;
+          const cleanName = cleanAndCapitalize(String(row[finalNameIdx]));
 
           importedProducts.push({
             id: `imp-${Date.now()}-${i}`,
             code: rawCode,
-            name: String(row[finalNameIdx]),
+            name: cleanName,
             cost: rawCost,
             price: calculatedPrice,
             stock: Number(row[finalStockIdx]) || 0,
@@ -95,11 +96,9 @@ export default function SmartImporter({ avgMargin, onClose, onImport }: SmartImp
 
   const confirmImport = () => {
     if (previewData) {
-      // 1. Pedir nombre de Proveedor
       const globalSupplier = window.prompt("🏢 Nombra al Proveedor General para asignar a todos estos productos:");
-      if (!globalSupplier) return; // Cancel if no provider
+      if (!globalSupplier) return;
 
-      // 2. Asignar ruta de acomodo en Almacén Inteligente
       let areaChar = "C";
       let areaNum = 1;
       
@@ -107,7 +106,6 @@ export default function SmartImporter({ avgMargin, onClose, onImport }: SmartImp
         const assignedLocation = `${areaChar}-${areaNum}`;
         areaNum++;
         if (areaNum > 20) { areaNum = 1; areaChar = String.fromCharCode(areaChar.charCodeAt(0) + 1); }
-        
         return { ...p, supplier: globalSupplier, location: assignedLocation };
       });
 
@@ -124,14 +122,14 @@ export default function SmartImporter({ avgMargin, onClose, onImport }: SmartImp
         {previewData ? (
           <div className="animate-fade-in">
             <h2 style={{ color: 'var(--color-primary)', marginBottom: '10px' }}>👀 Revisión y Precios Calculados (AUTO)</h2>
-            <p style={{ color: 'var(--color-secondary)', marginBottom: '20px' }}>ERIKA ha extraído los costos. Revisa que estén correctos antes de asignar proveedor.</p>
+            <p style={{ color: 'var(--color-secondary)', marginBottom: '20px' }}>ERIKA ha limpiado los textos y extraído los costos. Revisa que estén correctos antes de importar.</p>
             
             <div style={{ maxHeight: '300px', overflowY: 'auto', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '10px', marginBottom: '20px' }}>
               <table style={{ width: '100%', fontSize: '0.85rem', textAlign: 'left', borderCollapse: 'collapse' }}>
                 <thead style={{ background: 'rgba(255,255,255,0.05)' }}>
                   <tr style={{ color: 'var(--color-secondary)' }}>
                     <th style={{ padding: '8px' }}>CÓDIGO</th>
-                    <th style={{ padding: '8px' }}>Producto</th>
+                    <th style={{ padding: '8px' }}>Producto (Texto Limpio)</th>
                     <th style={{ padding: '8px' }}>Stock</th>
                     <th style={{ padding: '8px' }}>Costo</th>
                     <th style={{ padding: '8px', color: 'white', background: 'rgba(16, 185, 129, 0.2)' }}>Precio Venta (AUTO)</th>
@@ -159,7 +157,7 @@ export default function SmartImporter({ avgMargin, onClose, onImport }: SmartImp
         ) : (
           <div>
             <h2 style={{ color: 'var(--color-primary)', marginBottom: '10px' }}>⚡ Subir Facturas / Costos</h2>
-            <p style={{ color: 'var(--color-text)', opacity: 0.8, marginBottom: '25px', fontSize: '0.9rem' }}>Sube tu Excel. Extraeré Código, Descripción y Costo ("AA" o "Con IVA").</p>
+            <p style={{ color: 'var(--color-text)', opacity: 0.8, marginBottom: '25px', fontSize: '0.9rem' }}>Sube tu Excel. La Inteligencia Artificial limpiará los textos feos y protegerá contra duplicados.</p>
             {isProcessing ? (
                <div style={{ padding: '40px 0' }}><p style={{ color: 'var(--color-secondary)' }}>{progress}</p></div>
             ) : (

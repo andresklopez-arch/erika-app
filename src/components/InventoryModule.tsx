@@ -49,20 +49,43 @@ export default function InventoryModule() {
     XLSX.writeFile(wb, `Exportacion_ERIKA_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const printQRLocation = (location: string, productName: string) => {
+  const printDualLabel = (location: string, productName: string, productCode: string) => {
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=ERIKA-LOC-${location}`;
     const newWindow = window.open("", "_blank");
     if (newWindow) {
       newWindow.document.write(`
         <html>
+          <head>
+            <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+          </head>
           <body style="text-align: center; font-family: sans-serif; padding-top: 50px;">
-            <h2>Etiqueta de Almacén ERIKA</h2>
+            <h2>Etiqueta Doble de Almacén ERIKA</h2>
             <h1>ÁREA: ${location}</h1>
+            <h3 style="color: #666;">SKU/Código: ${productCode}</h3>
             <h3 style="color: #666;">Contiene: ${productName}</h3>
-            <img src="${qrUrl}" alt="QR Code" style="margin: 20px; border: 2px solid black; padding: 10px;" />
-            <p style="font-size: 1.2rem;">Pegue esta etiqueta en el pasillo correspondiente.</p>
+            
+            <div style="display: flex; justify-content: center; align-items: center; gap: 50px; margin-top: 20px;">
+              <div style="text-align: center;">
+                <p style="font-weight: bold;">Escanear Ubicación (Bodeguero)</p>
+                <img src="${qrUrl}" alt="QR Code" style="border: 2px solid black; padding: 10px; width: 180px;" />
+              </div>
+              <div style="text-align: center;">
+                <p style="font-weight: bold;">Escanear Venta (Caja Pistola)</p>
+                <svg id="barcode"></svg>
+              </div>
+            </div>
+
+            <p style="font-size: 1.2rem; margin-top: 50px;">Pegue esta etiqueta en el pasillo correspondiente.</p>
             <script>
-              setTimeout(() => { window.print(); }, 500);
+              window.onload = function() {
+                JsBarcode("#barcode", "${productCode}", {
+                  format: "CODE128",
+                  width: 2.5,
+                  height: 100,
+                  displayValue: true
+                });
+                setTimeout(() => { window.print(); }, 800);
+              };
             </script>
           </body>
         </html>
@@ -103,7 +126,7 @@ export default function InventoryModule() {
             <tr>
               <th style={{ padding: '15px' }}>Código</th>
               <th style={{ padding: '15px' }}>Producto</th>
-              <th style={{ padding: '15px' }}>Ubicación Física</th>
+              <th style={{ padding: '15px' }}>Ubicación y Códigos</th>
               <th style={{ padding: '15px' }}>Stock</th>
               <th style={{ padding: '15px' }}>Costo Prov.</th>
               <th style={{ padding: '15px' }}>Precio Venta</th>
@@ -125,11 +148,12 @@ export default function InventoryModule() {
                       </span>
                       {item.location && (
                         <button 
-                          onClick={() => printQRLocation(item.location!, item.name)} 
-                          title="Imprimir Código QR de Área"
-                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}
+                          onClick={() => printDualLabel(item.location!, item.name, item.code || item.id)} 
+                          title="Imprimir Etiqueta Dual (QR Bodega + Código Barras Caja)"
+                          className="btn-primary"
+                          style={{ padding: '4px 8px', fontSize: '0.9rem' }}
                         >
-                          🖨️
+                          🖨️ Etiqueta
                         </button>
                       )}
                     </div>
@@ -155,8 +179,34 @@ export default function InventoryModule() {
           onClose={() => setShowImporter(false)} 
           onImport={(newProducts) => {
             setImportHistory([...importHistory, items]);
-            setItems([...newProducts, ...items]);
-            alert(`✅ ERIKA enrutó los productos hacia tu Almacén.\nSe generaron ubicaciones a partir de C-1 en adelante. Dirígete a inventario a imprimir las etiquetas QR.`);
+            
+            // 🧠 LÓGICA DE DEDUPLICACIÓN
+            let updatedCount = 0;
+            let newCount = 0;
+            const nextItemsList = [...items];
+            
+            for (const p of newProducts) {
+              const existingIndex = nextItemsList.findIndex(i => i.code === p.code && i.code !== "");
+              
+              if (existingIndex >= 0) {
+                // Producto ya existe: Actualizar stock y costos.
+                nextItemsList[existingIndex] = {
+                  ...nextItemsList[existingIndex],
+                  cost: p.cost,
+                  price: p.price,
+                  stock: nextItemsList[existingIndex].stock + p.stock,
+                  supplier: p.supplier || nextItemsList[existingIndex].supplier
+                };
+                updatedCount++;
+              } else {
+                // Producto nuevo
+                nextItemsList.push(p);
+                newCount++;
+              }
+            }
+
+            setItems(nextItemsList);
+            alert(`✅ ERIKA Procesó la Importación.\n\n📊 Se actualizaron precios y sumaron stock a ${updatedCount} productos repetidos (Sin duplicar).\n🆕 Se agregaron ${newCount} productos totalmente nuevos al catálogo.\n\nSe asignaron áreas desde C-1 en adelante.`);
           }} 
         />
       )}
