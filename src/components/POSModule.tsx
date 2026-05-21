@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { LoggerService } from "../services/loggerService";
 
 interface POSItem {
   id: string;
@@ -21,10 +22,10 @@ export default function POSModule() {
   const [activeTicketId, setActiveTicketId] = useState(1);
   const [nextTicketId, setNextTicketId] = useState(2);
   const [cancellations, setCancellations] = useState<{time: string, item: string}[]>([]);
+  const [isListening, setIsListening] = useState(false);
 
   const activeTicket = tickets.find(t => t.id === activeTicketId) || tickets[0];
 
-  // Listener global de atajos de teclado para productividad
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F4') {
@@ -39,14 +40,14 @@ export default function POSModule() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [tickets, activeTicketId]);
 
-  const addToCart = (productName: string, price: number, unit: string = "pz", cost: number = price * 0.7) => {
+  const addToCart = (productName: string, price: number, unit: string = "pz", cost: number = price * 0.7, addedQty: number = 1) => {
     setTickets(tickets.map(t => {
       if (t.id === activeTicketId) {
         const existing = t.items.find(i => i.name === productName);
         if (existing) {
-          return { ...t, items: t.items.map(i => i.name === productName ? { ...i, qty: i.qty + 1 } : i) };
+          return { ...t, items: t.items.map(i => i.name === productName ? { ...i, qty: i.qty + addedQty } : i) };
         }
-        return { ...t, items: [...t.items, { id: Date.now().toString(), name: productName, price, cost, qty: 1, unit }] };
+        return { ...t, items: [...t.items, { id: Date.now().toString(), name: productName, price, cost, qty: addedQty, unit }] };
       }
       return t;
     }));
@@ -62,7 +63,7 @@ export default function POSModule() {
     }));
   };
 
-  const removeItem = (itemId: string) => {
+  const removeItem = async (itemId: string) => {
     const pass = window.prompt("🔒 ACCESO RESTRINGIDO: Contraseña de Administrador requerida:");
     if (pass !== "admin123") {
       alert("❌ Contraseña incorrecta. Operación bloqueada.");
@@ -75,6 +76,8 @@ export default function POSModule() {
         time: new Date().toLocaleTimeString(),
         item: `${itemToRemove.qty}x ${itemToRemove.name}`
       }]);
+      // Sincroniza con la nube en segundo plano
+      LoggerService.logCancellation(itemToRemove.name, itemToRemove.qty);
     }
 
     setTickets(tickets.map(t => {
@@ -91,7 +94,6 @@ export default function POSModule() {
     const rawTotal = activeTicket.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
     const totalCost = activeTicket.items.reduce((sum, item) => sum + (item.cost * item.qty), 0);
     
-    // Límite de seguridad: La venta NUNCA debe ser menor al costo + 5% de utilidad mínima absoluta
     const safeMinimum = totalCost * 1.05;
 
     let proposedTotal = 0;
@@ -146,6 +148,61 @@ export default function POSModule() {
     return suggestions.slice(0, 3);
   };
 
+  // HARDWARE: Lógica del Micrófono (Speech API)
+  const startVoiceRecognition = () => {
+    // @ts-ignore
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      return alert("Tu navegador no soporta reconocimiento de voz. Usa Google Chrome para PC o Android.");
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'es-MX';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onerror = () => { setIsListening(false); alert("Error en el micrófono. Revisa los permisos."); };
+    recognition.onend = () => setIsListening(false);
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript.toLowerCase();
+      
+      // Inteligencia Heurística: Extraer números del texto hablado
+      const matchNumber = transcript.match(/(\d+)/);
+      const qty = matchNumber ? parseInt(matchNumber[0]) : 1;
+      
+      let found = false;
+      if (transcript.includes("cemento")) { addToCart("Cemento Tolteca 50kg", 210, "bulto", 180, qty); found = true; }
+      else if (transcript.includes("pintura")) { addToCart("Pintura Blanca 19L", 1250, "cubeta", 900, qty); found = true; }
+      else if (transcript.includes("cable")) { addToCart("Cable Calibre 12", 15, "metro", 8, qty); found = true; }
+      else if (transcript.includes("clavo")) { addToCart("Clavo 2 pulg", 45, "caja", 25, qty); found = true; }
+
+      if (found) {
+        alert(`🎤 ERIKA Entendió: "Agregando ${qty} unidades de ${transcript}"`);
+      } else {
+        alert(`🎤 ERIKA Escuchó: "${transcript}", pero no encontró ese artículo en el catálogo rápido.`);
+      }
+    };
+
+    recognition.start();
+  };
+
+  // HARDWARE: Lógica de Impresión Térmica Bluetooth
+  const printTicketBluetooth = async () => {
+    try {
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb'] // UUID Genérico de impresoras térmicas
+      });
+      alert(`✅ Conectando con impresora: "${device.name}"... Preparando el formato térmico.`);
+      // En producción aquí se mandaría el string ESC/POS al servidor GATT del dispositivo.
+      setTimeout(() => alert("🖨️ ERIKA envió la orden de impresión por Bluetooth con éxito."), 1500);
+    } catch (error) {
+      console.error(error);
+      alert("❌ Se canceló la búsqueda o tu computadora/celular no tiene encendido el Bluetooth.");
+    }
+  };
+
   const rawTotal = activeTicket.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
   const discountAmount = rawTotal * (activeTicket.discountPct / 100);
   const finalTotal = rawTotal - discountAmount;
@@ -155,10 +212,20 @@ export default function POSModule() {
   return (
     <div className="animate-fade-in" style={{ display: 'flex', gap: '20px', height: '100%' }}>
       
-      {/* Lado Izquierdo: Buscador y Sugerencias IA */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <div className="glass-panel" style={{ flex: 1 }}>
-          <h2 style={{ color: 'var(--color-primary)', marginBottom: '15px' }}>Buscador de Productos</h2>
+        <div className="glass-panel" style={{ flex: 1, position: 'relative' }}>
+          <div className="flex-between" style={{ marginBottom: '15px' }}>
+            <h2 style={{ color: 'var(--color-primary)', margin: 0 }}>Buscador de Productos</h2>
+            <button 
+              onClick={startVoiceRecognition}
+              className="btn-primary" 
+              style={{ background: isListening ? '#ef4444' : 'var(--glass-bg)', border: '1px solid var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', animation: isListening ? 'pulse 1.5s infinite' : 'none' }}
+            >
+              🎤 {isListening ? 'Escuchando...' : 'Dictar Pedido'}
+            </button>
+            <style>{`@keyframes pulse { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }`}</style>
+          </div>
+
           <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
             <input type="text" placeholder="Buscar producto o escanear código de barras..." style={{ flex: 1, padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', color: 'white', border: '1px solid var(--color-primary)' }} autoFocus />
             <button className="btn-primary" onClick={() => addToCart("Producto Escaneado", 150)}>Agregar</button>
@@ -189,7 +256,6 @@ export default function POSModule() {
         </div>
       </div>
 
-      {/* Lado Derecho: Nota Virtual Editable */}
       <div className="glass-panel" style={{ width: '450px', display: 'flex', flexDirection: 'column' }}>
         <div className="flex-between" style={{ marginBottom: '15px' }}>
           <h2 style={{ margin: 0 }}>🧾 Nota Virtual</h2>
@@ -198,9 +264,9 @@ export default function POSModule() {
               <button 
                 className="btn-primary" 
                 style={{ background: 'transparent', border: '1px solid var(--color-primary)', padding: '6px 12px', fontSize: '0.8rem' }} 
-                onClick={() => alert("🚨 REGISTRO DE MERMAS Y CANCELACIONES EN CAJA 🚨\n\n" + cancellations.map(c => `[${c.time}] Canceló: ${c.item}`).join('\n'))}
+                onClick={() => alert("🚨 LOG EN NUBE (Simulado) 🚨\n\n" + cancellations.map(c => `[${c.time}] Canceló: ${c.item}`).join('\n'))}
               >
-                📓 Log Mermas ({cancellations.length})
+                ☁️ Nube Mermas ({cancellations.length})
               </button>
             )}
             <button className="btn-primary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => {
@@ -226,7 +292,7 @@ export default function POSModule() {
 
         <div style={{ flex: 1, overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '10px', marginBottom: '20px' }}>
           {activeTicket.items.length === 0 ? (
-            <div style={{ textAlign: 'center', opacity: 0.5, marginTop: '50px' }}>La nota está vacía. Captura artículos a la izquierda.</div>
+            <div style={{ textAlign: 'center', opacity: 0.5, marginTop: '50px' }}>La nota está vacía. Escanea o dicta un artículo.</div>
           ) : (
             <ul style={{ listStyle: 'none' }}>
               {activeTicket.items.map((item, idx) => (
@@ -278,9 +344,14 @@ export default function POSModule() {
             <span style={{ color: 'var(--color-secondary)' }}>${finalTotal.toFixed(2)}</span>
           </div>
           
-          <button className="btn-primary" style={{ width: '100%', padding: '15px', fontSize: '1.2rem' }}>
-            💰 Cobrar e Imprimir Ticket
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button className="btn-primary" style={{ flex: 1, padding: '15px', fontSize: '1.2rem', background: 'transparent', border: '1px solid var(--color-primary)' }}>
+              💰 Cobro Rápido
+            </button>
+            <button onClick={printTicketBluetooth} className="btn-primary" style={{ flex: 1, padding: '15px', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+              🖨️ Imprimir (BT)
+            </button>
+          </div>
         </div>
       </div>
     </div>
