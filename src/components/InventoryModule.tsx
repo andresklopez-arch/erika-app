@@ -48,6 +48,28 @@ export default function InventoryModule() {
     XLSX.writeFile(wb, `Exportacion_ERIKA_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
+  const printQRLocation = (location: string, productName: string) => {
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=ERIKA-LOC-${location}`;
+    const newWindow = window.open("", "_blank");
+    if (newWindow) {
+      newWindow.document.write(`
+        <html>
+          <body style="text-align: center; font-family: sans-serif; padding-top: 50px;">
+            <h2>Etiqueta de Almacén ERIKA</h2>
+            <h1>ÁREA: ${location}</h1>
+            <h3 style="color: #666;">Contiene: ${productName}</h3>
+            <img src="${qrUrl}" alt="QR Code" style="margin: 20px; border: 2px solid black; padding: 10px;" />
+            <p style="font-size: 1.2rem;">Pegue esta etiqueta en el pasillo correspondiente.</p>
+            <script>
+              setTimeout(() => { window.print(); }, 500);
+            </script>
+          </body>
+        </html>
+      `);
+      newWindow.document.close();
+    }
+  };
+
   const undoLastImport = () => {
     if (importHistory.length === 0) return;
     const previousState = importHistory[importHistory.length - 1];
@@ -99,9 +121,20 @@ export default function InventoryModule() {
                     <div style={{ fontSize: '0.75rem', color: 'var(--color-secondary)' }}>Prov: {item.supplier || 'N/A'}</div>
                   </td>
                   <td style={{ padding: '15px' }}>
-                    <span style={{ background: 'rgba(255,255,255,0.1)', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--color-secondary)' }}>
-                      📍 Área {item.location || 'PENDIENTE'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ background: 'rgba(255,255,255,0.1)', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--color-secondary)' }}>
+                        📍 {item.location || 'PENDIENTE'}
+                      </span>
+                      {item.location && (
+                        <button 
+                          onClick={() => printQRLocation(item.location!, item.name)} 
+                          title="Imprimir Código QR de Área"
+                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}
+                        >
+                          🖨️
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td style={{ padding: '15px', fontWeight: 'bold' }}>{item.stock}</td>
                   <td style={{ padding: '15px' }}>${item.cost.toFixed(2)}</td>

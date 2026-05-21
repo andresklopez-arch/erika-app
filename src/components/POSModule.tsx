@@ -121,21 +121,40 @@ export default function POSModule() {
     setTickets(tickets.map(t => t.id === activeTicketId ? { ...t, discountPct: finalPct } : t));
   };
 
-  // --- IA DE VOZ Y TEXT-TO-SPEECH ---
+  // --- IA DE VOZ: FUZZY SEARCH, STOCK VALIDATION Y TEXT-TO-SPEECH ---
   const GLOBAL_CATALOG = [
-    { name: "Martillo Truper 16oz", price: 120.5, cost: 80.0, location: "A-1", keywords: ["martillo", "truper", "16oz"] },
-    { name: "Clavo 2 pulg", price: 45.0, cost: 25.0, location: "B-6", keywords: ["clavo", "clavos", "concreto"] },
-    { name: "Pintura Blanca 19L", price: 1250.0, cost: 900.0, location: "P-12", keywords: ["pintura", "blanca", "cubeta"] },
-    { name: "Cemento Tolteca 50kg", price: 210.0, cost: 180.0, location: "AAA-100", keywords: ["cemento", "bulto", "tolteca"] },
-    { name: "Cable Calibre 12", price: 15.0, cost: 8.0, location: "E-4", keywords: ["cable", "calibre", "12"] },
-    { name: "Brocha 4 pulgadas", price: 65.0, cost: 40.0, location: "P-10", keywords: ["brocha", "pulgadas"] }
+    { name: "Martillo Truper 16oz", price: 120.5, cost: 80.0, location: "A-1", stock: 12, keywords: ["martillo", "truper", "16oz"] },
+    { name: "Clavo 2 pulg", price: 45.0, cost: 25.0, location: "B-6", stock: 15, keywords: ["clavo", "clavos", "concreto"] },
+    { name: "Pintura Blanca 19L", price: 1250.0, cost: 900.0, location: "P-12", stock: 4, keywords: ["pintura", "blanca", "cubeta"] },
+    { name: "Cemento Tolteca 50kg", price: 210.0, cost: 180.0, location: "AAA-100", stock: 200, keywords: ["cemento", "bulto", "tolteca"] },
+    { name: "Cable Calibre 12", price: 15.0, cost: 8.0, location: "E-4", stock: 1500, keywords: ["cable", "calibre", "12"] },
+    { name: "Brocha 4 pulgadas", price: 65.0, cost: 40.0, location: "P-10", stock: 4, keywords: ["brocha", "pulgadas"] }
   ];
+
+  const fuzzyMatchKeywords = (fragment: string, keywords: string[]) => {
+    const fragmentWords = fragment.split(/\s+/);
+    for (const kw of keywords) {
+      if (fragment.includes(kw)) return true; // Match exacto
+      
+      // Búsqueda difusa de Levenshtein simplificada
+      for (const fWord of fragmentWords) {
+        if (fWord.length > 4 && Math.abs(fWord.length - kw.length) <= 2) {
+          let diffs = 0;
+          for (let i = 0; i < Math.min(fWord.length, kw.length); i++) {
+            if (fWord[i] !== kw[i]) diffs++;
+          }
+          if (diffs <= 2) return true; // Si es "Tulteca" en vez de "Tolteca", coincidirá.
+        }
+      }
+    }
+    return false;
+  };
 
   const speak = (text: string) => {
     if (!('speechSynthesis' in window)) return;
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'es-MX';
-    utterance.rate = 1.05; // Ritmo fluido
+    utterance.rate = 1.05;
     window.speechSynthesis.speak(utterance);
   };
 
@@ -153,18 +172,16 @@ export default function POSModule() {
 
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript.toLowerCase();
-      console.log("Voz escuchada:", transcript);
+      console.log("Voz escuchada (Bruta):", transcript);
       
-      // Inteligencia NLP Compuesta: Divide por "y", comas o "además"
       const fragments = transcript.replace(/además/g, 'y').replace(/,/g, 'y').split(' y ');
-      const foundItems: { name: string, qty: number, location: string }[] = [];
       let nothingFound = true;
+      let voiceReply = "";
 
       fragments.forEach((fragment: string) => {
         const matchNumber = fragment.match(/(\d+)/);
         let qty = matchNumber ? parseInt(matchNumber[0]) : 1;
         
-        // Conversión verbal simple de números
         if (!matchNumber) {
           if (fragment.includes("un") || fragment.includes("una")) qty = 1;
           if (fragment.includes("dos") || fragment.includes("par")) qty = 2;
@@ -175,27 +192,28 @@ export default function POSModule() {
 
         let matchedProduct = null;
         for (const prod of GLOBAL_CATALOG) {
-          if (prod.keywords.some(k => fragment.includes(k))) {
+          if (fuzzyMatchKeywords(fragment, prod.keywords)) {
             matchedProduct = prod;
             break;
           }
         }
 
         if (matchedProduct) {
-          addToCart(matchedProduct.name, matchedProduct.price, "pz", matchedProduct.cost, qty);
-          foundItems.push({ name: matchedProduct.name, qty, location: matchedProduct.location });
+          // REGLA DE SEGURIDAD: Comprobación de Stock en Tiempo Real
+          if (qty > matchedProduct.stock) {
+            voiceReply += `Atención. Solo tienes ${matchedProduct.stock} unidades de ${matchedProduct.name} en inventario. No autoricé agregar ${qty}. `;
+          } else {
+            addToCart(matchedProduct.name, matchedProduct.price, "pz", matchedProduct.cost, qty);
+            voiceReply += `Agregué ${qty} ${matchedProduct.name}. Búscalo en el área ${matchedProduct.location}. `;
+          }
           nothingFound = false;
         }
       });
 
       if (nothingFound) {
-        speak("Lo siento, no entendí ningún artículo del catálogo en tu solicitud.");
+        speak("Lo siento, la búsqueda difusa no encontró nada similar a lo que dictaste.");
       } else {
-        let responseText = "Listo. ";
-        foundItems.forEach(item => {
-          responseText += `Agregué ${item.qty} ${item.name}. Ve por él al área ${item.location}. `;
-        });
-        speak(responseText);
+        speak(voiceReply);
       }
     };
 
