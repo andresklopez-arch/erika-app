@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface POSItem {
   id: string;
@@ -20,10 +20,25 @@ export default function POSModule() {
   const [tickets, setTickets] = useState<Ticket[]>([{ id: 1, items: [], discountPct: 0 }]);
   const [activeTicketId, setActiveTicketId] = useState(1);
   const [nextTicketId, setNextTicketId] = useState(2);
+  const [cancellations, setCancellations] = useState<{time: string, item: string}[]>([]);
 
   const activeTicket = tickets.find(t => t.id === activeTicketId) || tickets[0];
 
-  // Agregamos un 'cost' simulado o real al agregar un producto
+  // Listener global de atajos de teclado para productividad
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F4') {
+        e.preventDefault();
+        applyDiscount("percent");
+      } else if (e.key === 'F8') {
+        e.preventDefault();
+        applyDiscount("fixed");
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [tickets, activeTicketId]);
+
   const addToCart = (productName: string, price: number, unit: string = "pz", cost: number = price * 0.7) => {
     setTickets(tickets.map(t => {
       if (t.id === activeTicketId) {
@@ -48,11 +63,18 @@ export default function POSModule() {
   };
 
   const removeItem = (itemId: string) => {
-    // 1. REGLA DE SEGURIDAD: Contraseña requerida para eliminar de la nota
-    const pass = window.prompt("🔒 ACCESO RESTRINGIDO: Ingresa la contraseña de Administrador para eliminar este artículo.");
+    const pass = window.prompt("🔒 ACCESO RESTRINGIDO: Contraseña de Administrador requerida:");
     if (pass !== "admin123") {
-      alert("❌ Contraseña incorrecta o cancelada. El artículo no fue eliminado.");
+      alert("❌ Contraseña incorrecta. Operación bloqueada.");
       return;
+    }
+
+    const itemToRemove = activeTicket.items.find(i => i.id === itemId);
+    if (itemToRemove) {
+      setCancellations([...cancellations, {
+        time: new Date().toLocaleTimeString(),
+        item: `${itemToRemove.qty}x ${itemToRemove.name}`
+      }]);
     }
 
     setTickets(tickets.map(t => {
@@ -63,33 +85,40 @@ export default function POSModule() {
     }));
   };
 
-  const applyDiscount = () => {
-    // 2. REGLA DE SEGURIDAD: Seguro de utilidad máxima
+  const applyDiscount = (mode: "percent" | "fixed") => {
     if (activeTicket.items.length === 0) return alert("No hay artículos para descontar.");
 
-    const pctStr = window.prompt("Ingresa el porcentaje de descuento a aplicar al cliente (Ej. 10 para 10%):");
-    if (!pctStr) return;
-    const pct = parseFloat(pctStr);
-    if (isNaN(pct) || pct < 0 || pct > 100) return alert("Porcentaje inválido.");
-
     const rawTotal = activeTicket.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
-    const proposedTotal = rawTotal * (1 - (pct / 100));
-    
-    // Calculamos el costo real de todo lo que hay en el carrito
     const totalCost = activeTicket.items.reduce((sum, item) => sum + (item.cost * item.qty), 0);
     
     // Límite de seguridad: La venta NUNCA debe ser menor al costo + 5% de utilidad mínima absoluta
     const safeMinimum = totalCost * 1.05;
 
+    let proposedTotal = 0;
+    let finalPct = 0;
+
+    if (mode === "percent") {
+      const valStr = window.prompt(`Límite seguro de descuento permitido: ${((1 - (safeMinimum / rawTotal)) * 100).toFixed(1)}%\nIngresa el PORCENTAJE de descuento a aplicar (Ej. 10):`);
+      if (!valStr) return;
+      const pct = parseFloat(valStr);
+      if (isNaN(pct) || pct < 0 || pct > 100) return alert("Porcentaje inválido.");
+      proposedTotal = rawTotal * (1 - (pct / 100));
+      finalPct = pct;
+    } else {
+      const valStr = window.prompt(`El total actual es $${rawTotal.toFixed(2)}.\nPrecio MÁS BAJO permitido: $${safeMinimum.toFixed(2)}\n\nIngresa la CANTIDAD EXACTA en la que quieres cerrar la cuenta (Ej. 1000):`);
+      if (!valStr) return;
+      const fixedAmount = parseFloat(valStr);
+      if (isNaN(fixedAmount) || fixedAmount < 0 || fixedAmount > rawTotal) return alert("Valor inválido.");
+      proposedTotal = fixedAmount;
+      finalPct = (1 - (fixedAmount / rawTotal)) * 100;
+    }
+
     if (proposedTotal < safeMinimum) {
-      // Calcular cuál es el descuento máximo permitido antes de chocar con el límite
-      const maxDiscountAllowed = ((1 - (safeMinimum / rawTotal)) * 100).toFixed(1);
-      alert(`⚠️ SEGURO DE UTILIDAD ACTIVADO ⚠️\n\nAplicar un ${pct}% de descuento pondría la ganancia por debajo del límite seguro (o en números rojos).\n\nEl descuento MÁXIMO permitido para este carrito es de: ${maxDiscountAllowed}%`);
+      alert(`⚠️ SEGURO DE UTILIDAD ACTIVADO ⚠️\n\nCerrar la cuenta en $${proposedTotal.toFixed(2)} violaría tus límites y generaría pérdida de utilidad.\n\nEl sistema bloqueará este descuento. El precio más bajo que te puedo autorizar es: $${safeMinimum.toFixed(2)}`);
       return;
     }
 
-    setTickets(tickets.map(t => t.id === activeTicketId ? { ...t, discountPct: pct } : t));
-    alert(`✅ Descuento del ${pct}% aplicado correctamente.`);
+    setTickets(tickets.map(t => t.id === activeTicketId ? { ...t, discountPct: finalPct } : t));
   };
 
   const getCrossSellSuggestions = () => {
@@ -164,11 +193,22 @@ export default function POSModule() {
       <div className="glass-panel" style={{ width: '450px', display: 'flex', flexDirection: 'column' }}>
         <div className="flex-between" style={{ marginBottom: '15px' }}>
           <h2 style={{ margin: 0 }}>🧾 Nota Virtual</h2>
-          <button className="btn-primary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => {
-            setTickets([...tickets, { id: nextTicketId, items: [], discountPct: 0 }]);
-            setActiveTicketId(nextTicketId);
-            setNextTicketId(nextTicketId + 1);
-          }}>+ Nueva Nota</button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            {cancellations.length > 0 && (
+              <button 
+                className="btn-primary" 
+                style={{ background: 'transparent', border: '1px solid var(--color-primary)', padding: '6px 12px', fontSize: '0.8rem' }} 
+                onClick={() => alert("🚨 REGISTRO DE MERMAS Y CANCELACIONES EN CAJA 🚨\n\n" + cancellations.map(c => `[${c.time}] Canceló: ${c.item}`).join('\n'))}
+              >
+                📓 Log Mermas ({cancellations.length})
+              </button>
+            )}
+            <button className="btn-primary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => {
+              setTickets([...tickets, { id: nextTicketId, items: [], discountPct: 0 }]);
+              setActiveTicketId(nextTicketId);
+              setNextTicketId(nextTicketId + 1);
+            }}>+ Nueva Nota</button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '5px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '10px' }}>
@@ -212,11 +252,16 @@ export default function POSModule() {
         <div style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '12px' }}>
           
           <div className="flex-between" style={{ marginBottom: '10px' }}>
-            <button onClick={applyDiscount} style={{ background: 'transparent', color: 'var(--color-secondary)', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.9rem' }}>
-              % Aplicar Descuento Especial
-            </button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => applyDiscount("percent")} style={{ background: 'transparent', color: 'var(--color-secondary)', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.9rem' }}>
+                % Descuento [F4]
+              </button>
+              <button onClick={() => applyDiscount("fixed")} style={{ background: 'transparent', color: 'var(--color-secondary)', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.9rem' }}>
+                $ Cierre Exacto [F8]
+              </button>
+            </div>
             {activeTicket.discountPct > 0 && (
-              <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>-{activeTicket.discountPct}%</span>
+              <span style={{ color: 'var(--color-primary)', fontWeight: 'bold' }}>-{activeTicket.discountPct.toFixed(1)}%</span>
             )}
           </div>
 
