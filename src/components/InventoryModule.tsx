@@ -5,6 +5,7 @@ import SmartImporter from "./SmartImporter";
 
 interface InventoryItem {
   id: string;
+  code?: string;
   name: string;
   price: number;
   stock: number;
@@ -17,11 +18,11 @@ interface InventoryItem {
 }
 
 const INVENTORY_DB: InventoryItem[] = [
-  { id: "1", name: "Martillo Truper 16oz", price: 120.5, cost: 80.0, stock: 12, minStock: 5, salesIndex: 85, supplier: "Truper", location: "A-1" },
-  { id: "2", name: "Clavo para concreto 2 pulgadas", price: 45.0, cost: 25.0, stock: 15, minStock: 50, salesIndex: 90, supplier: "Aceros México", location: "B-6" },
-  { id: "3", name: "Pintura Blanca 19L Comex", price: 1250.0, cost: 900.0, stock: 4, minStock: 5, salesIndex: 40, supplier: "Comex", location: "P-12" },
-  { id: "4", name: "Cemento Tolteca 50kg", price: 210.0, cost: 180.0, stock: 200, minStock: 100, salesIndex: 95, supplier: "Cemex", location: "AAA-100" },
-  { id: "5", name: "Cable Calibre 12 AWG (m)", price: 15.0, cost: 8.0, stock: 1500, minStock: 500, salesIndex: 80, supplier: "Condumex", location: "E-4" },
+  { id: "1", code: "TRU-16", name: "Martillo Truper 16oz", price: 120.5, cost: 80.0, stock: 12, minStock: 5, salesIndex: 85, supplier: "Truper", location: "A-1" },
+  { id: "2", code: "CLA-02", name: "Clavo para concreto 2 pulgadas", price: 45.0, cost: 25.0, stock: 15, minStock: 50, salesIndex: 90, supplier: "Aceros México", location: "B-6" },
+  { id: "3", code: "COM-19", name: "Pintura Blanca 19L Comex", price: 1250.0, cost: 900.0, stock: 4, minStock: 5, salesIndex: 40, supplier: "Comex", location: "P-12" },
+  { id: "4", code: "TOL-50", name: "Cemento Tolteca 50kg", price: 210.0, cost: 180.0, stock: 200, minStock: 100, salesIndex: 95, supplier: "Cemex", location: "AAA-100" },
+  { id: "5", code: "CAB-12", name: "Cable Calibre 12 AWG (m)", price: 15.0, cost: 8.0, stock: 1500, minStock: 500, salesIndex: 80, supplier: "Condumex", location: "E-4" },
 ];
 
 export default function InventoryModule() {
@@ -33,7 +34,7 @@ export default function InventoryModule() {
 
   const exportToExcel = () => {
     const data = items.map(i => ({
-      "ID": i.id,
+      "CÓDIGO": i.code || i.id,
       "Producto": i.name,
       "Ubicación (Pasillo)": i.location || "Sin Asignar",
       "Proveedor": i.supplier || "No Asignado",
@@ -100,22 +101,19 @@ export default function InventoryModule() {
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead style={{ background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid var(--glass-border)' }}>
             <tr>
+              <th style={{ padding: '15px' }}>Código</th>
               <th style={{ padding: '15px' }}>Producto</th>
               <th style={{ padding: '15px' }}>Ubicación Física</th>
               <th style={{ padding: '15px' }}>Stock</th>
               <th style={{ padding: '15px' }}>Costo Prov.</th>
               <th style={{ padding: '15px' }}>Precio Venta</th>
-              <th style={{ padding: '15px' }}>Alertas de Mercado</th>
             </tr>
           </thead>
           <tbody>
             {items.map(item => {
-              const currentMargin = (item.price - item.cost) / item.cost;
-              const isMarginLow = currentMargin < (avgMargin - 0.1);
-              const highDemand = item.salesIndex > 80 && item.stock <= item.minStock;
-
               return (
                 <tr key={item.id} style={{ borderBottom: '1px solid var(--glass-border)', background: item.autoPriced ? 'rgba(16, 185, 129, 0.1)' : 'transparent' }}>
+                  <td style={{ padding: '15px', fontWeight: 'bold', color: 'var(--color-primary)' }}>{item.code || '-'}</td>
                   <td style={{ padding: '15px', fontWeight: 'bold' }}>
                     {item.name}
                     <div style={{ fontSize: '0.75rem', color: 'var(--color-secondary)' }}>Prov: {item.supplier || 'N/A'}</div>
@@ -144,15 +142,6 @@ export default function InventoryModule() {
                       {item.autoPriced && <span title="Precio Asignado Automáticamente" style={{ fontSize: '0.8rem', background: 'var(--color-secondary)', color: 'black', padding: '2px 6px', borderRadius: '4px' }}>AUTO</span>}
                     </div>
                   </td>
-                  <td style={{ padding: '15px' }}>
-                    {highDemand ? (
-                      <div style={{ color: 'var(--color-secondary)', fontSize: '0.85rem' }}>📈 Alta Demanda.</div>
-                    ) : isMarginLow ? (
-                      <div style={{ color: 'var(--color-primary)', fontSize: '0.85rem' }}>⚠️ Margen Bajo ({(currentMargin*100).toFixed(0)}%)</div>
-                    ) : (
-                      <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)' }}>Estable</span>
-                    )}
-                  </td>
                 </tr>
               )
             })}
@@ -167,7 +156,7 @@ export default function InventoryModule() {
           onImport={(newProducts) => {
             setImportHistory([...importHistory, items]);
             setItems([...newProducts, ...items]);
-            alert(`✅ ERIKA agregó ${newProducts.length} productos y asignó ubicaciones por defecto. Revísalas.`);
+            alert(`✅ ERIKA enrutó los productos hacia tu Almacén.\nSe generaron ubicaciones a partir de C-1 en adelante. Dirígete a inventario a imprimir las etiquetas QR.`);
           }} 
         />
       )}

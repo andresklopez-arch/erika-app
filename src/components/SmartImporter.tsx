@@ -3,7 +3,7 @@ import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 
 interface SmartImporterProps {
-  avgMargin: number; // Porcentaje promedio que la IA usará para sugerir el precio
+  avgMargin: number;
   onClose: () => void;
   onImport: (products: any[]) => void;
 }
@@ -14,17 +14,6 @@ export default function SmartImporter({ avgMargin, onClose, onImport }: SmartImp
   const [progress, setProgress] = useState("");
   const [previewData, setPreviewData] = useState<any[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const downloadTemplate = () => {
-    const ws = XLSX.utils.aoa_to_sheet([
-      ["Nombre del Producto", "Costo del Proveedor", "Stock Ingresado", "Nombre del Proveedor"],
-      ["Martillo Truper 16oz", 80.00, 15, "Ferretera Nacional"],
-      ["Clavo 2 pulgadas (Caja)", 25.00, 50, "Aceros México"]
-    ]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Plantilla_Inventario");
-    XLSX.writeFile(wb, "Plantilla_Inventario_ERIKA.xlsx");
-  };
 
   const processExcel = async (file: File) => {
     setIsProcessing(true);
@@ -41,75 +30,88 @@ export default function SmartImporter({ avgMargin, onClose, onImport }: SmartImp
         
         if (rawData.length < 2) throw new Error("Documento vacío");
 
-        const headers = rawData[0].map(h => String(h).toLowerCase());
+        // Extraer los índices de la cabecera (incluso si tienen espacios extra)
+        const headers = rawData[0].map(h => String(h).toLowerCase().trim());
+        
+        const codeIdx = headers.findIndex(h => h.includes("codigo") || h.includes("código"));
         const nameIdx = headers.findIndex(h => h.includes("nombre") || h.includes("descrip"));
-        const costIdx = headers.findIndex(h => h.includes("costo") || h.includes("precio prov") || h.includes("compra"));
-        const stockIdx = headers.findIndex(h => h.includes("stock") || h.includes("cantidad"));
-        const provIdx = headers.findIndex(h => h.includes("proveedor"));
+        // Soporta la columna "aa" o "con iva" o "costo"
+        const costIdx = headers.findIndex(h => h.includes("costo") || h === "aa" || h.includes("iva") || h.includes("compra"));
+        // Soporta la columna "piezas totales" o "almacen" o "stock"
+        const stockIdx = headers.findIndex(h => h.includes("stock") || h.includes("cantidad") || h.includes("totales") || h.includes("almacen"));
 
-        const finalNameIdx = nameIdx >= 0 ? nameIdx : 0;
-        const finalCostIdx = costIdx >= 0 ? costIdx : 1;
-        const finalStockIdx = stockIdx >= 0 ? stockIdx : 2;
-        const finalProvIdx = provIdx >= 0 ? provIdx : 3;
+        const finalNameIdx = nameIdx >= 0 ? nameIdx : 1; // Asume col B por defecto si falla
+        const finalCostIdx = costIdx >= 0 ? costIdx : 5; // Asume col F (AA) si falla
+        const finalStockIdx = stockIdx >= 0 ? stockIdx : 4; // Asume col E (Piezas totales)
+        const finalCodeIdx = codeIdx >= 0 ? codeIdx : 0; // Asume col A
 
         const importedProducts = [];
         for (let i = 1; i < rawData.length; i++) {
           const row = rawData[i];
-          if (!row[finalNameIdx]) continue;
+          if (!row || !row[finalNameIdx]) continue; // Salta filas vacías
           
-          const rawCost = Number(row[finalCostIdx]) || 0;
-          // Aplicar la lógica comercial: Fija el precio usando el margen promedio
+          let rawCost = Number(row[finalCostIdx]);
+          // A veces los Excel traen strings de moneda Ej. "$58,48"
+          if (isNaN(rawCost) && typeof row[finalCostIdx] === 'string') {
+            rawCost = Number(row[finalCostIdx].replace(/[^0-9.-]+/g,""));
+          }
+          if (isNaN(rawCost)) rawCost = 0;
+
           const calculatedPrice = rawCost * (1 + avgMargin);
+          const rawCode = row[finalCodeIdx] ? String(row[finalCodeIdx]) : `SKU-${Date.now()}-${i}`;
 
           importedProducts.push({
             id: `imp-${Date.now()}-${i}`,
+            code: rawCode,
             name: String(row[finalNameIdx]),
             cost: rawCost,
             price: calculatedPrice,
             stock: Number(row[finalStockIdx]) || 0,
-            supplier: row[finalProvIdx] ? String(row[finalProvIdx]) : "Proveedor Desconocido",
+            supplier: "Pendiente",
             minStock: 5,
             salesIndex: 50,
-            autoPriced: true // MARCA DISTINTIVA de que la IA le asignó el precio
+            autoPriced: true
           });
         }
 
         setTimeout(() => {
           setPreviewData(importedProducts);
           setIsProcessing(false);
-        }, 1500);
+        }, 1000);
 
       } catch (err) {
-        alert("Error al leer el Excel.");
+        alert("Error al leer el Excel. Revisa el formato de columnas.");
         setIsProcessing(false);
       }
     };
     reader.readAsBinaryString(file);
   };
 
-  const processPDF = async (file: File) => {
-    setIsProcessing(true);
-    setProgress("👁️ IA Extrayendo costos de la factura...");
-    
-    setTimeout(() => {
-      const mockExtracted = [
-        { id: `ocr-${Date.now()}-1`, name: "Tornillo 1/2 pulg (IA)", cost: 1.00, price: 1.00 * (1 + avgMargin), stock: 500, minStock: 100, salesIndex: 75, supplier: "Factura IA", autoPriced: true },
-        { id: `ocr-${Date.now()}-2`, name: "Fester 19L (IA)", cost: 1200.00, price: 1200.00 * (1 + avgMargin), stock: 10, minStock: 5, salesIndex: 90, supplier: "Factura IA", autoPriced: true },
-      ];
-      setPreviewData(mockExtracted);
-      setIsProcessing(false);
-    }, 3000);
-  };
-
   const handleFileSelection = (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase();
     if (ext === "xlsx" || ext === "xls" || ext === "csv") processExcel(file);
-    else if (ext === "pdf" || ext === "png" || ext === "jpg") processPDF(file);
+    else alert("Formato no soportado aún para tablas completas. Sube un XLSX.");
   };
 
   const confirmImport = () => {
     if (previewData) {
-      onImport(previewData);
+      // 1. Pedir nombre de Proveedor
+      const globalSupplier = window.prompt("🏢 Nombra al Proveedor General para asignar a todos estos productos:");
+      if (!globalSupplier) return; // Cancel if no provider
+
+      // 2. Asignar ruta de acomodo en Almacén Inteligente
+      let areaChar = "C";
+      let areaNum = 1;
+      
+      const finalProducts = previewData.map(p => {
+        const assignedLocation = `${areaChar}-${areaNum}`;
+        areaNum++;
+        if (areaNum > 20) { areaNum = 1; areaChar = String.fromCharCode(areaChar.charCodeAt(0) + 1); }
+        
+        return { ...p, supplier: globalSupplier, location: assignedLocation };
+      });
+
+      onImport(finalProducts);
       onClose();
     }
   };
@@ -122,23 +124,25 @@ export default function SmartImporter({ avgMargin, onClose, onImport }: SmartImp
         {previewData ? (
           <div className="animate-fade-in">
             <h2 style={{ color: 'var(--color-primary)', marginBottom: '10px' }}>👀 Revisión y Precios Calculados (AUTO)</h2>
-            <p style={{ color: 'var(--color-secondary)', marginBottom: '20px' }}>ERIKA ha calculado los Precios de Venta usando tu margen promedio ({(avgMargin*100).toFixed(1)}%). Revisa que estén correctos.</p>
+            <p style={{ color: 'var(--color-secondary)', marginBottom: '20px' }}>ERIKA ha extraído los costos. Revisa que estén correctos antes de asignar proveedor.</p>
             
             <div style={{ maxHeight: '300px', overflowY: 'auto', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '10px', marginBottom: '20px' }}>
               <table style={{ width: '100%', fontSize: '0.85rem', textAlign: 'left', borderCollapse: 'collapse' }}>
                 <thead style={{ background: 'rgba(255,255,255,0.05)' }}>
                   <tr style={{ color: 'var(--color-secondary)' }}>
+                    <th style={{ padding: '8px' }}>CÓDIGO</th>
                     <th style={{ padding: '8px' }}>Producto</th>
-                    <th style={{ padding: '8px' }}>Proveedor</th>
+                    <th style={{ padding: '8px' }}>Stock</th>
                     <th style={{ padding: '8px' }}>Costo</th>
-                    <th style={{ padding: '8px', color: 'white', background: 'rgba(16, 185, 129, 0.2)' }}>Precio AUTO</th>
+                    <th style={{ padding: '8px', color: 'white', background: 'rgba(16, 185, 129, 0.2)' }}>Precio Venta (AUTO)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {previewData.slice(0, 50).map((p, i) => (
                     <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <td style={{ padding: '8px' }}>{p.code}</td>
                       <td style={{ padding: '8px' }}>{p.name}</td>
-                      <td style={{ padding: '8px' }}>{p.supplier}</td>
+                      <td style={{ padding: '8px' }}>{p.stock}</td>
                       <td style={{ padding: '8px' }}>${p.cost.toFixed(2)}</td>
                       <td style={{ padding: '8px', background: 'rgba(16, 185, 129, 0.1)', fontWeight: 'bold' }}>${p.price.toFixed(2)}</td>
                     </tr>
@@ -149,20 +153,19 @@ export default function SmartImporter({ avgMargin, onClose, onImport }: SmartImp
 
             <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
               <button className="btn-primary" onClick={() => setPreviewData(null)} style={{ background: 'transparent', border: '1px solid var(--color-primary)' }}>Cancelar</button>
-              <button className="btn-primary" onClick={confirmImport} style={{ background: 'var(--color-primary)' }}>✅ Aprobar Precios e Importar</button>
+              <button className="btn-primary" onClick={confirmImport} style={{ background: 'var(--color-primary)' }}>✅ Asignar Proveedor y Ubicar</button>
             </div>
           </div>
         ) : (
           <div>
             <h2 style={{ color: 'var(--color-primary)', marginBottom: '10px' }}>⚡ Subir Facturas / Costos</h2>
-            <p style={{ color: 'var(--color-text)', opacity: 0.8, marginBottom: '25px', fontSize: '0.9rem' }}>Sube tu Excel o PDF. ERIKA detectará el costo y generará el Precio de Venta en automático.</p>
+            <p style={{ color: 'var(--color-text)', opacity: 0.8, marginBottom: '25px', fontSize: '0.9rem' }}>Sube tu Excel. Extraeré Código, Descripción y Costo ("AA" o "Con IVA").</p>
             {isProcessing ? (
                <div style={{ padding: '40px 0' }}><p style={{ color: 'var(--color-secondary)' }}>{progress}</p></div>
             ) : (
               <div>
-                <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept=".xlsx,.xls,.csv,.pdf,image/*" onChange={(e) => e.target.files && handleFileSelection(e.target.files[0])} />
-                <button onClick={() => fileInputRef.current?.click()} className="btn-primary" style={{ padding: '20px', width: '100%', marginBottom: '20px' }}>📁 Buscar Archivo</button>
-                <button onClick={downloadTemplate} style={{ background: 'transparent', color: 'var(--color-secondary)', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>📥 Descargar Plantilla de Costos Excel</button>
+                <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept=".xlsx,.xls,.csv" onChange={(e) => e.target.files && handleFileSelection(e.target.files[0])} />
+                <button onClick={() => fileInputRef.current?.click()} className="btn-primary" style={{ padding: '20px', width: '100%', marginBottom: '20px' }}>📁 Buscar Archivo Excel</button>
               </div>
             )}
           </div>
