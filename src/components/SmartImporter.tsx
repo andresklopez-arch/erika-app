@@ -11,7 +11,19 @@ export default function SmartImporter({ onClose, onImport }: SmartImporterProps)
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState("");
+  const [previewData, setPreviewData] = useState<any[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const downloadTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Nombre del Producto", "Precio de Venta", "Costo de Compra", "Stock Actual"],
+      ["Martillo Truper 16oz", 120.50, 80.00, 15],
+      ["Clavo 2 pulgadas (Caja)", 45.00, 25.00, 50]
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Plantilla_Inventario");
+    XLSX.writeFile(wb, "Plantilla_Inventario_ERIKA.xlsx");
+  };
 
   const processExcel = async (file: File) => {
     setIsProcessing(true);
@@ -29,7 +41,6 @@ export default function SmartImporter({ onClose, onImport }: SmartImporterProps)
         if (rawData.length < 2) throw new Error("Documento vacío");
 
         setProgress("🔍 Detectando columnas automáticamente con IA...");
-        // IA Heurística para adivinar las columnas
         const headers = rawData[0].map(h => String(h).toLowerCase());
         
         const nameIdx = headers.findIndex(h => h.includes("nombre") || h.includes("descrip") || h.includes("producto") || h.includes("articulo"));
@@ -37,7 +48,6 @@ export default function SmartImporter({ onClose, onImport }: SmartImporterProps)
         const costIdx = headers.findIndex(h => h.includes("costo") || h.includes("compra"));
         const stockIdx = headers.findIndex(h => h.includes("stock") || h.includes("cantidad") || h.includes("inventario"));
 
-        // Fallbacks por si la hoja no tiene encabezados claros (asumimos formato estándar)
         const finalNameIdx = nameIdx >= 0 ? nameIdx : 0;
         const finalPriceIdx = priceIdx >= 0 ? priceIdx : 1;
         const finalCostIdx = costIdx >= 0 ? costIdx : 2;
@@ -46,7 +56,7 @@ export default function SmartImporter({ onClose, onImport }: SmartImporterProps)
         const importedProducts = [];
         for (let i = 1; i < rawData.length; i++) {
           const row = rawData[i];
-          if (!row[finalNameIdx]) continue; // Saltar filas vacías
+          if (!row[finalNameIdx]) continue;
           
           importedProducts.push({
             id: `imp-${Date.now()}-${i}`,
@@ -55,13 +65,13 @@ export default function SmartImporter({ onClose, onImport }: SmartImporterProps)
             cost: Number(row[finalCostIdx]) || 0,
             stock: Number(row[finalStockIdx]) || 0,
             minStock: 5,
-            salesIndex: 50 // Valor por defecto
+            salesIndex: 50
           });
         }
 
         setTimeout(() => {
-          onImport(importedProducts);
-          onClose();
+          setPreviewData(importedProducts);
+          setIsProcessing(false);
         }, 1500);
 
       } catch (err) {
@@ -76,7 +86,6 @@ export default function SmartImporter({ onClose, onImport }: SmartImporterProps)
     setIsProcessing(true);
     setProgress("👁️ Iniciando Motor de Visión IA ERIKA...");
     
-    // Simulación del procesamiento del OCR / LLM visual
     setTimeout(() => setProgress("📄 Escaneando estructura del documento..."), 1500);
     setTimeout(() => setProgress("💡 Extrayendo filas, precios y cantidades..."), 3500);
     
@@ -85,8 +94,8 @@ export default function SmartImporter({ onClose, onImport }: SmartImporterProps)
         { id: `ocr-${Date.now()}-1`, name: "Tornillo 1/2 pulgada (Extraído por IA)", price: 2.50, cost: 1.00, stock: 500, minStock: 100, salesIndex: 75 },
         { id: `ocr-${Date.now()}-2`, name: "Impermeabilizante Fester 19L (Extraído por IA)", price: 1800.00, cost: 1200.00, stock: 10, minStock: 5, salesIndex: 90 },
       ];
-      onImport(mockExtracted);
-      onClose();
+      setPreviewData(mockExtracted);
+      setIsProcessing(false);
     }, 5500);
   };
 
@@ -109,45 +118,97 @@ export default function SmartImporter({ onClose, onImport }: SmartImporterProps)
     }
   };
 
+  const confirmImport = () => {
+    if (previewData) {
+      onImport(previewData);
+      onClose();
+    }
+  };
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="glass-panel animate-fade-in" style={{ width: '500px', textAlign: 'center', padding: '40px', position: 'relative', border: '1px solid var(--color-primary)' }}>
+      <div className="glass-panel animate-fade-in" style={{ width: previewData ? '700px' : '500px', textAlign: 'center', padding: '40px', position: 'relative', border: '1px solid var(--color-primary)' }}>
         <button onClick={onClose} style={{ position: 'absolute', top: '15px', right: '15px', background: 'transparent', color: 'white', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}>✖</button>
         
-        <h2 style={{ color: 'var(--color-primary)', marginBottom: '10px' }}>⚡ Importación Inteligente</h2>
-        <p style={{ color: 'var(--color-text)', opacity: 0.8, marginBottom: '25px', fontSize: '0.9rem' }}>Sube tu lista de precios en <strong>Excel</strong> o toma una foto/sube un <strong>PDF</strong> de la factura de tu proveedor para que ERIKA la lea.</p>
+        {previewData ? (
+          <div className="animate-fade-in">
+            <h2 style={{ color: 'var(--color-primary)', marginBottom: '10px' }}>👀 Revisión de Datos ERIKA</h2>
+            <p style={{ color: 'var(--color-secondary)', marginBottom: '20px' }}>He detectado {previewData.length} productos listos para importarse.</p>
+            
+            <div style={{ maxHeight: '300px', overflowY: 'auto', background: 'rgba(0,0,0,0.3)', borderRadius: '8px', padding: '10px', marginBottom: '20px' }}>
+              <table style={{ width: '100%', fontSize: '0.85rem', textAlign: 'left', borderCollapse: 'collapse' }}>
+                <thead style={{ background: 'rgba(255,255,255,0.05)' }}>
+                  <tr style={{ color: 'var(--color-secondary)' }}>
+                    <th style={{ padding: '8px' }}>Producto</th>
+                    <th style={{ padding: '8px' }}>Costo</th>
+                    <th style={{ padding: '8px' }}>Precio</th>
+                    <th style={{ padding: '8px' }}>Stock</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewData.slice(0, 50).map((p, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <td style={{ padding: '8px' }}>{p.name}</td>
+                      <td style={{ padding: '8px' }}>${p.cost}</td>
+                      <td style={{ padding: '8px' }}>${p.price}</td>
+                      <td style={{ padding: '8px' }}>{p.stock}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {previewData.length > 50 && <p style={{ marginTop: '10px', fontSize: '0.8rem', opacity: 0.6 }}>...mostrando solo los primeros 50.</p>}
+            </div>
 
-        {isProcessing ? (
-          <div style={{ padding: '40px 0' }}>
-            <div style={{ width: '50px', height: '50px', border: '4px solid rgba(255,255,255,0.1)', borderTop: '4px solid var(--color-primary)', borderRadius: '50%', margin: '0 auto', animation: 'spin 1s linear infinite' }} />
-            <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-            <p style={{ marginTop: '20px', color: 'var(--color-secondary)', fontWeight: 'bold' }}>{progress}</p>
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+              <button className="btn-primary" onClick={() => setPreviewData(null)} style={{ background: 'transparent', border: '1px solid var(--color-primary)' }}>Rechazar</button>
+              <button className="btn-primary" onClick={confirmImport} style={{ background: 'var(--color-primary)' }}>✅ Confirmar e Inyectar a BD</button>
+            </div>
           </div>
         ) : (
-          <div 
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={handleFileDrop}
-            onClick={() => fileInputRef.current?.click()}
-            style={{
-              border: `2px dashed ${isDragging ? 'var(--color-primary)' : 'rgba(255,255,255,0.3)'}`,
-              background: isDragging ? 'rgba(244, 63, 94, 0.1)' : 'rgba(0,0,0,0.3)',
-              borderRadius: '12px',
-              padding: '50px 20px',
-              cursor: 'pointer',
-              transition: 'all 0.3s ease'
-            }}
-          >
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              style={{ display: 'none' }} 
-              accept=".xlsx,.xls,.csv,.pdf,image/*" 
-              onChange={(e) => e.target.files && handleFileSelection(e.target.files[0])}
-            />
-            <div style={{ fontSize: '3rem', marginBottom: '10px' }}>📂</div>
-            <h3 style={{ color: 'white', marginBottom: '5px' }}>Arrastra tus archivos aquí</h3>
-            <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>o haz clic para explorar tu dispositivo</p>
+          <div>
+            <h2 style={{ color: 'var(--color-primary)', marginBottom: '10px' }}>⚡ Importación Inteligente</h2>
+            <p style={{ color: 'var(--color-text)', opacity: 0.8, marginBottom: '25px', fontSize: '0.9rem' }}>Sube tu lista de precios en <strong>Excel</strong> o toma una foto/sube un <strong>PDF</strong> de la factura.</p>
+
+            {isProcessing ? (
+              <div style={{ padding: '40px 0' }}>
+                <div style={{ width: '50px', height: '50px', border: '4px solid rgba(255,255,255,0.1)', borderTop: '4px solid var(--color-primary)', borderRadius: '50%', margin: '0 auto', animation: 'spin 1s linear infinite' }} />
+                <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+                <p style={{ marginTop: '20px', color: 'var(--color-secondary)', fontWeight: 'bold' }}>{progress}</p>
+              </div>
+            ) : (
+              <div>
+                <div 
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={handleFileDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    border: `2px dashed ${isDragging ? 'var(--color-primary)' : 'rgba(255,255,255,0.3)'}`,
+                    background: isDragging ? 'rgba(244, 63, 94, 0.1)' : 'rgba(0,0,0,0.3)',
+                    borderRadius: '12px',
+                    padding: '50px 20px',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    marginBottom: '20px'
+                  }}
+                >
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    style={{ display: 'none' }} 
+                    accept=".xlsx,.xls,.csv,.pdf,image/*" 
+                    onChange={(e) => e.target.files && handleFileSelection(e.target.files[0])}
+                  />
+                  <div style={{ fontSize: '3rem', marginBottom: '10px' }}>📂</div>
+                  <h3 style={{ color: 'white', marginBottom: '5px' }}>Arrastra tus archivos aquí</h3>
+                  <p style={{ fontSize: '0.8rem', opacity: 0.6 }}>o haz clic para explorar tu dispositivo</p>
+                </div>
+
+                <button onClick={downloadTemplate} style={{ background: 'transparent', color: 'var(--color-secondary)', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.85rem' }}>
+                  📥 Descargar Plantilla Ideal de Excel
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

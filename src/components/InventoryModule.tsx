@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import * as XLSX from "xlsx";
 import SmartImporter from "./SmartImporter";
 
 interface InventoryItem {
@@ -44,6 +45,22 @@ export default function InventoryModule() {
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
   };
 
+  const exportToExcel = () => {
+    const data = items.map(i => ({
+      "ID ERIKA": i.id,
+      "Nombre del Producto": i.name,
+      "Costo de Compra": i.cost,
+      "Precio de Venta": i.price,
+      "Stock Actual": i.stock,
+      "Stock Mínimo": i.minStock,
+      "Índice Venta (0-100)": i.salesIndex
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Inventario_Total");
+    XLSX.writeFile(wb, `Respaldo_Inventario_ERIKA_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '100%' }}>
       
@@ -68,8 +85,8 @@ export default function InventoryModule() {
         </div>
         
         <div style={{ display: 'flex', gap: '10px' }}>
+          <button className="btn-primary" onClick={exportToExcel} style={{ background: 'var(--glass-bg)', border: '1px solid #10b981', color: '#10b981' }}>📥 Exportar Excel</button>
           <button className="btn-primary" onClick={() => setShowImporter(true)} style={{ background: 'linear-gradient(135deg, var(--color-secondary), #059669)' }}>⚡ Carga Inteligente</button>
-          <button className="btn-primary" style={{ background: 'var(--glass-bg)', border: '1px solid var(--color-primary)' }}>+ Nuevo Producto</button>
         </div>
       </div>
 
@@ -124,7 +141,7 @@ export default function InventoryModule() {
           onClose={() => setShowImporter(false)} 
           onImport={(newProducts) => {
             setItems([...newProducts, ...items]);
-            alert(`✅ ERIKA procesó tu archivo y agregó ${newProducts.length} productos a tu inventario exitosamente.`);
+            alert(`✅ ERIKA inyectó ${newProducts.length} productos a tu base de datos exitosamente.`);
           }} 
         />
       )}
