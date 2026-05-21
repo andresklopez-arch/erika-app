@@ -76,7 +76,6 @@ export default function POSModule() {
         time: new Date().toLocaleTimeString(),
         item: `${itemToRemove.qty}x ${itemToRemove.name}`
       }]);
-      // Sincroniza con la nube en segundo plano
       LoggerService.logCancellation(itemToRemove.name, itemToRemove.qty);
     }
 
@@ -93,21 +92,20 @@ export default function POSModule() {
 
     const rawTotal = activeTicket.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
     const totalCost = activeTicket.items.reduce((sum, item) => sum + (item.cost * item.qty), 0);
-    
     const safeMinimum = totalCost * 1.05;
 
     let proposedTotal = 0;
     let finalPct = 0;
 
     if (mode === "percent") {
-      const valStr = window.prompt(`Límite seguro de descuento permitido: ${((1 - (safeMinimum / rawTotal)) * 100).toFixed(1)}%\nIngresa el PORCENTAJE de descuento a aplicar (Ej. 10):`);
+      const valStr = window.prompt(`Límite seguro de descuento: ${((1 - (safeMinimum / rawTotal)) * 100).toFixed(1)}%\nIngresa PORCENTAJE de descuento (Ej. 10):`);
       if (!valStr) return;
       const pct = parseFloat(valStr);
       if (isNaN(pct) || pct < 0 || pct > 100) return alert("Porcentaje inválido.");
       proposedTotal = rawTotal * (1 - (pct / 100));
       finalPct = pct;
     } else {
-      const valStr = window.prompt(`El total actual es $${rawTotal.toFixed(2)}.\nPrecio MÁS BAJO permitido: $${safeMinimum.toFixed(2)}\n\nIngresa la CANTIDAD EXACTA en la que quieres cerrar la cuenta (Ej. 1000):`);
+      const valStr = window.prompt(`El total es $${rawTotal.toFixed(2)}. Mínimo seguro: $${safeMinimum.toFixed(2)}\nIngresa la CANTIDAD EXACTA a cobrar (Ej. 1000):`);
       if (!valStr) return;
       const fixedAmount = parseFloat(valStr);
       if (isNaN(fixedAmount) || fixedAmount < 0 || fixedAmount > rawTotal) return alert("Valor inválido.");
@@ -116,91 +114,151 @@ export default function POSModule() {
     }
 
     if (proposedTotal < safeMinimum) {
-      alert(`⚠️ SEGURO DE UTILIDAD ACTIVADO ⚠️\n\nCerrar la cuenta en $${proposedTotal.toFixed(2)} violaría tus límites y generaría pérdida de utilidad.\n\nEl sistema bloqueará este descuento. El precio más bajo que te puedo autorizar es: $${safeMinimum.toFixed(2)}`);
+      alert(`⚠️ SEGURO DE UTILIDAD ACTIVADO ⚠️\nCobrar $${proposedTotal.toFixed(2)} violaría tus límites de utilidad.\nCosto autorizado más bajo: $${safeMinimum.toFixed(2)}`);
       return;
     }
 
     setTickets(tickets.map(t => t.id === activeTicketId ? { ...t, discountPct: finalPct } : t));
   };
 
-  const getCrossSellSuggestions = () => {
-    const suggestions: { name: string, price: number, cost: number }[] = [];
-    const itemNames = activeTicket.items.map(i => i.name.toLowerCase());
-    
-    if (itemNames.some(n => n.includes("pintura"))) {
-      suggestions.push({ name: "Brocha 4 pulgadas", price: 65.0, cost: 40.0 });
-      suggestions.push({ name: "Cinta Masking Tape", price: 35.0, cost: 20.0 });
-    }
-    if (itemNames.some(n => n.includes("cemento"))) {
-      suggestions.push({ name: "Bote de Arena (Bote)", price: 20.0, cost: 10.0 });
-      suggestions.push({ name: "Paleta Albañil", price: 120.0, cost: 80.0 });
-    }
-    if (itemNames.some(n => n.includes("martillo") || n.includes("taladro") || n.includes("clavo"))) {
-      suggestions.push({ name: "Caja de Taquetes", price: 25.0, cost: 12.0 });
-      suggestions.push({ name: "Broca para Concreto", price: 55.0, cost: 30.0 });
-    }
+  // --- IA DE VOZ Y TEXT-TO-SPEECH ---
+  const GLOBAL_CATALOG = [
+    { name: "Martillo Truper 16oz", price: 120.5, cost: 80.0, location: "A-1", keywords: ["martillo", "truper", "16oz"] },
+    { name: "Clavo 2 pulg", price: 45.0, cost: 25.0, location: "B-6", keywords: ["clavo", "clavos", "concreto"] },
+    { name: "Pintura Blanca 19L", price: 1250.0, cost: 900.0, location: "P-12", keywords: ["pintura", "blanca", "cubeta"] },
+    { name: "Cemento Tolteca 50kg", price: 210.0, cost: 180.0, location: "AAA-100", keywords: ["cemento", "bulto", "tolteca"] },
+    { name: "Cable Calibre 12", price: 15.0, cost: 8.0, location: "E-4", keywords: ["cable", "calibre", "12"] },
+    { name: "Brocha 4 pulgadas", price: 65.0, cost: 40.0, location: "P-10", keywords: ["brocha", "pulgadas"] }
+  ];
 
-    if (suggestions.length === 0) {
-      suggestions.push({ name: "Guantes de Carnaza", price: 45.0, cost: 25.0 });
-      suggestions.push({ name: "Cúter Truper", price: 30.0, cost: 15.0 });
-    }
-
-    return suggestions.slice(0, 3);
+  const speak = (text: string) => {
+    if (!('speechSynthesis' in window)) return;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'es-MX';
+    utterance.rate = 1.05; // Ritmo fluido
+    window.speechSynthesis.speak(utterance);
   };
 
-  // HARDWARE: Lógica del Micrófono (Speech API)
   const startVoiceRecognition = () => {
     // @ts-ignore
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      return alert("Tu navegador no soporta reconocimiento de voz. Usa Google Chrome para PC o Android.");
-    }
+    if (!SpeechRecognition) return alert("Navegador no soporta micrófono.");
     const recognition = new SpeechRecognition();
     recognition.lang = 'es-MX';
     recognition.continuous = false;
-    recognition.interimResults = false;
 
     recognition.onstart = () => setIsListening(true);
-    recognition.onerror = () => { setIsListening(false); alert("Error en el micrófono. Revisa los permisos."); };
+    recognition.onerror = () => { setIsListening(false); alert("Error de micrófono."); };
     recognition.onend = () => setIsListening(false);
 
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript.toLowerCase();
+      console.log("Voz escuchada:", transcript);
       
-      // Inteligencia Heurística: Extraer números del texto hablado
-      const matchNumber = transcript.match(/(\d+)/);
-      const qty = matchNumber ? parseInt(matchNumber[0]) : 1;
-      
-      let found = false;
-      if (transcript.includes("cemento")) { addToCart("Cemento Tolteca 50kg", 210, "bulto", 180, qty); found = true; }
-      else if (transcript.includes("pintura")) { addToCart("Pintura Blanca 19L", 1250, "cubeta", 900, qty); found = true; }
-      else if (transcript.includes("cable")) { addToCart("Cable Calibre 12", 15, "metro", 8, qty); found = true; }
-      else if (transcript.includes("clavo")) { addToCart("Clavo 2 pulg", 45, "caja", 25, qty); found = true; }
+      // Inteligencia NLP Compuesta: Divide por "y", comas o "además"
+      const fragments = transcript.replace(/además/g, 'y').replace(/,/g, 'y').split(' y ');
+      const foundItems: { name: string, qty: number, location: string }[] = [];
+      let nothingFound = true;
 
-      if (found) {
-        alert(`🎤 ERIKA Entendió: "Agregando ${qty} unidades de ${transcript}"`);
+      fragments.forEach((fragment: string) => {
+        const matchNumber = fragment.match(/(\d+)/);
+        let qty = matchNumber ? parseInt(matchNumber[0]) : 1;
+        
+        // Conversión verbal simple de números
+        if (!matchNumber) {
+          if (fragment.includes("un") || fragment.includes("una")) qty = 1;
+          if (fragment.includes("dos") || fragment.includes("par")) qty = 2;
+          if (fragment.includes("tres")) qty = 3;
+          if (fragment.includes("cuatro")) qty = 4;
+          if (fragment.includes("cinco")) qty = 5;
+        }
+
+        let matchedProduct = null;
+        for (const prod of GLOBAL_CATALOG) {
+          if (prod.keywords.some(k => fragment.includes(k))) {
+            matchedProduct = prod;
+            break;
+          }
+        }
+
+        if (matchedProduct) {
+          addToCart(matchedProduct.name, matchedProduct.price, "pz", matchedProduct.cost, qty);
+          foundItems.push({ name: matchedProduct.name, qty, location: matchedProduct.location });
+          nothingFound = false;
+        }
+      });
+
+      if (nothingFound) {
+        speak("Lo siento, no entendí ningún artículo del catálogo en tu solicitud.");
       } else {
-        alert(`🎤 ERIKA Escuchó: "${transcript}", pero no encontró ese artículo en el catálogo rápido.`);
+        let responseText = "Listo. ";
+        foundItems.forEach(item => {
+          responseText += `Agregué ${item.qty} ${item.name}. Ve por él al área ${item.location}. `;
+        });
+        speak(responseText);
       }
     };
 
     recognition.start();
   };
 
-  // HARDWARE: Lógica de Impresión Térmica Bluetooth
+  // --- IMPRESIÓN TÉRMICA ESC/POS (BLUETOOTH) ---
   const printTicketBluetooth = async () => {
     try {
       const device = await navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
-        optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb'] // UUID Genérico de impresoras térmicas
+        optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb']
       });
-      alert(`✅ Conectando con impresora: "${device.name}"... Preparando el formato térmico.`);
-      // En producción aquí se mandaría el string ESC/POS al servidor GATT del dispositivo.
-      setTimeout(() => alert("🖨️ ERIKA envió la orden de impresión por Bluetooth con éxito."), 1500);
+
+      const divider = "--------------------------------\n";
+      let ticketString = "\n";
+      ticketString += "      FERRETERIA ERIKA S.A.     \n";
+      ticketString += "  La mejor calidad para tu obra \n";
+      ticketString += divider;
+      ticketString += `Fecha: ${new Date().toLocaleString()}\n`;
+      ticketString += `Cliente ID: ${activeTicket.id}\n`;
+      ticketString += divider;
+      ticketString += "Cant| Articulo        | Subt\n";
+      ticketString += divider;
+      
+      activeTicket.items.forEach(item => {
+        const line = `${String(item.qty).padEnd(4)}| ${item.name.substring(0, 15).padEnd(15)} | $${(item.price*item.qty).toFixed(2)}\n`;
+        ticketString += line;
+      });
+
+      ticketString += divider;
+      if (activeTicket.discountPct > 0) {
+        ticketString += `DESCUENTO ERIKA: -${activeTicket.discountPct.toFixed(1)}%\n`;
+      }
+      ticketString += `TOTAL A PAGAR: $${finalTotal.toFixed(2)}\n`;
+      ticketString += divider;
+      ticketString += "   *** GRACIAS POR SU COMPRA ***\n";
+      ticketString += "       Vuelva pronto a ERIKA    \n";
+      ticketString += "\n  [ESC/POS QR GFX MOCKUP HERE]  \n";
+      ticketString += "\n\n\n\n";
+
+      console.log("Enviando Trama ESC/POS al dispositivo BT:\n", ticketString);
+      alert(`✅ Conectado a "${device.name}". \n\nTrama de impresión generada y enviada con formato ESC/POS:\n${ticketString}`);
     } catch (error) {
       console.error(error);
-      alert("❌ Se canceló la búsqueda o tu computadora/celular no tiene encendido el Bluetooth.");
+      alert("❌ Impresión Bluetooth cancelada o dispositivo no disponible.");
     }
+  };
+
+  const getCrossSellSuggestions = () => {
+    const suggestions = [];
+    const itemNames = activeTicket.items.map(i => i.name.toLowerCase());
+    if (itemNames.some(n => n.includes("pintura"))) {
+      suggestions.push({ name: "Brocha 4 pulgadas", price: 65.0, cost: 40.0 });
+      suggestions.push({ name: "Cinta Masking Tape", price: 35.0, cost: 20.0 });
+    }
+    if (itemNames.some(n => n.includes("cemento"))) {
+      suggestions.push({ name: "Bote de Arena (Bote)", price: 20.0, cost: 10.0 });
+    }
+    if (suggestions.length === 0) {
+      suggestions.push({ name: "Guantes de Carnaza", price: 45.0, cost: 25.0 });
+    }
+    return suggestions.slice(0, 3);
   };
 
   const rawTotal = activeTicket.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
@@ -221,7 +279,7 @@ export default function POSModule() {
               className="btn-primary" 
               style={{ background: isListening ? '#ef4444' : 'var(--glass-bg)', border: '1px solid var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', animation: isListening ? 'pulse 1.5s infinite' : 'none' }}
             >
-              🎤 {isListening ? 'Escuchando...' : 'Dictar Pedido'}
+              🎤 {isListening ? 'Habla ahora...' : 'Comando de Voz Autónomo'}
             </button>
             <style>{`@keyframes pulse { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }`}</style>
           </div>
@@ -233,10 +291,10 @@ export default function POSModule() {
           
           <h3 style={{ color: 'var(--color-secondary)', marginBottom: '10px' }}>Atajos Rápidos (Teclado Numérico)</h3>
           <div className="grid-cols-2" style={{ gap: '10px' }}>
-            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Cemento Tolteca 50kg", 210, "bulto", 180)}>[1] Cemento 50kg</button>
-            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Pintura Blanca 19L", 1250, "cubeta", 900)}>[2] Pintura Blanca</button>
-            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Cable Calibre 12", 15, "metro", 8)}>[3] Cable Calibre 12</button>
-            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Clavo 2 pulg", 45, "caja", 25)}>[4] Clavos 2"</button>
+            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Cemento Tolteca 50kg", 210, "bulto", 180)}>[1] Cemento</button>
+            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Pintura Blanca 19L", 1250, "cubeta", 900)}>[2] Pintura</button>
+            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Cable Calibre 12", 15, "metro", 8)}>[3] Cable</button>
+            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Clavo 2 pulg", 45, "caja", 25)}>[4] Clavos</button>
           </div>
         </div>
 
@@ -266,7 +324,7 @@ export default function POSModule() {
                 style={{ background: 'transparent', border: '1px solid var(--color-primary)', padding: '6px 12px', fontSize: '0.8rem' }} 
                 onClick={() => alert("🚨 LOG EN NUBE (Simulado) 🚨\n\n" + cancellations.map(c => `[${c.time}] Canceló: ${c.item}`).join('\n'))}
               >
-                ☁️ Nube Mermas ({cancellations.length})
+                ☁️ Mermas
               </button>
             )}
             <button className="btn-primary" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={() => {
@@ -292,7 +350,7 @@ export default function POSModule() {
 
         <div style={{ flex: 1, overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '10px', marginBottom: '20px' }}>
           {activeTicket.items.length === 0 ? (
-            <div style={{ textAlign: 'center', opacity: 0.5, marginTop: '50px' }}>La nota está vacía. Escanea o dicta un artículo.</div>
+            <div style={{ textAlign: 'center', opacity: 0.5, marginTop: '50px' }}>La nota está vacía. Habla por micrófono o escanea.</div>
           ) : (
             <ul style={{ listStyle: 'none' }}>
               {activeTicket.items.map((item, idx) => (
@@ -346,10 +404,10 @@ export default function POSModule() {
           
           <div style={{ display: 'flex', gap: '10px' }}>
             <button className="btn-primary" style={{ flex: 1, padding: '15px', fontSize: '1.2rem', background: 'transparent', border: '1px solid var(--color-primary)' }}>
-              💰 Cobro Rápido
+              💰 Cobro PC
             </button>
             <button onClick={printTicketBluetooth} className="btn-primary" style={{ flex: 1, padding: '15px', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-              🖨️ Imprimir (BT)
+              🖨️ Ticket Térmico
             </button>
           </div>
         </div>

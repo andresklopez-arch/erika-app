@@ -12,15 +12,16 @@ interface InventoryItem {
   cost: number;
   salesIndex: number;
   supplier?: string;
+  location?: string;
   autoPriced?: boolean;
 }
 
 const INVENTORY_DB: InventoryItem[] = [
-  { id: "1", name: "Martillo Truper 16oz", price: 120.5, cost: 80.0, stock: 12, minStock: 5, salesIndex: 85, supplier: "Truper" },
-  { id: "2", name: "Clavo para concreto 2 pulgadas", price: 45.0, cost: 25.0, stock: 15, minStock: 50, salesIndex: 90, supplier: "Aceros México" },
-  { id: "3", name: "Pintura Blanca 19L Comex", price: 1250.0, cost: 900.0, stock: 4, minStock: 5, salesIndex: 40, supplier: "Comex" },
-  { id: "4", name: "Cemento Tolteca 50kg", price: 210.0, cost: 180.0, stock: 200, minStock: 100, salesIndex: 95, supplier: "Cemex" },
-  { id: "5", name: "Cable Calibre 12 AWG (m)", price: 15.0, cost: 8.0, stock: 1500, minStock: 500, salesIndex: 80, supplier: "Condumex" },
+  { id: "1", name: "Martillo Truper 16oz", price: 120.5, cost: 80.0, stock: 12, minStock: 5, salesIndex: 85, supplier: "Truper", location: "A-1" },
+  { id: "2", name: "Clavo para concreto 2 pulgadas", price: 45.0, cost: 25.0, stock: 15, minStock: 50, salesIndex: 90, supplier: "Aceros México", location: "B-6" },
+  { id: "3", name: "Pintura Blanca 19L Comex", price: 1250.0, cost: 900.0, stock: 4, minStock: 5, salesIndex: 40, supplier: "Comex", location: "P-12" },
+  { id: "4", name: "Cemento Tolteca 50kg", price: 210.0, cost: 180.0, stock: 200, minStock: 100, salesIndex: 95, supplier: "Cemex", location: "AAA-100" },
+  { id: "5", name: "Cable Calibre 12 AWG (m)", price: 15.0, cost: 8.0, stock: 1500, minStock: 500, salesIndex: 80, supplier: "Condumex", location: "E-4" },
 ];
 
 export default function InventoryModule() {
@@ -28,13 +29,13 @@ export default function InventoryModule() {
   const [importHistory, setImportHistory] = useState<InventoryItem[][]>([]);
   const [showImporter, setShowImporter] = useState(false);
 
-  // Calcula el margen de ganancia promedio de todo el inventario (Ej. 0.35 = 35%)
   const avgMargin = items.reduce((acc, i) => acc + ((i.price - i.cost) / i.cost), 0) / items.length;
 
   const exportToExcel = () => {
     const data = items.map(i => ({
       "ID": i.id,
       "Producto": i.name,
+      "Ubicación (Pasillo)": i.location || "Sin Asignar",
       "Proveedor": i.supplier || "No Asignado",
       "Costo Compra": i.cost,
       "Precio Venta": i.price,
@@ -60,15 +61,15 @@ export default function InventoryModule() {
       
       <div className="glass-panel flex-between" style={{ padding: '20px' }}>
         <div>
-          <h3 style={{ margin: 0, color: 'var(--color-primary)' }}>Margen de Utilidad Promedio: {(avgMargin * 100).toFixed(1)}%</h3>
-          <p style={{ fontSize: '0.85rem', opacity: 0.7 }}>ERIKA usará este promedio para sugerir y fijar precios automáticamente.</p>
+          <h3 style={{ margin: 0, color: 'var(--color-primary)' }}>Módulo de Almacén e Inventario Físico</h3>
+          <p style={{ fontSize: '0.85rem', opacity: 0.7 }}>Margen de Utilidad Promedio Actual: {(avgMargin * 100).toFixed(1)}%</p>
         </div>
         
         <div style={{ display: 'flex', gap: '10px' }}>
           {importHistory.length > 0 && (
             <button className="btn-primary" onClick={undoLastImport} style={{ background: 'transparent', border: '1px solid var(--color-primary)' }}>↩️ Deshacer Importación</button>
           )}
-          <button className="btn-primary" onClick={exportToExcel} style={{ background: 'var(--glass-bg)', border: '1px solid #10b981', color: '#10b981' }}>📥 Exportar Filtrado</button>
+          <button className="btn-primary" onClick={exportToExcel} style={{ background: 'var(--glass-bg)', border: '1px solid #10b981', color: '#10b981' }}>📥 Exportar Catálogo</button>
           <button className="btn-primary" onClick={() => setShowImporter(true)} style={{ background: 'linear-gradient(135deg, var(--color-secondary), #059669)' }}>⚡ Carga Inteligente</button>
         </div>
       </div>
@@ -78,18 +79,17 @@ export default function InventoryModule() {
           <thead style={{ background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid var(--glass-border)' }}>
             <tr>
               <th style={{ padding: '15px' }}>Producto</th>
+              <th style={{ padding: '15px' }}>Ubicación Física</th>
               <th style={{ padding: '15px' }}>Stock</th>
               <th style={{ padding: '15px' }}>Costo Prov.</th>
-              <th style={{ padding: '15px' }}>Precio Sugerido</th>
-              <th style={{ padding: '15px' }}>Margen Real</th>
-              <th style={{ padding: '15px' }}>Alertas de Mercado (IA)</th>
+              <th style={{ padding: '15px' }}>Precio Venta</th>
+              <th style={{ padding: '15px' }}>Alertas de Mercado</th>
             </tr>
           </thead>
           <tbody>
             {items.map(item => {
               const currentMargin = (item.price - item.cost) / item.cost;
               const isMarginLow = currentMargin < (avgMargin - 0.1);
-              const isMarginHigh = currentMargin > (avgMargin + 0.3);
               const highDemand = item.salesIndex > 80 && item.stock <= item.minStock;
 
               return (
@@ -97,6 +97,11 @@ export default function InventoryModule() {
                   <td style={{ padding: '15px', fontWeight: 'bold' }}>
                     {item.name}
                     <div style={{ fontSize: '0.75rem', color: 'var(--color-secondary)' }}>Prov: {item.supplier || 'N/A'}</div>
+                  </td>
+                  <td style={{ padding: '15px' }}>
+                    <span style={{ background: 'rgba(255,255,255,0.1)', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--color-secondary)' }}>
+                      📍 Área {item.location || 'PENDIENTE'}
+                    </span>
                   </td>
                   <td style={{ padding: '15px', fontWeight: 'bold' }}>{item.stock}</td>
                   <td style={{ padding: '15px' }}>${item.cost.toFixed(2)}</td>
@@ -106,19 +111,11 @@ export default function InventoryModule() {
                       {item.autoPriced && <span title="Precio Asignado Automáticamente" style={{ fontSize: '0.8rem', background: 'var(--color-secondary)', color: 'black', padding: '2px 6px', borderRadius: '4px' }}>AUTO</span>}
                     </div>
                   </td>
-                  <td style={{ padding: '15px', color: isMarginLow ? 'var(--color-primary)' : 'white' }}>
-                    {(currentMargin * 100).toFixed(1)}%
-                    {isMarginLow && ' ⚠️ Bajo'}
-                  </td>
                   <td style={{ padding: '15px' }}>
                     {highDemand ? (
-                      <div style={{ color: 'var(--color-secondary)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        📈 Alta Demanda. Sugerimos subir el precio.
-                      </div>
+                      <div style={{ color: 'var(--color-secondary)', fontSize: '0.85rem' }}>📈 Alta Demanda.</div>
                     ) : isMarginLow ? (
-                      <div style={{ color: 'var(--color-primary)', fontSize: '0.85rem' }}>
-                        ⚠️ Pérdida potencial detectada.
-                      </div>
+                      <div style={{ color: 'var(--color-primary)', fontSize: '0.85rem' }}>⚠️ Margen Bajo ({(currentMargin*100).toFixed(0)}%)</div>
                     ) : (
                       <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)' }}>Estable</span>
                     )}
@@ -135,9 +132,9 @@ export default function InventoryModule() {
           avgMargin={avgMargin}
           onClose={() => setShowImporter(false)} 
           onImport={(newProducts) => {
-            setImportHistory([...importHistory, items]); // Guarda estado previo para el "Deshacer"
+            setImportHistory([...importHistory, items]);
             setItems([...newProducts, ...items]);
-            alert(`✅ ERIKA fijó precios promedios y agregó ${newProducts.length} productos. Revisa los marcados como "AUTO".`);
+            alert(`✅ ERIKA agregó ${newProducts.length} productos y asignó ubicaciones por defecto. Revísalas.`);
           }} 
         />
       )}
