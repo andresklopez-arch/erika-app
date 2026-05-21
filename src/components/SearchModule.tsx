@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import { fuzzySearch } from "@/utils/levenshtein";
 
-interface Product {
+export interface Product {
   id: string;
   name: string;
   price: number;
@@ -23,7 +23,7 @@ const TOP_SERVICES = [
   { id: "top3", name: "Igualación de Pintura", price: 150.0 },
 ];
 
-export default function SearchModule() {
+export default function SearchModule({ onSelect }: { onSelect?: (product: Product) => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Product[]>([]);
   const [history, setHistory] = useState<Product[]>([]);
@@ -52,7 +52,8 @@ export default function SearchModule() {
     localStorage.setItem("search_history", JSON.stringify(newHistory));
     setQuery("");
     inputRef.current?.blur();
-    alert(`Añadido a venta: ${product.name}`);
+    if (onSelect) onSelect(product);
+    else alert(`Añadido a venta: ${product.name}`);
   };
 
   useEffect(() => {
