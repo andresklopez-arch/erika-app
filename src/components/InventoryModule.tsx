@@ -11,81 +11,64 @@ interface InventoryItem {
   minStock: number;
   cost: number;
   salesIndex: number;
+  supplier?: string;
+  autoPriced?: boolean;
 }
 
 const INVENTORY_DB: InventoryItem[] = [
-  { id: "1", name: "Martillo Truper 16oz", price: 120.5, cost: 80.0, stock: 12, minStock: 5, salesIndex: 85 },
-  { id: "2", name: "Clavo para concreto 2 pulgadas", price: 45.0, cost: 25.0, stock: 15, minStock: 50, salesIndex: 90 },
-  { id: "3", name: "Pintura Blanca 19L Comex", price: 1250.0, cost: 900.0, stock: 4, minStock: 5, salesIndex: 40 },
-  { id: "4", name: "Cemento Tolteca 50kg", price: 210.0, cost: 180.0, stock: 200, minStock: 100, salesIndex: 95 },
-  { id: "5", name: "Cable Calibre 12 AWG (m)", price: 15.0, cost: 8.0, stock: 1500, minStock: 500, salesIndex: 80 },
+  { id: "1", name: "Martillo Truper 16oz", price: 120.5, cost: 80.0, stock: 12, minStock: 5, salesIndex: 85, supplier: "Truper" },
+  { id: "2", name: "Clavo para concreto 2 pulgadas", price: 45.0, cost: 25.0, stock: 15, minStock: 50, salesIndex: 90, supplier: "Aceros México" },
+  { id: "3", name: "Pintura Blanca 19L Comex", price: 1250.0, cost: 900.0, stock: 4, minStock: 5, salesIndex: 40, supplier: "Comex" },
+  { id: "4", name: "Cemento Tolteca 50kg", price: 210.0, cost: 180.0, stock: 200, minStock: 100, salesIndex: 95, supplier: "Cemex" },
+  { id: "5", name: "Cable Calibre 12 AWG (m)", price: 15.0, cost: 8.0, stock: 1500, minStock: 500, salesIndex: 80, supplier: "Condumex" },
 ];
 
 export default function InventoryModule() {
   const [items, setItems] = useState<InventoryItem[]>(INVENTORY_DB);
-  const [bulkAdjustment, setBulkAdjustment] = useState<number>(0);
-  const [adjustmentType, setAdjustmentType] = useState<"percentage" | "fixed">("percentage");
+  const [importHistory, setImportHistory] = useState<InventoryItem[][]>([]);
   const [showImporter, setShowImporter] = useState(false);
 
-  const applyBulkPriceChange = () => {
-    if (bulkAdjustment === 0) return;
-    setItems(items.map(i => {
-      const newPrice = adjustmentType === "percentage" 
-        ? i.price * (1 + (bulkAdjustment / 100))
-        : i.price + bulkAdjustment;
-      return { ...i, price: Math.max(0.5, newPrice) };
-    }));
-    alert(`✅ Precios actualizados de forma masiva en la base de datos.`);
-    setBulkAdjustment(0);
-  };
-
-  const generateWhatsappOrder = (item: InventoryItem) => {
-    const qtyToOrder = Math.max((item.minStock * 2) - item.stock, item.minStock); 
-    const msg = `Hola, soy ERIKA (Sistema). Necesito hacer un pedido automático de ${qtyToOrder} unidades de *${item.name}*. Mi último precio registrado fue $${item.cost}. ¿Me confirmas existencias y envío?`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
-  };
+  // Calcula el margen de ganancia promedio de todo el inventario (Ej. 0.35 = 35%)
+  const avgMargin = items.reduce((acc, i) => acc + ((i.price - i.cost) / i.cost), 0) / items.length;
 
   const exportToExcel = () => {
     const data = items.map(i => ({
-      "ID ERIKA": i.id,
-      "Nombre del Producto": i.name,
-      "Costo de Compra": i.cost,
-      "Precio de Venta": i.price,
-      "Stock Actual": i.stock,
-      "Stock Mínimo": i.minStock,
-      "Índice Venta (0-100)": i.salesIndex
+      "ID": i.id,
+      "Producto": i.name,
+      "Proveedor": i.supplier || "No Asignado",
+      "Costo Compra": i.cost,
+      "Precio Venta": i.price,
+      "Stock": i.stock,
+      "Automático": i.autoPriced ? "SÍ" : "NO"
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Inventario_Total");
-    XLSX.writeFile(wb, `Respaldo_Inventario_ERIKA_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Inventario_Filtrado");
+    XLSX.writeFile(wb, `Exportacion_ERIKA_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const undoLastImport = () => {
+    if (importHistory.length === 0) return;
+    const previousState = importHistory[importHistory.length - 1];
+    setItems(previousState);
+    setImportHistory(importHistory.slice(0, -1));
+    alert("🔙 Importación deshecha. La base de datos regresó a su estado anterior.");
   };
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px', height: '100%' }}>
       
       <div className="glass-panel flex-between" style={{ padding: '20px' }}>
-        <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-          <h3 style={{ margin: 0 }}>Ajuste de Precios Masivo</h3>
-          <input 
-            type="number" 
-            value={bulkAdjustment}
-            onChange={(e) => setBulkAdjustment(Number(e.target.value))}
-            style={{ width: '80px', padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.2)' }}
-          />
-          <select 
-            value={adjustmentType}
-            onChange={(e) => setAdjustmentType(e.target.value as any)}
-            style={{ padding: '8px', borderRadius: '8px', background: 'var(--bg-secondary)', color: 'white', border: '1px solid rgba(255,255,255,0.2)' }}
-          >
-            <option value="percentage">% Porcentaje</option>
-            <option value="fixed">$ Fijo</option>
-          </select>
-          <button className="btn-primary" onClick={applyBulkPriceChange} style={{ padding: '8px 16px', fontSize: '0.9rem' }}>Aplicar a todo</button>
+        <div>
+          <h3 style={{ margin: 0, color: 'var(--color-primary)' }}>Margen de Utilidad Promedio: {(avgMargin * 100).toFixed(1)}%</h3>
+          <p style={{ fontSize: '0.85rem', opacity: 0.7 }}>ERIKA usará este promedio para sugerir y fijar precios automáticamente.</p>
         </div>
         
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="btn-primary" onClick={exportToExcel} style={{ background: 'var(--glass-bg)', border: '1px solid #10b981', color: '#10b981' }}>📥 Exportar Excel</button>
+          {importHistory.length > 0 && (
+            <button className="btn-primary" onClick={undoLastImport} style={{ background: 'transparent', border: '1px solid var(--color-primary)' }}>↩️ Deshacer Importación</button>
+          )}
+          <button className="btn-primary" onClick={exportToExcel} style={{ background: 'var(--glass-bg)', border: '1px solid #10b981', color: '#10b981' }}>📥 Exportar Filtrado</button>
           <button className="btn-primary" onClick={() => setShowImporter(true)} style={{ background: 'linear-gradient(135deg, var(--color-secondary), #059669)' }}>⚡ Carga Inteligente</button>
         </div>
       </div>
@@ -95,38 +78,49 @@ export default function InventoryModule() {
           <thead style={{ background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid var(--glass-border)' }}>
             <tr>
               <th style={{ padding: '15px' }}>Producto</th>
-              <th style={{ padding: '15px' }}>Stock Actual</th>
-              <th style={{ padding: '15px' }}>Mínimo Óptimo</th>
-              <th style={{ padding: '15px' }}>Costo Compra</th>
-              <th style={{ padding: '15px' }}>Precio Venta</th>
-              <th style={{ padding: '15px' }}>Desplazamiento</th>
-              <th style={{ padding: '15px' }}>Acciones IA</th>
+              <th style={{ padding: '15px' }}>Stock</th>
+              <th style={{ padding: '15px' }}>Costo Prov.</th>
+              <th style={{ padding: '15px' }}>Precio Sugerido</th>
+              <th style={{ padding: '15px' }}>Margen Real</th>
+              <th style={{ padding: '15px' }}>Alertas de Mercado (IA)</th>
             </tr>
           </thead>
           <tbody>
             {items.map(item => {
-              const isLowStock = item.stock <= item.minStock;
+              const currentMargin = (item.price - item.cost) / item.cost;
+              const isMarginLow = currentMargin < (avgMargin - 0.1);
+              const isMarginHigh = currentMargin > (avgMargin + 0.3);
+              const highDemand = item.salesIndex > 80 && item.stock <= item.minStock;
+
               return (
-                <tr key={item.id} style={{ borderBottom: '1px solid var(--glass-border)', background: isLowStock ? 'rgba(244, 63, 94, 0.1)' : 'transparent' }}>
-                  <td style={{ padding: '15px', fontWeight: 'bold' }}>{item.name}</td>
-                  <td style={{ padding: '15px', color: isLowStock ? 'var(--color-primary)' : 'white', fontWeight: 'bold' }}>
-                    {item.stock} {isLowStock && '⚠️'}
+                <tr key={item.id} style={{ borderBottom: '1px solid var(--glass-border)', background: item.autoPriced ? 'rgba(16, 185, 129, 0.1)' : 'transparent' }}>
+                  <td style={{ padding: '15px', fontWeight: 'bold' }}>
+                    {item.name}
+                    <div style={{ fontSize: '0.75rem', color: 'var(--color-secondary)' }}>Prov: {item.supplier || 'N/A'}</div>
                   </td>
-                  <td style={{ padding: '15px', opacity: 0.7 }}>{item.minStock}</td>
+                  <td style={{ padding: '15px', fontWeight: 'bold' }}>{item.stock}</td>
                   <td style={{ padding: '15px' }}>${item.cost.toFixed(2)}</td>
-                  <td style={{ padding: '15px', color: 'var(--color-secondary)', fontWeight: 'bold' }}>${item.price.toFixed(2)}</td>
                   <td style={{ padding: '15px' }}>
-                    <div style={{ width: '100%', maxWidth: '100px', background: 'rgba(255,255,255,0.1)', height: '8px', borderRadius: '4px' }}>
-                      <div style={{ width: `${item.salesIndex}%`, background: item.salesIndex > 80 ? 'var(--color-secondary)' : 'var(--color-accent)', height: '100%', borderRadius: '4px' }}></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: item.autoPriced ? 'var(--color-secondary)' : 'white', fontWeight: 'bold' }}>${item.price.toFixed(2)}</span>
+                      {item.autoPriced && <span title="Precio Asignado Automáticamente" style={{ fontSize: '0.8rem', background: 'var(--color-secondary)', color: 'black', padding: '2px 6px', borderRadius: '4px' }}>AUTO</span>}
                     </div>
                   </td>
+                  <td style={{ padding: '15px', color: isMarginLow ? 'var(--color-primary)' : 'white' }}>
+                    {(currentMargin * 100).toFixed(1)}%
+                    {isMarginLow && ' ⚠️ Bajo'}
+                  </td>
                   <td style={{ padding: '15px' }}>
-                    {isLowStock ? (
-                      <button onClick={() => generateWhatsappOrder(item)} style={{ background: '#25D366', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        📱 Pedir por WA
-                      </button>
+                    {highDemand ? (
+                      <div style={{ color: 'var(--color-secondary)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        📈 Alta Demanda. Sugerimos subir el precio.
+                      </div>
+                    ) : isMarginLow ? (
+                      <div style={{ color: 'var(--color-primary)', fontSize: '0.85rem' }}>
+                        ⚠️ Pérdida potencial detectada.
+                      </div>
                     ) : (
-                      <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)' }}>Stock Óptimo</span>
+                      <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)' }}>Estable</span>
                     )}
                   </td>
                 </tr>
@@ -138,10 +132,12 @@ export default function InventoryModule() {
 
       {showImporter && (
         <SmartImporter 
+          avgMargin={avgMargin}
           onClose={() => setShowImporter(false)} 
           onImport={(newProducts) => {
+            setImportHistory([...importHistory, items]); // Guarda estado previo para el "Deshacer"
             setItems([...newProducts, ...items]);
-            alert(`✅ ERIKA inyectó ${newProducts.length} productos a tu base de datos exitosamente.`);
+            alert(`✅ ERIKA fijó precios promedios y agregó ${newProducts.length} productos. Revisa los marcados como "AUTO".`);
           }} 
         />
       )}
