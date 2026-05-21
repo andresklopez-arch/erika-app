@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { LoggerService } from "../services/loggerService";
 import { Html5QrcodeScanner } from "html5-qrcode";
+import { supabase } from "../lib/supabaseClient";
 
 interface POSItem {
   id: string;
@@ -19,17 +20,8 @@ interface Ticket {
   discountPct: number;
 }
 
-// Catálogo Global Mockeado (Debe coincidir con la Base de Datos real)
-const GLOBAL_CATALOG = [
-  { code: "TRU-16", name: "Martillo Truper 16oz", price: 120.5, cost: 80.0, location: "A-1", stock: 12, keywords: ["martillo", "truper", "16oz"] },
-  { code: "CLA-02", name: "Clavo 2 pulg", price: 45.0, cost: 25.0, location: "B-6", stock: 15, keywords: ["clavo", "clavos", "concreto"] },
-  { code: "COM-19", name: "Pintura Blanca 19L", price: 1250.0, cost: 900.0, location: "P-12", stock: 4, keywords: ["pintura", "blanca", "cubeta"] },
-  { code: "TOL-50", name: "Cemento Tolteca 50kg", price: 210.0, cost: 180.0, location: "AAA-100", stock: 200, keywords: ["cemento", "bulto", "tolteca"] },
-  { code: "CAB-12", name: "Cable Calibre 12", price: 15.0, cost: 8.0, location: "E-4", stock: 1500, keywords: ["cable", "calibre", "12"] },
-  { code: "BRO-04", name: "Brocha 4 pulgadas", price: 65.0, cost: 40.0, location: "P-10", stock: 4, keywords: ["brocha", "pulgadas"] }
-];
-
 export default function POSModule() {
+  const [globalCatalog, setGlobalCatalog] = useState<any[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([{ id: 1, items: [], discountPct: 0 }]);
   const [activeTicketId, setActiveTicketId] = useState(1);
   const [nextTicketId, setNextTicketId] = useState(2);
@@ -44,19 +36,24 @@ export default function POSModule() {
   useEffect(() => {
     const saved = localStorage.getItem("ERIKA_VOICE_KEYWORD");
     if (saved) setSecurityKeyword(saved.toLowerCase());
+
+    // Cargar Catálogo desde Supabase
+    const fetchCatalog = async () => {
+      const { data } = await supabase.from('inventory').select('*');
+      if (data) setGlobalCatalog(data);
+    };
+    fetchCatalog();
   }, []);
 
-  // --- LECTOR LÁSER USB (Global Key Interceptor) y Atajos F4/F8 ---
+  // Lector Láser Interceptor
   useEffect(() => {
     let barcodeBuffer = "";
     let barcodeTimeout: any = null;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Atajos de Descuento
       if (e.key === 'F4') { e.preventDefault(); applyDiscount("percent"); return; } 
       if (e.key === 'F8') { e.preventDefault(); applyDiscount("fixed"); return; }
 
-      // Interceptor Láser: Solo actúa si el usuario NO está escribiendo manual en un input
       const target = e.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
 
@@ -65,12 +62,12 @@ export default function POSModule() {
         const scannedCode = barcodeBuffer.toUpperCase();
         barcodeBuffer = "";
         
-        const matched = GLOBAL_CATALOG.find(c => c.code === scannedCode);
+        const matched = globalCatalog.find(c => c.code === scannedCode);
         if (matched) {
           addToCart(matched.name, matched.price, "pz", matched.cost, 1);
           speak(`Escaneado: ${matched.name}`);
         } else {
-          speak("Producto no encontrado en catálogo.");
+          speak("Producto no encontrado en Supabase.");
         }
       } else if (e.key.length === 1) {
         barcodeBuffer += e.key;
@@ -80,16 +77,14 @@ export default function POSModule() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [tickets, activeTicketId]);
+  }, [tickets, activeTicketId, globalCatalog]);
 
-  // Búsqueda Manual
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const q = searchInput.trim().toUpperCase();
     if (!q) return;
     
-    // Busca por código o nombre
-    const matched = GLOBAL_CATALOG.find(c => c.code === q || c.name.toUpperCase().includes(q));
+    const matched = globalCatalog.find(c => c.code === q || c.name.toUpperCase().includes(q));
     if (matched) {
       addToCart(matched.name, matched.price, "pz", matched.cost, 1);
       setSearchInput("");
@@ -98,7 +93,6 @@ export default function POSModule() {
     }
   };
 
-  // --- VISIÓN ARTIFICIAL (QR SCANNER) ---
   useEffect(() => {
     let scanner: any = null;
     if (showScanner) {
@@ -107,17 +101,17 @@ export default function POSModule() {
         scanner.clear();
         setShowScanner(false);
         const loc = decodedText.replace("ERIKA-LOC-", "");
-        const matched = GLOBAL_CATALOG.find(c => c.location === loc || c.code === decodedText);
+        const matched = globalCatalog.find(c => c.location === loc || c.code === decodedText);
         if(matched) {
           addToCart(matched.name, matched.price, "pz", matched.cost, 1);
-          speak(`Código de visión detectado. ${matched.name} agregado al carrito.`);
+          speak(`Visión detectada. ${matched.name} agregado.`);
         } else {
            alert(`📷 Código no mapeado (${decodedText}).`);
         }
       }, () => { /* ignore */ });
     }
     return () => { if(scanner) scanner.clear().catch(()=>{}); };
-  }, [showScanner]);
+  }, [showScanner, globalCatalog]);
 
   const addToCart = (productName: string, price: number, unit: string = "pz", cost: number = price * 0.7, addedQty: number = 1) => {
     setTickets(tickets.map(t => {
@@ -145,16 +139,12 @@ export default function POSModule() {
     const itemToRemove = activeTicket.items.find(i => i.id === itemId);
     if (itemToRemove) {
       const reason = window.prompt(`¿Qué pasará con: ${itemToRemove.name}?\n\n[ 1 ] Regresa a Almacén (Sano)\n[ 2 ] Basura / Dañado (Merma)`);
-      
-      if (reason === "1") {
-         alert("✅ Stock devuelto al inventario físico correctamente.");
-      } else if (reason === "2") {
+      if (reason === "1") alert("✅ Stock devuelto al inventario físico correctamente.");
+      else if (reason === "2") {
          setCancellations([...cancellations, { time: new Date().toLocaleTimeString(), item: `${itemToRemove.qty}x ${itemToRemove.name} (MERMA) - Pérdida: $${(itemToRemove.cost * itemToRemove.qty).toFixed(2)}` }]);
          LoggerService.logCancellation(itemToRemove.name, itemToRemove.qty);
          alert("⚠️ Registrado como Pérdida/Merma Financiera en el Historial.");
-      } else {
-         return; // Cancela la eliminación si no elige nada válido
-      }
+      } else return;
     }
     setTickets(tickets.map(t => t.id === activeTicketId ? { ...t, items: t.items.filter(i => i.id !== itemId) } : t));
   };
@@ -180,9 +170,11 @@ export default function POSModule() {
     setTickets(tickets.map(t => t.id === activeTicketId ? { ...t, discountPct: finalPct } : t));
   };
 
-  const fuzzyMatchKeywords = (fragment: string, keywords: string[]) => {
+  const fuzzyMatchKeywords = (fragment: string, name: string) => {
     const fWords = fragment.split(/\s+/);
-    for (const kw of keywords) {
+    const nWords = name.toLowerCase().split(/\s+/);
+    for (const kw of nWords) {
+      if (kw.length < 4) continue;
       if (fragment.includes(kw)) return true;
       for (const fWord of fWords) {
         if (fWord.length > 4 && Math.abs(fWord.length - kw.length) <= 2) {
@@ -215,11 +207,7 @@ export default function POSModule() {
 
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript.toLowerCase();
-      
-      if (!transcript.includes(securityKeyword)) {
-        speak(`Error de autenticación. No escuché la palabra clave.`);
-        return;
-      }
+      if (!transcript.includes(securityKeyword)) return speak(`Error de autenticación. No escuché la palabra clave.`);
 
       const fragments = transcript.replace(/además/g, 'y').replace(/,/g, 'y').split(' y ');
       let nothingFound = true;
@@ -235,7 +223,7 @@ export default function POSModule() {
         }
 
         let matchedProduct = null;
-        for (const prod of GLOBAL_CATALOG) if (fuzzyMatchKeywords(fragment, prod.keywords)) { matchedProduct = prod; break; }
+        for (const prod of globalCatalog) if (fuzzyMatchKeywords(fragment, prod.name)) { matchedProduct = prod; break; }
 
         if (matchedProduct) {
           if (qty > matchedProduct.stock) {
@@ -256,12 +244,8 @@ export default function POSModule() {
   };
 
   const getCrossSellSuggestions = () => {
-    const suggestions = [];
-    const names = activeTicket.items.map(i => i.name.toLowerCase());
-    if (names.some(n => n.includes("pintura"))) suggestions.push({ name: "Brocha 4 pulgadas", price: 65.0, cost: 40.0 });
-    if (names.some(n => n.includes("cemento"))) suggestions.push({ name: "Bote de Arena (Bote)", price: 20.0, cost: 10.0 });
-    if (suggestions.length === 0) suggestions.push({ name: "Guantes de Carnaza", price: 45.0, cost: 25.0 });
-    return suggestions.slice(0, 3);
+    if (globalCatalog.length === 0) return [];
+    return globalCatalog.slice(0, 3).map(p => ({ name: p.name, price: p.price, cost: p.cost }));
   };
 
   const rawTotal = activeTicket.items.reduce((sum, item) => sum + (item.price * item.qty), 0);
@@ -272,11 +256,9 @@ export default function POSModule() {
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', gap: '20px', height: '100%' }}>
-      
       {showScanner && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
           <h2 style={{ color: 'var(--color-primary)' }}>📷 Escáner de Visión Artificial</h2>
-          <p style={{ color: 'white', marginBottom: '20px' }}>Apunta al código QR o Código de Barras (CODE128).</p>
           <div id="qr-reader" style={{ width: '400px', maxWidth: '90%', background: 'white' }}></div>
           <button className="btn-primary" onClick={() => setShowScanner(false)} style={{ marginTop: '20px', background: 'transparent', border: '1px solid var(--color-primary)' }}>Cerrar Cámara</button>
         </div>
@@ -285,23 +267,16 @@ export default function POSModule() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div className="glass-panel" style={{ flex: 1, position: 'relative' }}>
           <div className="flex-between" style={{ marginBottom: '15px' }}>
-            <h2 style={{ color: 'var(--color-primary)', margin: 0 }}>Terminal de Ventas</h2>
+            <h2 style={{ color: 'var(--color-primary)', margin: 0 }}>Terminal de Ventas (☁️ Nube)</h2>
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => setShowScanner(true)} className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--color-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                📷 Visión Web
-              </button>
-              <button onClick={startVoiceRecognition} className="btn-primary" style={{ background: isListening ? '#ef4444' : 'var(--glass-bg)', border: '1px solid var(--color-primary)', display: 'flex', alignItems: 'center', gap: '8px', animation: isListening ? 'pulse 1.5s infinite' : 'none' }}>
-                🎤 Dictar
-              </button>
+              <button onClick={() => setShowScanner(true)} className="btn-primary" style={{ background: 'transparent', border: '1px solid var(--color-secondary)' }}>📷 Visión</button>
+              <button onClick={startVoiceRecognition} className="btn-primary" style={{ background: isListening ? '#ef4444' : 'var(--glass-bg)', border: '1px solid var(--color-primary)' }}>🎤 Dictar</button>
             </div>
-            <style>{`@keyframes pulse { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }`}</style>
           </div>
 
           <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
             <input 
-              type="text" 
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
+              type="text" value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Buscar por Nombre, Código de Barras o Disparar Pistola Láser..." 
               style={{ flex: 1, padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.3)', color: 'white', border: '1px solid var(--color-primary)' }} 
             />
@@ -310,17 +285,14 @@ export default function POSModule() {
           
           <h3 style={{ color: 'var(--color-secondary)', marginBottom: '10px' }}>Atajos Rápidos (Teclado Numérico)</h3>
           <div className="grid-cols-2" style={{ gap: '10px' }}>
-            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Cemento Tolteca 50kg", 210, "bulto", 180)}>[1] Cemento</button>
-            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Pintura Blanca 19L", 1250, "cubeta", 900)}>[2] Pintura</button>
-            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Cable Calibre 12", 15, "metro", 8)}>[3] Cable</button>
-            <button className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart("Clavo 2 pulg", 45, "caja", 25)}>[4] Clavos</button>
+            {globalCatalog.slice(0, 4).map((c, i) => (
+              <button key={c.id} className="btn-primary" style={{ background: 'rgba(255,255,255,0.05)' }} onClick={() => addToCart(c.name, c.price, "pz", c.cost)}>[{i+1}] {c.name.substring(0,15)}...</button>
+            ))}
           </div>
         </div>
 
         <div className="glass-panel" style={{ background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), transparent)', border: '1px solid var(--color-secondary)' }}>
-          <h3 style={{ color: 'var(--color-secondary)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            🧠 ERIKA Sugiere Ofrecer:
-          </h3>
+          <h3 style={{ color: 'var(--color-secondary)', marginBottom: '10px' }}>🧠 ERIKA Sugiere Ofrecer:</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {getCrossSellSuggestions().map((sug, idx) => (
               <div key={idx} className="flex-between" style={{ background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px' }}>
@@ -369,7 +341,6 @@ export default function POSModule() {
         </div>
 
         <div style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '12px' }}>
-          
           <div className="flex-between" style={{ marginBottom: '10px' }}>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button onClick={() => applyDiscount("percent")} style={{ background: 'transparent', color: 'var(--color-secondary)', border: 'none', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.9rem' }}>% Descuento [F4]</button>
@@ -384,10 +355,7 @@ export default function POSModule() {
           <div className="flex-between" style={{ marginBottom: '20px', fontSize: '1.5rem', fontWeight: 'bold', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '15px' }}>
             <span>TOTAL</span><span style={{ color: 'var(--color-secondary)' }}>${finalTotal.toFixed(2)}</span>
           </div>
-          
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="btn-primary" style={{ flex: 1, padding: '15px', background: 'transparent', border: '1px solid var(--color-primary)' }}>💰 Cobro PC</button>
-          </div>
+          <button className="btn-primary" style={{ width: '100%', padding: '15px', background: 'transparent', border: '1px solid var(--color-primary)' }}>💰 Cobro PC</button>
         </div>
       </div>
     </div>
