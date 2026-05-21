@@ -22,8 +22,8 @@ export default function RootLayout({
               <span style={{ fontSize: '0.8rem', color: 'var(--color-secondary)' }}>Sistema Online</span>
             </div>
             <nav style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px' }}>
-              <a href="/" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>📊 Dashboard</a>
-              <a href="/ventas" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>🛒 Punto de Venta</a>
+              <a href="/" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>🛒 Punto de Venta</a>
+              <a href="/dashboard" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>📊 Dashboard</a>
               <a href="/inventario" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>📦 Almacén e Inventario</a>
               <a href="/reportes" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>📈 Reportes e Inteligencia</a>
               <a href="/configuracion" style={{ color: 'white', textDecoration: 'none', padding: '10px' }}>⚙️ Configuración</a>
