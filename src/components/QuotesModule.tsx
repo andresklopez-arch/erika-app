@@ -20,23 +20,23 @@ export default function QuotesModule() {
 
   const convertToSale = async (quote: any) => {
     const pass = window.prompt(
-      "¿Seguro que deseas convertir esta cotización a venta directa? (Ingresa tu PIN)",
+      "¿Seguro que deseas enviar esta cotización a la Caja para cobrar? (Ingresa tu PIN)",
     );
     if (!pass) return;
 
-    // Aquí en una implementación real enviaríamos el carrito al estado global o crearíamos la venta
-    // Como es un prototipo, simplemente la marcamos como "converted"
     const { error } = await supabase
       .from("quotes")
       .update({ status: "converted" })
       .eq("id", quote.id);
     if (error) return alert("Error: " + error.message);
 
+    // Enviar artículos a la caja vía localStorage
+    localStorage.setItem("ERIKA_RESTORE_QUOTE", JSON.stringify(quote.items));
+
     alert(
-      `✅ Cotización de ${quote.customer_name} convertida a venta. Envía los artículos a caja.`,
+      `✅ Cotización de ${quote.customer_name} enviada a caja. Serás redirigido para proceder con el cobro.`,
     );
-    fetchQuotes();
-    setSelectedQuoteId("");
+    window.location.href = "/caja";
   };
 
   const printQuote = (quote: any) => {

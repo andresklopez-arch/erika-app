@@ -8,6 +8,7 @@ import SuppliersManagerModal from "./SuppliersManagerModal";
 import AccountsPayableModal from "./AccountsPayableModal";
 import LossesManagerModal from "./LossesManagerModal";
 import LayawayModal from "./LayawayModal";
+import InboundModal from "./InboundModal";
 
 interface InventoryItem {
   id: string;
@@ -34,6 +35,7 @@ export default function InventoryModule() {
   const [showAccountsPayableModal, setShowAccountsPayableModal] = useState(false);
   const [showLossesModal, setShowLossesModal] = useState(false);
   const [showLayaways, setShowLayaways] = useState(false);
+  const [showInboundModal, setShowInboundModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchInventory = async () => {
@@ -265,6 +267,20 @@ export default function InventoryModule() {
           >
             👤 Clientes
           </button>
+            <button
+              onClick={() => setShowInboundModal(true)}
+              className="btn-primary"
+              style={{
+                background: "#10b981",
+                padding: "10px 15px",
+                borderRadius: "5px",
+                cursor: "pointer",
+                border: "none",
+                color: "white",
+              }}
+            >
+              📦 Recibir Mercancía
+            </button>
           <button
             className="btn-primary"
             onClick={() => setShowSuppliersModal(true)}
@@ -687,6 +703,13 @@ export default function InventoryModule() {
 
       {showLayaways && (
         <LayawayModal show={showLayaways} onClose={() => setShowLayaways(false)} />
+      )}
+      
+      {showInboundModal && (
+        <InboundModal 
+          onClose={() => setShowInboundModal(false)} 
+          onSuccess={() => { setShowInboundModal(false); fetchInventory(); }} 
+        />
       )}
     </div>
   );

@@ -123,14 +123,30 @@ export default function POSModule() {
     const saved = localStorage.getItem("ERIKA_VOICE_KEYWORD");
     if (saved) setSecurityKeyword(saved.toLowerCase());
 
-    // Cargar Catálogo desde Supabase
-    const fetchCatalog = async () => {
-      const { data } = await supabase.from("inventory").select("*");
-      if (data) setGlobalCatalog(data);
+    const fetchInventoryAndCustomers = async () => {
+      const { data: invData } = await supabase.from("inventory").select("*");
+      if (invData) setGlobalCatalog(invData);
       const { data: custData } = await supabase.from("customers").select("*");
       if (custData) setCustomers(custData);
     };
-    fetchCatalog();
+
+    const restoreQuote = () => {
+       const saved = localStorage.getItem("ERIKA_RESTORE_QUOTE");
+       if (saved) {
+          try {
+             const items = JSON.parse(saved);
+             if (items && items.length > 0) {
+                setTickets([{ id: 1, items, discountPct: 0 }]);
+                setActiveTicketId(1);
+                localStorage.removeItem("ERIKA_RESTORE_QUOTE");
+                alert("✅ Cotización cargada en la caja exitosamente.");
+             }
+          } catch(e) {}
+       }
+    };
+
+    fetchInventoryAndCustomers();
+    restoreQuote();
   }, []);
 
   // Lector Láser Interceptor
