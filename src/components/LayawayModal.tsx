@@ -29,6 +29,50 @@ export default function LayawayModal({ show, onClose }: { show: boolean; onClose
       .eq("id", layaway.id);
 
     if (error) return alert("Error al registrar el abono.");
+    
+    // Print Thermal Ticket for Abono
+    const ticketWindow = window.open("", "_blank", "width=300,height=500");
+    if (ticketWindow) {
+      const ticketHtml = `
+        <html>
+          <head>
+            <style>
+              body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; width: 58mm; color: #000; background: #fff; }
+              .center { text-align: center; }
+              .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
+              .bold { font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            <div class="center bold" style="font-size: 16px; margin-bottom: 5px;">FERRETERÍA ERIKA</div>
+            <div class="center" style="font-size: 12px;">Comprobante de Abono</div>
+            <div class="divider"></div>
+            <div style="font-size: 12px; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
+            <div style="font-size: 12px; margin-bottom: 5px;">Cliente: ${layaway.customer_name}</div>
+            <div class="divider"></div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+              <div>Abono Recibido:</div>
+              <div class="bold">$${payment.toFixed(2)}</div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+              <div>Saldo Restante:</div>
+              <div class="bold">$${newBalance.toFixed(2)}</div>
+            </div>
+            <div class="divider"></div>
+            <div class="center bold" style="font-size: 12px; margin-top: 10px;">
+              ${isCompleted ? "¡APARTADO LIQUIDADO!" : "¡Gracias por su abono!"}
+            </div>
+          </body>
+        </html>
+      `;
+      ticketWindow.document.write(ticketHtml);
+      ticketWindow.document.close();
+      setTimeout(() => {
+        ticketWindow.print();
+        ticketWindow.close();
+      }, 500);
+    }
+
     alert(`✅ Abono registrado. ${isCompleted ? "¡APARTADO LIQUIDADO, puede entregar la mercancía!" : `Saldo restante: $${newBalance.toFixed(2)}`}`);
     fetchLayaways();
   };

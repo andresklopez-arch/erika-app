@@ -3,10 +3,21 @@ import { useState, useEffect } from "react";
 
 export default function SettingsModule() {
   const [voiceKeyword, setVoiceKeyword] = useState("erika");
+  const [earnRate, setEarnRate] = useState("100"); // Gasta $100
+  const [earnPoints, setEarnPoints] = useState("1"); // Gana 1 punto
+  const [redeemRate, setRedeemRate] = useState("10"); // 10 puntos = $1 de descuento
 
   useEffect(() => {
-    const saved = localStorage.getItem("ERIKA_VOICE_KEYWORD");
-    if (saved) setVoiceKeyword(saved);
+    const savedVoice = localStorage.getItem("ERIKA_VOICE_KEYWORD");
+    if (savedVoice) setVoiceKeyword(savedVoice);
+
+    const sEarnRate = localStorage.getItem("ERIKA_EARN_RATE");
+    const sEarnPts = localStorage.getItem("ERIKA_EARN_PTS");
+    const sRedeem = localStorage.getItem("ERIKA_REDEEM_RATE");
+    
+    if (sEarnRate) setEarnRate(sEarnRate);
+    if (sEarnPts) setEarnPoints(sEarnPts);
+    if (sRedeem) setRedeemRate(sRedeem);
   }, []);
 
   const saveConfig = () => {
@@ -16,48 +27,21 @@ export default function SettingsModule() {
     );
   };
 
+  const saveLoyaltyConfig = () => {
+    localStorage.setItem("ERIKA_EARN_RATE", earnRate);
+    localStorage.setItem("ERIKA_EARN_PTS", earnPoints);
+    localStorage.setItem("ERIKA_REDEEM_RATE", redeemRate);
+    alert("✅ Tasas del Programa de Lealtad actualizadas.");
+  };
+
   return (
     <div
       className="animate-fade-in glass-panel"
-      style={{ padding: "30px", maxWidth: "600px", margin: "0 auto" }}
+      style={{ padding: "30px", maxWidth: "800px", margin: "0 auto" }}
     >
       <h2 style={{ color: "var(--color-primary)" }}>
         ⚙️ Configuración Global de ERIKA
       </h2>
-
-      <div style={{ marginTop: "30px" }}>
-        <h3 style={{ marginBottom: "10px" }}>
-          🔐 Palabra Clave de Seguridad (Voz)
-        </h3>
-        <p style={{ fontSize: "0.85rem", opacity: 0.7, marginBottom: "15px" }}>
-          El sistema de voz ignorará peticiones a menos que la persona que le
-          hable incluya esta palabra en su frase (Ej. "Agrega 2 clavos, palabra
-          secreta ERIKA").
-        </p>
-
-        <input
-          type="text"
-          value={voiceKeyword}
-          onChange={(e) => setVoiceKeyword(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "12px",
-            borderRadius: "8px",
-            background: "rgba(0,0,0,0.3)",
-            color: "white",
-            border: "1px solid var(--color-primary)",
-            marginBottom: "20px",
-          }}
-        />
-
-        <button
-          className="btn-primary"
-          onClick={saveConfig}
-          style={{ width: "100%" }}
-        >
-          💾 Guardar Palabra de Seguridad
-        </button>
-      </div>
 
       <div style={{ marginTop: "30px" }}>
         <h3 style={{ marginBottom: "10px", color: "var(--color-secondary)" }}>
@@ -107,15 +91,15 @@ export default function SettingsModule() {
       </div>
 
       <div style={{ display: "flex", gap: "30px", flexWrap: "wrap", marginTop: "30px" }}>
-        <div style={{ flex: 1, minWidth: "300px" }}>
-          <div className="glass-panel" style={{ marginBottom: "20px" }}>
+        <div style={{ flex: 1, minWidth: "300px", display: "flex", flexDirection: "column", gap: "20px" }}>
+          
+          <div className="glass-panel">
             <h3 style={{ marginBottom: "10px" }}>
               🔐 Palabra Clave de Seguridad (Voz)
             </h3>
             <p style={{ fontSize: "0.85rem", opacity: 0.7, marginBottom: "15px" }}>
               El sistema de voz ignorará peticiones a menos que la persona que le
-              hable incluya esta palabra en su frase (Ej. "Agrega 2 clavos, palabra
-              secreta ERIKA").
+              hable incluya esta palabra en su frase.
             </p>
 
             <input
@@ -142,34 +126,33 @@ export default function SettingsModule() {
             </button>
           </div>
 
-          <div className="glass-panel">
-            <h3 style={{ marginBottom: "10px", color: "var(--color-secondary)" }}>
-              ☁️ Conexión Supabase (Nube)
+          <div className="glass-panel" style={{ border: "1px solid #eab308" }}>
+            <h3 style={{ margin: "0 0 20px 0", color: "#eab308", display: "flex", alignItems: "center", gap: "10px" }}>
+              ⭐ Tasas de Puntos de Lealtad
             </h3>
-            <input
-              type="text"
-              placeholder="URL del Proyecto"
-              disabled
-              style={{
-                width: "100%",
-                padding: "12px",
-                borderRadius: "8px",
-                background: "rgba(255,255,255,0.05)",
-                color: "white",
-                border: "1px solid rgba(255,255,255,0.1)",
-                marginBottom: "10px",
-              }}
-            />
-            <button className="btn-primary" style={{ width: "100%", padding: "10px", marginTop: "10px" }}>
-              💾 Guardar Configuración de Alertas
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Por cada $ de compra (Pesos):</label>
+              <input type="number" value={earnRate} onChange={e => setEarnRate(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }} />
+            </div>
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Se otorgan (Puntos):</label>
+              <input type="number" value={earnPoints} onChange={e => setEarnPoints(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }} />
+            </div>
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Puntos requeridos para $1.00 de descuento en caja:</label>
+              <input type="number" value={redeemRate} onChange={e => setRedeemRate(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }} />
+            </div>
+            <button className="btn-primary" onClick={saveLoyaltyConfig} style={{ width: "100%", background: "transparent", border: "1px solid #eab308", color: "#eab308" }}>
+              💾 Guardar Tasas de Lealtad
             </button>
           </div>
+
         </div>
 
         {/* LICENCIA DEL SISTEMA */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "20px" }}>
-          <div className="glass-panel" style={{ flex: 1, border: "1px solid #eab308" }}>
-            <h3 style={{ margin: "0 0 20px 0", color: "#eab308", display: "flex", alignItems: "center", gap: "10px" }}>
+          <div className="glass-panel" style={{ flex: 1, border: "1px solid #10b981" }}>
+            <h3 style={{ margin: "0 0 20px 0", color: "#10b981", display: "flex", alignItems: "center", gap: "10px" }}>
               🔑 Licencia del Sistema ERIKA
             </h3>
             

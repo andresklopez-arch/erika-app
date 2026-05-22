@@ -30,6 +30,26 @@ interface Ticket {
 
 export default function POSModule() {
   const [globalCatalog, setGlobalCatalog] = useState<any[]>([]);
+  const [offlinePendingCount, setOfflinePendingCount] = useState(0);
+
+  const [loyaltyRates, setLoyaltyRates] = useState({
+    earnRate: 100, // $100 -> 1 pt
+    earnPoints: 1,
+    redeemRate: 10, // 10 pts -> $1 discount
+  });
+
+  useEffect(() => {
+    const sEarnRate = parseFloat(localStorage.getItem("ERIKA_EARN_RATE") || "100");
+    const sEarnPts = parseFloat(localStorage.getItem("ERIKA_EARN_PTS") || "1");
+    const sRedeem = parseFloat(localStorage.getItem("ERIKA_REDEEM_RATE") || "10");
+    
+    setLoyaltyRates({
+      earnRate: sEarnRate > 0 ? sEarnRate : 100,
+      earnPoints: sEarnPts > 0 ? sEarnPts : 1,
+      redeemRate: sRedeem > 0 ? sRedeem : 10
+    });
+  }, []);
+
   const [tickets, setTickets] = useState<Ticket[]>([
     { id: 1, items: [], discountPct: 0 },
   ]);
@@ -882,6 +902,62 @@ export default function POSModule() {
                 </option>
               ))}
             </select>
+            {selectedCustomerId && customers.find(c => c.id === selectedCustomerId)?.points > 0 && (
+              <button 
+                onClick={async () => {
+                   if (activeTicket.items.length === 0) return alert("Agrega artículos primero.");
+                   const customer = customers.find(c => c.id === selectedCustomerId);
+                   if (!customer || !customer.points) return;
+                   const pointsToRedeemStr = window.prompt(`El cliente tiene ${customer.points} puntos.\nCanje de ${loyaltyRates.redeemRate} puntos = $1.00 de descuento.\n¿Cuántos puntos desea canjear?`);
+                   if (!pointsToRedeemStr) return;
+                   const pointsToRedeem = parseInt(pointsToRedeemStr, 10);
+                   if (isNaN(pointsToRedeem) || pointsToRedeem <= 0) return;
+                   if (pointsToRedeem > customer.points) return alert("El cliente no tiene suficientes puntos.");
+                   
+                   const discountAmount = pointsToRedeem / loyaltyRates.redeemRate;
+                   if (discountAmount > finalTotal) return alert("El descuento no puede ser mayor al total de la cuenta.");
+
+                   const { error } = await supabase.from("customers").update({ points: customer.points - pointsToRedeem }).eq("id", customer.id);
+                   if (error) return alert("Error al descontar puntos.");
+
+                   // Apply as a fixed discount item
+                   setTickets(tickets.map(t => {
+                     if (t.id === activeTicketId) {
+                        return {
+                           ...t,
+                           items: [...t.items, {
+                              id: "DESC-PUNTOS-" + Date.now(),
+                              name: "Descuento por Puntos ERIKA",
+                              qty: 1,
+                              price: -discountAmount,
+                              cost: 0,
+                              unit: "PZA"
+                           }]
+                        }
+                     }
+                     return t;
+                   }));
+
+                   alert(`✅ Canje exitoso. Se descontaron ${pointsToRedeem} puntos y se aplicó un descuento de $${discountAmount.toFixed(2)}.`);
+                   
+                   // Reload customers to refresh points
+                   const { data: custData } = await supabase.from("customers").select("*");
+                   if (custData) setCustomers(custData);
+                }}
+                style={{
+                  width: "100%",
+                  marginTop: "10px",
+                  padding: "8px",
+                  borderRadius: "8px",
+                  background: "linear-gradient(135deg, #f59e0b, #d97706)",
+                  color: "white",
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: "bold"
+                }}>
+                🌟 Canjear Puntos de Lealtad
+              </button>
+            )}
           </div>
 
           <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
@@ -936,12 +1012,12 @@ export default function POSModule() {
 
                   if (error) return alert("Error al cobrar: " + error.message);
 
-                  // Sumar Puntos si hay cliente (1 punto por cada $100 pesos)
+                  // Sumar Puntos si hay cliente (según configuración)
                   let puntosGanados = 0;
                   if (selectedCustomerId) {
                      const customer = customers.find(c => c.id === selectedCustomerId);
                      if (customer) {
-                        puntosGanados = Math.floor(finalTotal / 100);
+                        puntosGanados = Math.floor(finalTotal / loyaltyRates.earnRate) * loyaltyRates.earnPoints;
                         if (puntosGanados > 0) {
                            await supabase.from("customers").update({ points: (customer.points || 0) + puntosGanados }).eq("id", selectedCustomerId);
                            alert(`⭐ El cliente ganó ${puntosGanados} Erika Puntos.`);
@@ -1067,6 +1143,66 @@ export default function POSModule() {
                     if (invItem) {
                        await supabase.from("inventory").update({ stock: invItem.stock - item.qty }).eq("name", item.name);
                     }
+                 }
+
+                 // Print Thermal Ticket for Layaway
+                 const ticketWindow = window.open("", "_blank", "width=300,height=500");
+                 if (ticketWindow) {
+                   const itemsHtml = activeTicket.items
+                     .map(
+                       (item) => `
+                         <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px;">
+                           <div style="flex: 2;">${item.qty}x ${item.name}</div>
+                           <div style="flex: 1; text-align: right;">$${(item.price * item.qty).toFixed(2)}</div>
+                         </div>
+                       `,
+                     )
+                     .join("");
+                     
+                   const ticketHtml = `
+                     <html>
+                       <head>
+                         <style>
+                           body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; width: 58mm; color: #000; background: #fff; }
+                           .center { text-align: center; }
+                           .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
+                           .bold { font-weight: bold; }
+                         </style>
+                       </head>
+                       <body>
+                         <div class="center bold" style="font-size: 16px; margin-bottom: 5px;">FERRETERÍA ERIKA</div>
+                         <div class="center" style="font-size: 12px;">Comprobante de Apartado</div>
+                         <div class="divider"></div>
+                         <div style="font-size: 12px; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
+                         <div style="font-size: 12px; margin-bottom: 5px;">Cliente: ${customer?.name || "Desconocido"}</div>
+                         <div class="divider"></div>
+                         ${itemsHtml}
+                         <div class="divider"></div>
+                         <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+                           <div>Total Mercancía:</div>
+                           <div class="bold">$${finalTotal.toFixed(2)}</div>
+                         </div>
+                         <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+                           <div>Enganche Dado:</div>
+                           <div class="bold">$${downPayment.toFixed(2)}</div>
+                         </div>
+                         <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+                           <div>Saldo Pendiente:</div>
+                           <div class="bold">$${(finalTotal - downPayment).toFixed(2)}</div>
+                         </div>
+                         <div class="divider"></div>
+                         <div class="center bold" style="font-size: 12px; margin-bottom: 5px; color: red;">¡ATENCIÓN!</div>
+                         <div class="center" style="font-size: 10px;">Vence: ${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
+                         <div class="center" style="font-size: 10px; margin-top: 5px;">Pasando esta fecha, la mercancía regresará a piso de ventas.</div>
+                       </body>
+                     </html>
+                   `;
+                   ticketWindow.document.write(ticketHtml);
+                   ticketWindow.document.close();
+                   setTimeout(() => {
+                     ticketWindow.print();
+                     ticketWindow.close();
+                   }, 500);
                  }
 
                  alert(`✅ Apartado creado con éxito. Enganche de $${downPayment.toFixed(2)} registrado.\nTiene 30 días para liquidar el saldo de $${(finalTotal - downPayment).toFixed(2)}.`);

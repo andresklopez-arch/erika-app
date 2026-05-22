@@ -34,6 +34,7 @@ export default function Dashboard() {
   // New States
   const [incomeVsExpenses, setIncomeVsExpenses] = useState<any[]>([]);
   const [hasPlayedBell, setHasPlayedBell] = useState(false);
+  const [overdueLayaways, setOverdueLayaways] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -42,16 +43,23 @@ export default function Dashboard() {
       const todayIso = today.toISOString();
       const todayStr = today.toISOString().split('T')[0];
 
-      // 1. Check for Debts due today or overdue
+      // 1. Check for Debts and Overdue Layaways
       const { data: debts } = await supabase.from("supplier_debts").select("*").eq("status", "pending").lte("due_date", todayStr);
-      if (debts && debts.length > 0 && !hasPlayedBell) {
+      const { data: layaways } = await supabase.from("layaways").select("*").eq("status", "pending").lt("due_date", todayStr);
+      
+      if (layaways) setOverdueLayaways(layaways);
+
+      if (((debts && debts.length > 0) || (layaways && layaways.length > 0)) && !hasPlayedBell) {
           // Play Bell
           try {
              const audio = new Audio("https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=success-1-6297.mp3");
              audio.volume = 0.5;
              audio.play().catch(e => console.log("Audio autoplay blocked by browser."));
              setHasPlayedBell(true);
-             alert(`🔔 ¡ATENCIÓN! Tienes ${debts.length} cuenta(s) por pagar vencida(s) o que vencen HOY.`);
+             let msg = "🔔 ¡ATENCIÓN!\n";
+             if (debts && debts.length > 0) msg += `- Tienes ${debts.length} cuenta(s) por pagar vencida(s) o que vencen HOY.\n`;
+             if (layaways && layaways.length > 0) msg += `- Tienes ${layaways.length} apartado(s) vencido(s).`;
+             alert(msg);
           } catch(e) {}
       }
 
@@ -317,12 +325,12 @@ export default function Dashboard() {
             <h3
               style={{ color: "var(--color-secondary)", marginBottom: "10px" }}
             >
-              ⚠️ Alertas Críticas (Bajo Stock)
+              ⚠️ Alertas Críticas
             </h3>
             <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-              {lowStockAlerts.map((alert, idx) => (
+              {overdueLayaways.map((layaway, idx) => (
                 <li
-                  key={idx}
+                  key={`layaway-${idx}`}
                   style={{
                     background: "rgba(239, 68, 68, 0.1)",
                     border: "1px solid #ef4444",
@@ -333,13 +341,32 @@ export default function Dashboard() {
                     justifyContent: "space-between",
                   }}
                 >
-                  <span>{alert.name}</span>
+                  <span>📦 Apartado Vencido: {layaway.customer_name}</span>
                   <strong style={{ color: "#ef4444" }}>
+                    Debe: ${layaway.balance.toFixed(2)}
+                  </strong>
+                </li>
+              ))}
+              {lowStockAlerts.map((alert, idx) => (
+                <li
+                  key={`stock-${idx}`}
+                  style={{
+                    background: "rgba(245, 158, 11, 0.1)",
+                    border: "1px solid #f59e0b",
+                    padding: "10px",
+                    borderRadius: "8px",
+                    marginBottom: "10px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <span>📉 Bajo Stock: {alert.name}</span>
+                  <strong style={{ color: "#f59e0b" }}>
                     {alert.stock} (Min: {alert.minStock})
                   </strong>
                 </li>
               ))}
-              {lowStockAlerts.length === 0 && (
+              {lowStockAlerts.length === 0 && overdueLayaways.length === 0 && (
                 <li style={{ padding: "10px", color: "rgba(255,255,255,0.5)" }}>
                   No hay alertas críticas.
                 </li>
