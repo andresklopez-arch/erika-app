@@ -149,14 +149,19 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
   white-space: nowrap;
   position: relative;
   z-index: 1000;
+  flex-shrink: 0;
+  padding: 20px 12px;
 }
 
 .sidebar-container:hover {
   width: 280px;
+  padding: 20px 20px;
+  transform: none; /* Evita el salto vertical de 2px de la clase glass-panel que rompe el hover */
+  box-shadow: 0 8px 30px rgba(244, 63, 94, 0.15);
 }
 
 .sidebar-container .avatar {
