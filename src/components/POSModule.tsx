@@ -37,16 +37,28 @@ export default function POSModule() {
     earnPoints: 1,
     redeemRate: 10, // 10 pts -> $1 discount
   });
+  
+  const [wholesaleRules, setWholesaleRules] = useState({
+    minQty: 10,
+    discountPct: 10,
+  });
 
   useEffect(() => {
     const sEarnRate = parseFloat(localStorage.getItem("ERIKA_EARN_RATE") || "100");
     const sEarnPts = parseFloat(localStorage.getItem("ERIKA_EARN_PTS") || "1");
     const sRedeem = parseFloat(localStorage.getItem("ERIKA_REDEEM_RATE") || "10");
+    const sWQ = parseInt(localStorage.getItem("ERIKA_WHOLESALE_QTY") || "10");
+    const sWP = parseInt(localStorage.getItem("ERIKA_WHOLESALE_PCT") || "10");
     
     setLoyaltyRates({
       earnRate: sEarnRate > 0 ? sEarnRate : 100,
       earnPoints: sEarnPts > 0 ? sEarnPts : 1,
       redeemRate: sRedeem > 0 ? sRedeem : 10
+    });
+    
+    setWholesaleRules({
+      minQty: sWQ > 0 ? sWQ : 10,
+      discountPct: sWP > 0 ? sWP : 10
     });
   }, []);
 
@@ -277,10 +289,13 @@ export default function POSModule() {
 
   const applyDiscount = (mode: "percent" | "fixed") => {
     if (activeTicket.items.length === 0) return;
-    const rawTotal = activeTicket.items.reduce(
-      (sum, item) => sum + item.price * item.qty,
-      0,
-    );
+    const currentRawTotal = activeTicket.items.reduce((sum, item) => {
+      let p = item.price;
+      if (item.qty >= wholesaleRules.minQty) {
+        p = item.price * (1 - wholesaleRules.discountPct / 100);
+      }
+      return sum + p * item.qty;
+    }, 0);
     const totalCost = activeTicket.items.reduce(
       (sum, item) => sum + item.cost * item.qty,
       0,
@@ -292,11 +307,11 @@ export default function POSModule() {
     if (mode === "percent") {
       const pct = parseFloat(
         window.prompt(
-          `Máx: ${((1 - safeMinimum / rawTotal) * 100).toFixed(1)}%\nIngresa %:`,
+          `Máx: ${((1 - safeMinimum / currentRawTotal) * 100).toFixed(1)}%\nIngresa %:`,
         ) || "",
       );
       if (isNaN(pct)) return;
-      proposedTotal = rawTotal * (1 - pct / 100);
+      proposedTotal = currentRawTotal * (1 - pct / 100);
       finalPct = pct;
     } else {
       const fixedAmount = parseFloat(
@@ -306,7 +321,7 @@ export default function POSModule() {
       );
       if (isNaN(fixedAmount)) return;
       proposedTotal = fixedAmount;
-      finalPct = (1 - fixedAmount / rawTotal) * 100;
+      finalPct = (1 - fixedAmount / currentRawTotal) * 100;
     }
 
     if (proposedTotal < safeMinimum)
@@ -435,14 +450,37 @@ export default function POSModule() {
       }));
   };
 
-  const rawTotal = activeTicket.items.reduce(
-    (sum, item) => sum + item.price * item.qty,
-    0,
-  );
+  const rawTotal = activeTicket.items.reduce((sum, item) => {
+    let p = item.price;
+    if (item.qty >= wholesaleRules.minQty) {
+      p = item.price * (1 - wholesaleRules.discountPct / 100);
+    }
+    return sum + p * item.qty;
+  }, 0);
   const discountAmount = rawTotal * (activeTicket.discountPct / 100);
   const finalTotal = rawTotal - discountAmount;
   const iva = finalTotal * 0.16;
   const subtotal = finalTotal - iva;
+
+  const sendWhatsApp = (type: "quote" | "receipt") => {
+    if (activeTicket.items.length === 0) return alert("El ticket está vacío.");
+    let phone = "";
+    if (selectedCustomerId) {
+       const c = customers.find(x => x.id === selectedCustomerId);
+       if (c?.phone) phone = c.phone;
+    }
+    if (!phone) {
+       phone = window.prompt("Ingresa el número de WhatsApp a 10 dígitos (sin espacios):") || "";
+    }
+    if (!phone || phone.length < 10) return;
+    
+    const title = type === "quote" ? "*COTIZACIÓN - FERRETERÍA ERIKA*" : "*RECIBO DE COMPRA - FERRETERÍA ERIKA*";
+    const itemsText = activeTicket.items.map(i => `▪️ ${i.qty}x ${i.name} - $${(i.price * i.qty).toFixed(2)}`).join("%0A");
+    const totalText = `*TOTAL: $${finalTotal.toFixed(2)}*`;
+    
+    const msg = `${title}%0A%0A${itemsText}%0A%0A${totalText}%0A%0A¡Gracias por su preferencia!`;
+    window.open(`https://wa.me/52${phone}?text=${msg}`, "_blank");
+  };
 
   return (
     <div
@@ -745,14 +783,21 @@ export default function POSModule() {
                     />
                   )}
                   <div className="flex-between" style={{ flex: 1 }}>
-                    <strong style={{ fontSize: "1.1rem" }}>{item.name}</strong>
+                    <div>
+                      <strong style={{ fontSize: "1.1rem" }}>{item.name}</strong>
+                      {item.qty >= wholesaleRules.minQty && (
+                        <span style={{ marginLeft: "10px", background: "#3b82f6", color: "white", padding: "2px 6px", borderRadius: "4px", fontSize: "0.7rem", fontWeight: "bold" }}>
+                           MAYOREO -{wholesaleRules.discountPct}%
+                        </span>
+                      )}
+                    </div>
                     <strong
                       style={{
                         color: "var(--color-secondary)",
                         fontSize: "1.1rem",
                       }}
                     >
-                      ${(item.price * item.qty).toFixed(2)}
+                      ${((item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price) * item.qty).toFixed(2)}
                     </strong>
                   </div>
                 </div>
@@ -1062,49 +1107,63 @@ export default function POSModule() {
               💳 Crédito
             </button>
           </div>
-          <button
-            className="btn-primary"
-            style={{
-              width: "100%",
-              marginTop: "10px",
-              padding: "10px",
-              background: "transparent",
-              border: "1px solid #3b82f6",
-              color: "#3b82f6",
-            }}
-            onClick={async () => {
-              if (activeTicket.items.length === 0)
-                return alert("El ticket está vacío.");
-              if (isOffline)
-                return alert(
-                  "❌ Las cotizaciones requieren conexión a internet para guardarse.",
+          <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+            <button
+              className="btn-primary"
+              style={{
+                flex: 1,
+                padding: "10px",
+                background: "transparent",
+                border: "1px solid #3b82f6",
+                color: "#3b82f6",
+              }}
+              onClick={async () => {
+                if (activeTicket.items.length === 0)
+                  return alert("El ticket está vacío.");
+                if (isOffline)
+                  return alert(
+                    "❌ Las cotizaciones requieren conexión a internet para guardarse.",
+                  );
+                const customerName = window.prompt(
+                  "Nombre del cliente para la cotización:",
                 );
-              const customerName = window.prompt(
-                "Nombre del cliente para la cotización:",
-              );
-              if (!customerName) return;
+                if (!customerName) return;
 
-              const { error } = await supabase.from("quotes").insert({
-                customer_name: customerName,
-                items: activeTicket.items,
-                total: finalTotal,
-                status: "pending",
-              });
+                const { error } = await supabase.from("quotes").insert({
+                  customer_name: customerName,
+                  items: activeTicket.items,
+                  total: finalTotal,
+                  status: "pending",
+                });
 
-              if (error)
-                return alert("Error al guardar cotización: " + error.message);
-              alert("✅ Cotización guardada con éxito.");
-              setTickets(
-                tickets.map((t) =>
-                  t.id === activeTicketId
-                    ? { ...t, items: [], discountPct: 0 }
-                    : t,
-                ),
-              );
-            }}
-          >
-            📄 Guardar Cotización
-          </button>
+                if (error)
+                  return alert("Error al guardar cotización: " + error.message);
+                alert("✅ Cotización guardada con éxito.");
+                setTickets(
+                  tickets.map((t) =>
+                    t.id === activeTicketId
+                      ? { ...t, items: [], discountPct: 0 }
+                      : t,
+                  ),
+                );
+              }}
+            >
+              📄 Guardar Cotización
+            </button>
+            <button
+              className="btn-primary"
+              style={{
+                flex: 1,
+                padding: "10px",
+                background: "transparent",
+                border: "1px solid #22c55e",
+                color: "#22c55e",
+              }}
+              onClick={() => sendWhatsApp("quote")}
+            >
+              💬 Enviar Cotización por WhatsApp
+            </button>
+          </div>
           <button
             className="btn-primary"
             style={{

@@ -6,6 +6,9 @@ export default function SettingsModule() {
   const [earnRate, setEarnRate] = useState("100"); // Gasta $100
   const [earnPoints, setEarnPoints] = useState("1"); // Gana 1 punto
   const [redeemRate, setRedeemRate] = useState("10"); // 10 puntos = $1 de descuento
+  const [theme, setTheme] = useState("dark");
+  const [wholesaleMinQty, setWholesaleMinQty] = useState("10");
+  const [wholesaleDiscount, setWholesaleDiscount] = useState("10");
 
   useEffect(() => {
     const savedVoice = localStorage.getItem("ERIKA_VOICE_KEYWORD");
@@ -14,10 +17,16 @@ export default function SettingsModule() {
     const sEarnRate = localStorage.getItem("ERIKA_EARN_RATE");
     const sEarnPts = localStorage.getItem("ERIKA_EARN_PTS");
     const sRedeem = localStorage.getItem("ERIKA_REDEEM_RATE");
+    const sTheme = localStorage.getItem("ERIKA_THEME");
+    const sWholesaleQty = localStorage.getItem("ERIKA_WHOLESALE_QTY");
+    const sWholesalePct = localStorage.getItem("ERIKA_WHOLESALE_PCT");
     
     if (sEarnRate) setEarnRate(sEarnRate);
     if (sEarnPts) setEarnPoints(sEarnPts);
     if (sRedeem) setRedeemRate(sRedeem);
+    if (sTheme) setTheme(sTheme);
+    if (sWholesaleQty) setWholesaleMinQty(sWholesaleQty);
+    if (sWholesalePct) setWholesaleDiscount(sWholesalePct);
   }, []);
 
   const saveConfig = () => {
@@ -32,6 +41,22 @@ export default function SettingsModule() {
     localStorage.setItem("ERIKA_EARN_PTS", earnPoints);
     localStorage.setItem("ERIKA_REDEEM_RATE", redeemRate);
     alert("✅ Tasas del Programa de Lealtad actualizadas.");
+  };
+
+  const saveWholesaleConfig = () => {
+    localStorage.setItem("ERIKA_WHOLESALE_QTY", wholesaleMinQty);
+    localStorage.setItem("ERIKA_WHOLESALE_PCT", wholesaleDiscount);
+    alert("✅ Configuración de Mayoreo Automático guardada.");
+  };
+
+  const toggleTheme = (newTheme: string) => {
+    setTheme(newTheme);
+    localStorage.setItem("ERIKA_THEME", newTheme);
+    if (newTheme === "light") {
+      document.documentElement.setAttribute("data-theme", "light");
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
   };
 
   return (
@@ -175,13 +200,50 @@ export default function SettingsModule() {
                 <input 
                   type="text" 
                   placeholder="XXXX-XXXX-XXXX-XXXX" 
-                  style={{ flex: 1, padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white", fontFamily: "monospace", textTransform: "uppercase" }} 
+                  style={{ flex: 1, padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)", fontFamily: "monospace", textTransform: "uppercase" }} 
                 />
                 <button className="btn-primary" style={{ padding: "10px 20px" }}>
                   Validar
                 </button>
               </div>
               <p style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)", marginTop: "10px", fontStyle: "italic" }}>* El módulo de licencias se encuentra en modo bypass actualmente.</p>
+            </div>
+          </div>
+          
+          <div className="glass-panel" style={{ border: "1px solid #3b82f6" }}>
+            <h3 style={{ margin: "0 0 20px 0", color: "#3b82f6", display: "flex", alignItems: "center", gap: "10px" }}>
+              🛒 Descuentos Automáticos por Mayoreo
+            </h3>
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Cantidad Mínima para Mayoreo (piezas):</label>
+              <input type="number" value={wholesaleMinQty} onChange={e => setWholesaleMinQty(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
+            </div>
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Descuento a aplicar (%):</label>
+              <input type="number" value={wholesaleDiscount} onChange={e => setWholesaleDiscount(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
+            </div>
+            <button className="btn-primary" onClick={saveWholesaleConfig} style={{ width: "100%", background: "transparent", border: "1px solid #3b82f6", color: "#3b82f6" }}>
+              💾 Guardar Reglas de Mayoreo
+            </button>
+          </div>
+
+          <div className="glass-panel" style={{ border: "1px solid var(--color-primary)" }}>
+            <h3 style={{ margin: "0 0 20px 0", display: "flex", alignItems: "center", gap: "10px" }}>
+              🎨 Apariencia del Sistema
+            </h3>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button 
+                onClick={() => toggleTheme("dark")}
+                style={{ flex: 1, padding: "15px", borderRadius: "8px", border: theme === "dark" ? "2px solid var(--color-primary)" : "1px solid var(--glass-border)", background: "#0a0a0f", color: "white", cursor: "pointer", fontWeight: "bold" }}
+              >
+                🌙 Modo Oscuro
+              </button>
+              <button 
+                onClick={() => toggleTheme("light")}
+                style={{ flex: 1, padding: "15px", borderRadius: "8px", border: theme === "light" ? "2px solid var(--color-primary)" : "1px solid var(--glass-border)", background: "#f8fafc", color: "#0f172a", cursor: "pointer", fontWeight: "bold" }}
+              >
+                ☀️ Modo Claro
+              </button>
             </div>
           </div>
         </div>

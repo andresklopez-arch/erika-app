@@ -32,6 +32,14 @@ export default function AuthProvider({
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Apply Theme
+    const savedTheme = localStorage.getItem("ERIKA_THEME") || "dark";
+    if (savedTheme === "light") {
+      document.documentElement.setAttribute("data-theme", "light");
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
+
     const saved = localStorage.getItem("ERIKA_USER");
     if (saved) setCurrentUser(JSON.parse(saved));
     setIsLoading(false);
