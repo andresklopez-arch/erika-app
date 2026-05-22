@@ -365,3 +365,20 @@ body {
   }
 }
 
+/* Animación para el Toast de exportación */
+@keyframes toastSlideIn {
+  0% {
+    transform: translateY(100px) scale(0.9);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.toast-animate {
+  animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+

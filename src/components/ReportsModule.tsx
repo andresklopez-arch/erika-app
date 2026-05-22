@@ -28,6 +28,8 @@ export default function ReportsModule() {
   const [cashSessions, setCashSessions] = useState<CashSession[]>([]);
   const [searchCajero, setSearchCajero] = useState("");
   const [filterFecha, setFilterFecha] = useState("todos");
+  const [exporting, setExporting] = useState(false);
+  const [showToast, setShowToast] = useState(false);
 
   useEffect(() => {
      const fetchData = async () => {
@@ -174,28 +176,40 @@ export default function ReportsModule() {
   });
 
   const exportToCSV = () => {
-    const headers = ["Apertura", "Cierre", "Cajero", "Fondo Inicial", "Ventas Efectivo", "Ventas Tarjeta", "Descuadre", "Estado"];
-    const rows = filteredSessions.map(session => [
-      session.opened_at ? new Date(session.opened_at).toLocaleString() : "",
-      session.closed_at ? new Date(session.closed_at).toLocaleString() : "En curso",
-      session.opened_by || "",
-      (session.initial_balance ?? 0).toFixed(2),
-      (session.cash_sales ?? 0).toFixed(2),
-      (session.card_sales ?? 0).toFixed(2),
-      (session.discrepancy ?? 0).toFixed(2),
-      session.status === 'open' ? 'Abierta' : 'Cerrada'
-    ]);
+    if (exporting) return;
+    setExporting(true);
 
-    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
-      + [headers.join(","), ...rows.map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(","))].join("\n");
-    
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `reporte_arqueos_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const headers = ["Apertura", "Cierre", "Cajero", "Fondo Inicial", "Ventas Efectivo", "Ventas Tarjeta", "Descuadre", "Estado"];
+      const rows = filteredSessions.map(session => [
+        session.opened_at ? new Date(session.opened_at).toLocaleString() : "",
+        session.closed_at ? new Date(session.closed_at).toLocaleString() : "En curso",
+        session.opened_by || "",
+        (session.initial_balance ?? 0).toFixed(2),
+        (session.cash_sales ?? 0).toFixed(2),
+        (session.card_sales ?? 0).toFixed(2),
+        (session.discrepancy ?? 0).toFixed(2),
+        session.status === 'open' ? 'Abierta' : 'Cerrada'
+      ]);
+
+      const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+        + [headers.join(","), ...rows.map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(","))].join("\n");
+      
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `reporte_arqueos_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+    } catch (err) {
+      console.error("Error al exportar a CSV:", err);
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -340,21 +354,24 @@ export default function ReportsModule() {
             <div style={{ display: "flex", flexDirection: "column", gap: "5px", justifyContent: "flex-end" }}>
               <button
                 onClick={exportToCSV}
+                disabled={exporting}
                 style={{
                   padding: "10px 20px",
                   borderRadius: "8px",
-                  background: "rgba(16, 185, 129, 0.2)",
+                  background: exporting ? "rgba(16, 185, 129, 0.1)" : "rgba(16, 185, 129, 0.2)",
                   border: "1px solid #10b981",
                   color: "#10b981",
-                  cursor: "pointer",
+                  cursor: exporting ? "not-allowed" : "pointer",
                   fontWeight: "bold",
                   display: "flex",
                   alignItems: "center",
                   gap: "8px",
-                  height: "42px"
+                  height: "42px",
+                  opacity: exporting ? 0.6 : 1,
+                  transition: "all 0.2s ease"
                 }}
               >
-                📥 Exportar a CSV
+                {exporting ? "⏳ Procesando..." : "📥 Exportar a CSV"}
               </button>
             </div>
          </div>
@@ -425,6 +442,30 @@ export default function ReportsModule() {
           </button>
         </div>
       </div>
+      {showToast && (
+        <div 
+          className="toast-animate"
+          style={{
+            position: "fixed",
+            bottom: "20px",
+            right: "20px",
+            background: "rgba(16, 185, 129, 0.95)",
+            color: "white",
+            padding: "12px 24px",
+            borderRadius: "10px",
+            boxShadow: "0 10px 25px rgba(0, 0, 0, 0.3)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            backdropFilter: "blur(10px)",
+            border: "1px solid rgba(255, 255, 255, 0.1)"
+          }}
+        >
+          <span>✅</span>
+          <span style={{ fontWeight: "500" }}>Reporte exportado exitosamente</span>
+        </div>
+      )}
     </div>
   );
 }

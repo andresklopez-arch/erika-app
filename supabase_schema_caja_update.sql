@@ -40,5 +40,56 @@ CREATE POLICY "Permitir seleccionar sesiones" ON cash_sessions FOR SELECT USING 
 CREATE POLICY "Permitir actualizar sesiones si estan abiertas" ON cash_sessions FOR UPDATE USING (status = 'open') WITH CHECK (status = 'open' OR status = 'closed');
 CREATE POLICY "Permitir borrar sesiones si estan abiertas" ON cash_sessions FOR DELETE USING (status = 'open');
 
+-- 4. Doble Capa de Seguridad: Trigger para impedir modificaciones físicas en sesiones cerradas
+CREATE OR REPLACE FUNCTION check_session_not_closed()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' AND OLD.status = 'closed' THEN
+    RAISE EXCEPTION 'Operación denegada: No se puede modificar una sesión de caja ya cerrada.';
+  END IF;
+  
+  IF TG_OP = 'DELETE' AND OLD.status = 'closed' THEN
+    RAISE EXCEPTION 'Operación denegada: No se puede eliminar una sesión de caja ya cerrada.';
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_prevent_closed_session_modification ON cash_sessions;
+CREATE TRIGGER trg_prevent_closed_session_modification
+BEFORE UPDATE OR DELETE ON cash_sessions
+FOR EACH ROW
+EXECUTE FUNCTION check_session_not_closed();
+
+-- 5. Auditoría de Integridad: Vista para identificar discrepancias entre total_sales y transacciones
+CREATE OR REPLACE VIEW v_cash_sessions_audit AS
+SELECT 
+  cs.id AS session_id,
+  cs.opened_at,
+  cs.closed_at,
+  cs.opened_by,
+  cs.status,
+  cs.total_sales AS consolidated_total_sales,
+  COALESCE(
+    (
+      SELECT SUM(ct.amount)
+      FROM cash_transactions ct
+      WHERE ct.session_id = cs.id AND ct.type = 'sale'
+    ),
+    0
+  ) AS transactions_sum_sales,
+  (
+    cs.total_sales - COALESCE(
+      (
+        SELECT SUM(ct.amount)
+        FROM cash_transactions ct
+        WHERE ct.session_id = cs.id AND ct.type = 'sale'
+      ),
+      0
+    )
+  ) AS audit_sales_discrepancy
+FROM cash_sessions cs;
+
 -- Confirmación visual
-SELECT '✅ ACTUALIZACIÓN COMPLETA DE BD: Columna agregada, ventas históricas recalculadas y políticas RLS de protección activadas.' as status;
+SELECT '✅ ACTUALIZACIÓN COMPLETA DE BD: Columna agregada, ventas históricas recalculadas, políticas RLS activadas, trigger de seguridad activo y vista de auditoría de integridad creada.' as status;
