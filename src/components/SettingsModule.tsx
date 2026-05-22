@@ -23,6 +23,9 @@ export default function SettingsModule() {
   const [newUserPin, setNewUserPin] = useState("");
   const [newUserRole, setNewUserRole] = useState("cajero");
 
+  const [isConnected, setIsConnected] = useState<boolean>(true);
+  const [connectionType, setConnectionType] = useState<string>("system");
+
   useEffect(() => {
     const savedVoice = localStorage.getItem("ERIKA_VOICE_KEYWORD");
     if (savedVoice) setVoiceKeyword(savedVoice);
