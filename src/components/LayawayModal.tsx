@@ -1,0 +1,131 @@
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabaseClient";
+
+export default function LayawayModal({ show, onClose }: { show: boolean; onClose: () => void }) {
+  const [layaways, setLayaways] = useState<any[]>([]);
+
+  const fetchLayaways = async () => {
+    const { data } = await supabase.from("layaways").select("*").order("created_at", { ascending: false });
+    if (data) setLayaways(data);
+  };
+
+  useEffect(() => {
+    if (show) fetchLayaways();
+  }, [show]);
+
+  if (!show) return null;
+
+  const handlePay = async (layaway: any) => {
+    const payment = parseFloat(window.prompt(`Saldo pendiente: $${layaway.balance.toFixed(2)}\n¿Cuánto va a abonar?`) || "");
+    if (isNaN(payment) || payment <= 0) return;
+    if (payment > layaway.balance) return alert("El abono no puede superar el saldo pendiente.");
+
+    const newBalance = layaway.balance - payment;
+    const isCompleted = newBalance <= 0.01; // floating point safe
+
+    const { error } = await supabase
+      .from("layaways")
+      .update({ balance: newBalance, status: isCompleted ? "completed" : "pending" })
+      .eq("id", layaway.id);
+
+    if (error) return alert("Error al registrar el abono.");
+    alert(`✅ Abono registrado. ${isCompleted ? "¡APARTADO LIQUIDADO, puede entregar la mercancía!" : `Saldo restante: $${newBalance.toFixed(2)}`}`);
+    fetchLayaways();
+  };
+
+  const handleCancel = async (layaway: any) => {
+    if (!window.confirm("¿Seguro que deseas cancelar este apartado? La mercancía regresará al inventario físico.")) return;
+    
+    for (const item of layaway.items) {
+      // Find current stock by name
+      const { data: currentStock } = await supabase.from("inventory").select("stock").eq("name", item.name).single();
+      if (currentStock) {
+        await supabase.from("inventory").update({ stock: currentStock.stock + item.qty }).eq("name", item.name);
+      }
+    }
+
+    const { error } = await supabase.from("layaways").update({ status: "cancelled" }).eq("id", layaway.id);
+    if (error) return alert("Error al cancelar.");
+    alert("❌ Apartado cancelado. Productos devueltos.");
+    fetchLayaways();
+  };
+
+  return (
+    <div
+      style={{
+        position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+        background: "rgba(0,0,0,0.8)", zIndex: 1000,
+        display: "flex", justifyContent: "center", alignItems: "center"
+      }}
+    >
+      <div className="glass-panel" style={{ width: "900px", maxHeight: "90vh", overflowY: "auto", position: "relative" }}>
+        <button
+          onClick={onClose}
+          style={{ position: "absolute", top: "20px", right: "20px", background: "transparent", border: "none", color: "white", fontSize: "1.5rem", cursor: "pointer" }}
+        >
+          ✖
+        </button>
+        <h2 style={{ color: "var(--color-primary)", marginTop: 0 }}>📦 Gestión de Apartados (Layaway)</h2>
+        <p style={{ color: "var(--color-secondary)", marginBottom: "20px" }}>Aquí puedes gestionar los apartados de los clientes, recibir abonos y entregar mercancía.</p>
+
+        <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: "8px", overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+            <thead style={{ background: "rgba(255,255,255,0.05)" }}>
+              <tr>
+                <th style={{ padding: "12px" }}>Fecha / Vencimiento</th>
+                <th style={{ padding: "12px" }}>Cliente</th>
+                <th style={{ padding: "12px" }}>Artículos</th>
+                <th style={{ padding: "12px" }}>Total</th>
+                <th style={{ padding: "12px", color: "var(--color-secondary)" }}>Saldo</th>
+                <th style={{ padding: "12px", textAlign: "center" }}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {layaways.map(l => (
+                <tr key={l.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", opacity: l.status === "cancelled" ? 0.5 : 1 }}>
+                  <td style={{ padding: "15px" }}>
+                    <div>{new Date(l.created_at).toLocaleDateString()}</div>
+                    <div style={{ fontSize: "0.8rem", color: l.status === "pending" && new Date(l.due_date) < new Date() ? "#ef4444" : "var(--color-secondary)" }}>
+                      Vence: {new Date(l.due_date).toLocaleDateString()}
+                    </div>
+                  </td>
+                  <td style={{ padding: "15px" }}>{l.customer_name}</td>
+                  <td style={{ padding: "15px", fontSize: "0.8rem" }}>
+                    {l.items.map((i: any, idx: number) => (
+                      <div key={idx}>{i.qty}x {i.name}</div>
+                    ))}
+                  </td>
+                  <td style={{ padding: "15px", fontWeight: "bold" }}>${l.total_amount.toFixed(2)}</td>
+                  <td style={{ padding: "15px", fontWeight: "bold", color: l.balance > 0 ? "var(--color-secondary)" : "#10b981" }}>
+                    ${l.balance.toFixed(2)}
+                  </td>
+                  <td style={{ padding: "15px", display: "flex", gap: "10px", justifyContent: "center" }}>
+                    {l.status === "pending" && (
+                      <>
+                        <button className="btn-primary" style={{ padding: "5px 10px", fontSize: "0.8rem", background: "transparent", border: "1px solid var(--color-secondary)" }} onClick={() => handlePay(l)}>
+                          💵 Abonar
+                        </button>
+                        <button className="btn-primary" style={{ padding: "5px 10px", fontSize: "0.8rem", background: "transparent", border: "1px solid #ef4444", color: "#ef4444" }} onClick={() => handleCancel(l)}>
+                          ❌ Cancelar
+                        </button>
+                      </>
+                    )}
+                    {l.status === "completed" && <span style={{ color: "#10b981", fontWeight: "bold" }}>✅ Pagado</span>}
+                    {l.status === "cancelled" && <span style={{ color: "#ef4444", fontWeight: "bold" }}>🚫 Cancelado</span>}
+                  </td>
+                </tr>
+              ))}
+              {layaways.length === 0 && (
+                <tr>
+                  <td colSpan={6} style={{ padding: "20px", textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
+                    No hay apartados registrados.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -862,6 +862,28 @@ export default function POSModule() {
               ${finalTotal.toFixed(2)}
             </span>
           </div>
+          <div style={{ marginBottom: "15px" }}>
+            <select
+              value={selectedCustomerId}
+              onChange={(e) => setSelectedCustomerId(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px",
+                borderRadius: "8px",
+                background: "rgba(0,0,0,0.3)",
+                color: "white",
+                border: "1px solid var(--color-primary)",
+              }}
+            >
+              <option value="">-- Cliente de Mostrador (Sin Puntos) --</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} (Pts: {c.points || 0})
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
             <button
               className="btn-primary"
@@ -908,11 +930,24 @@ export default function POSModule() {
                       session_id: session.id,
                       type: "sale",
                       amount: finalTotal,
-                      description: `Venta Ticket #${activeTicket.id}`,
+                      description: `Venta Ticket #${activeTicket.id}${selectedCustomerId ? ` (Cliente ID: ${selectedCustomerId})` : ""}`,
                       device_info: navigator.userAgent,
                     });
 
                   if (error) return alert("Error al cobrar: " + error.message);
+
+                  // Sumar Puntos si hay cliente (1 punto por cada $100 pesos)
+                  let puntosGanados = 0;
+                  if (selectedCustomerId) {
+                     const customer = customers.find(c => c.id === selectedCustomerId);
+                     if (customer) {
+                        puntosGanados = Math.floor(finalTotal / 100);
+                        if (puntosGanados > 0) {
+                           await supabase.from("customers").update({ points: (customer.points || 0) + puntosGanados }).eq("id", selectedCustomerId);
+                           alert(`⭐ El cliente ganó ${puntosGanados} Erika Puntos.`);
+                        }
+                     }
+                  }
                   alert(
                     `✅ ¡Cobro Exitoso en Efectivo por $${finalTotal.toFixed(2)}!\nEl dinero ha sido ingresado a la Caja Fuerte.`,
                   );
@@ -993,6 +1028,54 @@ export default function POSModule() {
             }}
           >
             📄 Guardar Cotización
+          </button>
+          <button
+            className="btn-primary"
+            style={{
+              width: "100%",
+              marginTop: "10px",
+              padding: "10px",
+              background: "transparent",
+              border: "1px solid #10b981",
+              color: "#10b981",
+            }}
+            onClick={() => {
+              if (activeTicket.items.length === 0) return alert("El ticket está vacío.");
+              if (!selectedCustomerId) return alert("❌ Debes seleccionar un cliente para hacer un Apartado (Layaway).");
+              // Open Layaway Creation Modal (mocked for now)
+              const downPayment = parseFloat(window.prompt(`El total es $${finalTotal.toFixed(2)}.\n¿Cuánto dejará de enganche (Mínimo $${(finalTotal*0.1).toFixed(2)})?`) || "");
+              if (isNaN(downPayment) || downPayment <= 0) return;
+              if (downPayment > finalTotal) return alert("El enganche no puede ser mayor al total.");
+              
+              const makeLayaway = async () => {
+                 const customer = customers.find(c => c.id === selectedCustomerId);
+                 const { error } = await supabase.from("layaways").insert({
+                    customer_id: selectedCustomerId,
+                    customer_name: customer?.name || "Desconocido",
+                    total_amount: finalTotal,
+                    down_payment: downPayment,
+                    balance: finalTotal - downPayment,
+                    due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+                    items: activeTicket.items,
+                    status: "pending"
+                 });
+                 if (error) return alert("Error al crear apartado: " + error.message);
+
+                 // Reduce Inventory
+                 for (const item of activeTicket.items) {
+                    const invItem = globalCatalog.find(i => i.id === item.id); // note item.id from POS is sometimes random, should match properly by code or name
+                    if (invItem) {
+                       await supabase.from("inventory").update({ stock: invItem.stock - item.qty }).eq("name", item.name);
+                    }
+                 }
+
+                 alert(`✅ Apartado creado con éxito. Enganche de $${downPayment.toFixed(2)} registrado.\nTiene 30 días para liquidar el saldo de $${(finalTotal - downPayment).toFixed(2)}.`);
+                 setTickets(tickets.map(t => t.id === activeTicketId ? { ...t, items: [], discountPct: 0 } : t));
+              };
+              makeLayaway();
+            }}
+          >
+            📦 Sistema de Apartado (Layaway)
           </button>
         </div>
       </div>

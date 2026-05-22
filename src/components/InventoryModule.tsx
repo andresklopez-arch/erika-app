@@ -7,6 +7,7 @@ import ClientCaptureModal from "./ClientCaptureModal";
 import SuppliersManagerModal from "./SuppliersManagerModal";
 import AccountsPayableModal from "./AccountsPayableModal";
 import LossesManagerModal from "./LossesManagerModal";
+import LayawayModal from "./LayawayModal";
 
 interface InventoryItem {
   id: string;
@@ -32,6 +33,7 @@ export default function InventoryModule() {
   const [showSuppliersModal, setShowSuppliersModal] = useState(false);
   const [showAccountsPayableModal, setShowAccountsPayableModal] = useState(false);
   const [showLossesModal, setShowLossesModal] = useState(false);
+  const [showLayaways, setShowLayaways] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchInventory = async () => {
@@ -194,12 +196,6 @@ export default function InventoryModule() {
     }
   };
 
-  const undoLastImport = () => {
-    alert(
-      "🔙 La función de deshacer temporalmente deshabilitada por seguridad al migrar a la nube Supabase.",
-    );
-  };
-
   return (
     <div
       className="animate-fade-in"
@@ -272,6 +268,17 @@ export default function InventoryModule() {
             }}
           >
             📉 Gastos y Mermas
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() => setShowLayaways(true)}
+            style={{
+              background: "transparent",
+              border: "1px solid #3b82f6",
+              color: "#3b82f6",
+            }}
+          >
+            📦 Apartados
           </button>
           <button
             className="btn-primary"
@@ -635,6 +642,10 @@ export default function InventoryModule() {
       
       {showLossesModal && (
         <LossesManagerModal onClose={() => setShowLossesModal(false)} />
+      )}
+
+      {showLayaways && (
+        <LayawayModal show={showLayaways} onClose={() => setShowLayaways(false)} />
       )}
     </div>
   );

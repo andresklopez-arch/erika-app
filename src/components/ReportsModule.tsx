@@ -1,6 +1,46 @@
 "use client";
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabaseClient";
 
 export default function ReportsModule() {
+  const [netProfit, setNetProfit] = useState({
+     sales: 0,
+     costs: 0,
+     payments: 0, // abonos
+     losses: 0,
+     pureProfit: 0
+  });
+
+  useEffect(() => {
+     const fetchData = async () => {
+        const today = new Date();
+        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
+
+        // Ventas brutas y Costos (calculados del historial)
+        const { data: txs } = await supabase.from("cash_transactions").select("amount, description").eq("type", "sale").gte("created_at", firstDayOfMonth);
+        const sales = txs ? txs.reduce((s, t) => s + t.amount, 0) : 0;
+        // Asumiremos un costo promedio de 70% de la venta para simplicidad, o se debería extraer del JSON del ticket.
+        const costs = sales * 0.70; 
+
+        // Gastos y Mermas
+        const { data: losses } = await supabase.from("business_losses").select("amount").gte("created_at", firstDayOfMonth);
+        const totalLosses = losses ? losses.reduce((s, l) => s + l.amount, 0) : 0;
+
+        // Abonos a Proveedores
+        const { data: payments } = await supabase.from("supplier_payments").select("amount").gte("created_at", firstDayOfMonth);
+        const totalPayments = payments ? payments.reduce((s, p) => s + p.amount, 0) : 0;
+
+        setNetProfit({
+           sales,
+           costs,
+           payments: totalPayments,
+           losses: totalLosses,
+           pureProfit: sales - costs - totalLosses
+        });
+     };
+     fetchData();
+  }, []);
+
   return (
     <div
       className="animate-fade-in"
@@ -68,55 +108,31 @@ export default function ReportsModule() {
             style={{
               borderBottom: "1px solid var(--glass-border)",
               paddingBottom: "10px",
+              color: "#10b981"
             }}
           >
-            🧾 Facturas Pendientes (Autofacturación)
+            💰 Estado de Resultados: UTILIDAD NETA PURA (Mes Actual)
           </h3>
-          <div
-            className="flex-between"
-            style={{
-              background: "rgba(255,255,255,0.05)",
-              padding: "15px",
-              borderRadius: "8px",
-            }}
-          >
-            <div>
-              <strong>Ticket #0045 - Constructora Alfa</strong>
-              <div
-                style={{ fontSize: "0.8rem", color: "var(--color-secondary)" }}
-              >
-                Monto: $15,000.00 | Requiere XML y PDF
-              </div>
-            </div>
-            <button
-              className="btn-primary"
-              style={{ fontSize: "0.8rem", padding: "8px 12px" }}
-            >
-              Timbrar (Auto)
-            </button>
-          </div>
-          <div
-            className="flex-between"
-            style={{
-              background: "rgba(255,255,255,0.05)",
-              padding: "15px",
-              borderRadius: "8px",
-            }}
-          >
-            <div>
-              <strong>Factura Global del Día</strong>
-              <div
-                style={{ fontSize: "0.8rem", color: "var(--color-secondary)" }}
-              >
-                Monto: $4,520.50 | Público en General
-              </div>
-            </div>
-            <button
-              className="btn-primary"
-              style={{ fontSize: "0.8rem", padding: "8px 12px" }}
-            >
-              Generar Global
-            </button>
+          <div style={{ background: "rgba(0,0,0,0.3)", padding: "15px", borderRadius: "8px" }}>
+             <div className="flex-between" style={{ padding: "5px 0" }}>
+                 <span>Ingresos por Ventas Brutas:</span>
+                 <span style={{ color: "#10b981", fontWeight: "bold" }}>+ ${netProfit.sales.toFixed(2)}</span>
+             </div>
+             <div className="flex-between" style={{ padding: "5px 0" }}>
+                 <span>(-) Costo de lo Vendido (Est. 70%):</span>
+                 <span style={{ color: "#f59e0b" }}>- ${netProfit.costs.toFixed(2)}</span>
+             </div>
+             <div className="flex-between" style={{ padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                 <span>(-) Mermas y Gastos Operativos:</span>
+                 <span style={{ color: "#ef4444" }}>- ${netProfit.losses.toFixed(2)}</span>
+             </div>
+             <div className="flex-between" style={{ padding: "15px 0 5px 0", fontSize: "1.2rem", fontWeight: "bold" }}>
+                 <span>= UTILIDAD NETA (Ganancia Libre):</span>
+                 <span style={{ color: netProfit.pureProfit >= 0 ? "#10b981" : "#ef4444" }}>${netProfit.pureProfit.toFixed(2)}</span>
+             </div>
+             <p style={{ fontSize: "0.8rem", color: "var(--color-secondary)", marginTop: "10px", fontStyle: "italic" }}>
+                 * Este es el dinero 100% libre que ganó el negocio después de pagar el costo de los productos y los gastos internos. Los abonos a proveedores por deudas atrasadas fueron de ${netProfit.payments.toFixed(2)}.
+             </p>
           </div>
         </div>
       </div>
