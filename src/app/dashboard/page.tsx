@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from "react";
 import dynamic from "next/dynamic";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import {
@@ -17,6 +17,71 @@ import {
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../components/AuthProvider";
 
+// 1. Error Boundary para robustecer la importación dinámica frente a fallos de red
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class ReportsErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = {
+    hasError: false
+  };
+
+  public static getDerivedStateFromError(_: Error): ErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Error al cargar ReportsModule dinámicamente:", error, errorInfo);
+  }
+
+  public render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          padding: "40px",
+          textAlign: "center",
+          color: "#ef4444",
+          background: "rgba(239, 68, 68, 0.05)",
+          borderRadius: "12px",
+          border: "1px dashed rgba(239, 68, 68, 0.3)",
+          marginTop: "20px"
+        }}>
+          <span style={{ fontSize: "2.5rem", display: "block", marginBottom: "10px" }}>⚠️</span>
+          <h3 style={{ margin: "10px 0 5px 0", color: "#ef4444", fontWeight: "bold" }}>Error de conexión al cargar la Inteligencia</h3>
+          <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.95rem", maxWidth: "450px", margin: "0 auto 20px auto", lineHeight: 1.4 }}>
+            No pudimos descargar el módulo de Inteligencia de Erika. Esto suele ocurrir por microcortes en la conexión a internet.
+          </p>
+          <button
+            onClick={() => this.setState({ hasError: false })}
+            className="btn-primary"
+            style={{
+              background: "#ef4444",
+              border: "none",
+              color: "white",
+              padding: "10px 24px",
+              borderRadius: "8px",
+              fontWeight: "bold",
+              cursor: "pointer",
+              boxShadow: "0 4px 15px rgba(239, 68, 68, 0.25)",
+              transition: "all 0.2s"
+            }}
+          >
+            🔄 Reintentar Carga
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// 2. Importación dinámica con preloading spinner premium
 const ReportsModule = dynamic(() => import("../../components/ReportsModule"), {
   ssr: false,
   loading: () => (
@@ -44,6 +109,11 @@ const ReportsModule = dynamic(() => import("../../components/ReportsModule"), {
     </div>
   )
 });
+
+// 3. Función para pre-cargar el chunk JS de ReportsModule en hover
+const prefetchReports = () => {
+  import("../../components/ReportsModule").catch(() => {});
+};
 
 const INVENTORY_DIST_DATA = [
   { name: "Construcción", value: 45 },
@@ -77,6 +147,8 @@ export default function Dashboard() {
   const [overdueCustomers, setOverdueCustomers] = useState<any[]>([]);
 
   const changeTab = (tab: "dashboard" | "reportes") => {
+    // Sanitización estricta del valor
+    if (tab !== "dashboard" && tab !== "reportes") return;
     setActiveTab(tab);
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
@@ -93,6 +165,11 @@ export default function Dashboard() {
         const tabParam = params.get("tab");
         if (tabParam === "dashboard" || tabParam === "reportes") {
           initialTab = tabParam;
+        } else if (tabParam !== null) {
+          // Sanitización activa: si existe un parámetro tab pero es inválido, lo borramos de la URL
+          const url = new URL(window.location.href);
+          url.searchParams.delete("tab");
+          window.history.replaceState(null, "", url.pathname + url.search);
         }
       }
 
@@ -317,6 +394,7 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => changeTab("reportes")}
+              onMouseEnter={prefetchReports}
               style={{
                 padding: "10px 24px",
                 borderRadius: "8px",
@@ -779,7 +857,9 @@ export default function Dashboard() {
                 />
               </div>
             )}
-            <ReportsModule />
+            <ReportsErrorBoundary>
+              <ReportsModule />
+            </ReportsErrorBoundary>
           </div>
         )}
       </div>
