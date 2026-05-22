@@ -412,6 +412,61 @@ export default function SettingsModule() {
             </button>
           </div>
 
+          <div className="glass-panel" style={{ border: "1px solid var(--color-secondary)" }}>
+            <h3 style={{ margin: "0 0 20px 0", color: "var(--color-secondary)", display: "flex", alignItems: "center", gap: "10px" }}>
+              🖨️ Estado de Impresora Térmica
+            </h3>
+            <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", marginBottom: "15px" }}>
+              Configura y realiza pruebas de impresión con el controlador térmico del POS.
+            </p>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.05)", padding: "10px", borderRadius: "8px" }}>
+                <span style={{ fontSize: "0.9rem" }}>Conexión Física:</span>
+                <span style={{ fontWeight: "bold", color: isConnected ? "var(--color-secondary)" : "#ef4444" }}>
+                  {isConnected ? "🟢 Impresora Lista" : "🔴 Desconectada"}
+                </span>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.05)", padding: "10px", borderRadius: "8px" }}>
+                <span style={{ fontSize: "0.9rem" }}>Canal de Conexión:</span>
+                <span style={{ fontWeight: "bold", textTransform: "uppercase", color: "white" }}>
+                  {connectionType}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                onClick={togglePrinterConnection}
+                className="btn-primary"
+                style={{
+                  flex: 1,
+                  background: isConnected ? "rgba(239, 68, 68, 0.15)" : "rgba(16, 185, 129, 0.15)",
+                  border: isConnected ? "1px solid rgba(239, 68, 68, 0.3)" : "1px solid rgba(16, 185, 129, 0.3)",
+                  fontSize: "0.85rem",
+                  padding: "10px",
+                }}
+              >
+                {isConnected ? "🔌 Simular Desconexión" : "🔌 Conectar Impresora"}
+              </button>
+
+              <button
+                onClick={testPrint}
+                className="btn-primary"
+                style={{
+                  flex: 1,
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  fontSize: "0.85rem",
+                  padding: "10px",
+                }}
+              >
+                📄 Imprimir Prueba
+              </button>
+            </div>
+          </div>
+
           <div className="glass-panel" style={{ border: "1px solid var(--color-primary)" }}>
             <h3 style={{ margin: "0 0 20px 0", display: "flex", alignItems: "center", gap: "10px" }}>
               🎨 Apariencia del Sistema
