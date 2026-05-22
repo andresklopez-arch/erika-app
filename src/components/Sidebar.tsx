@@ -46,6 +46,24 @@ export default function Sidebar() {
         const option = menuOptions.find((o) => o.id === num);
         if (option && option.allowed) {
           e.preventDefault();
+
+          // Guarda de seguridad: Advertencia de pérdida de datos
+          if (pathname !== option.path && typeof window !== "undefined" && (window as any).__ERIKA_HAS_ACTIVE_CART__) {
+            const confirmLeave = window.confirm(
+              "⚠️ Tienes productos en el carrito. Si sales de esta pantalla se cancelará la venta actual. ¿Deseas continuar?"
+            );
+            if (!confirmLeave) return;
+          }
+
+          // Feedback visual: Animación flash
+          const linkEl = document.querySelector(`.sidebar-container a[href="${option.path}"]`);
+          if (linkEl) {
+            linkEl.classList.add("flash-nav");
+            setTimeout(() => {
+              linkEl.classList.remove("flash-nav");
+            }, 400);
+          }
+
           router.push(option.path);
         }
       }
@@ -53,7 +71,7 @@ export default function Sidebar() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentUser, router]);
+  }, [currentUser, router, pathname]);
 
   if (!currentUser) return null;
 
@@ -67,6 +85,18 @@ export default function Sidebar() {
     return pathname ? pathname.startsWith(href) : false;
   };
 
+  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, targetPath: string) => {
+    if (pathname === targetPath) return;
+    if (typeof window !== "undefined" && (window as any).__ERIKA_HAS_ACTIVE_CART__) {
+      const confirmLeave = window.confirm(
+        "⚠️ Tienes productos en el carrito. Si sales de esta pantalla se cancelará la venta actual. ¿Deseas continuar?"
+      );
+      if (!confirmLeave) {
+        e.preventDefault();
+      }
+    }
+  };
+
   return (
     <aside className="glass-panel sidebar-container">
       <div className="flex-center" style={{ flexDirection: "column", textAlign: "center" }}>
@@ -78,51 +108,99 @@ export default function Sidebar() {
       </div>
       <nav style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "20px" }}>
         {(isAdmin || p.pos) && (
-          <Link href="/" className={isActive("/") ? "active" : ""} title="Punto de Venta (Alt + 1)">
+          <Link
+            href="/"
+            className={isActive("/") ? "active" : ""}
+            onClick={(e) => handleLinkClick(e, "/")}
+            title="Punto de Venta (Alt + 1)"
+          >
             <span className="icon">🛒</span>
             <span className="nav-text">Punto de Venta</span>
+            <span className="shortcut-badge">Alt + 1</span>
           </Link>
         )}
         {(isAdmin || p.dashboard) && (
-          <Link href="/dashboard" className={isActive("/dashboard") ? "active" : ""} title="Dashboard (Alt + 2)">
+          <Link
+            href="/dashboard"
+            className={isActive("/dashboard") ? "active" : ""}
+            onClick={(e) => handleLinkClick(e, "/dashboard")}
+            title="Dashboard (Alt + 2)"
+          >
             <span className="icon">📊</span>
             <span className="nav-text">Dashboard</span>
+            <span className="shortcut-badge">Alt + 2</span>
           </Link>
         )}
         {(isAdmin || p.caja) && (
-          <Link href="/caja" className={isActive("/caja") ? "active" : ""} title="Arqueo de Caja (Alt + 3)">
+          <Link
+            href="/caja"
+            className={isActive("/caja") ? "active" : ""}
+            onClick={(e) => handleLinkClick(e, "/caja")}
+            title="Arqueo de Caja (Alt + 3)"
+          >
             <span className="icon">💵</span>
             <span className="nav-text">Arqueo de Caja</span>
+            <span className="shortcut-badge">Alt + 3</span>
           </Link>
         )}
         {(isAdmin || p.servicios) && (
-          <Link href="/servicios" className={isActive("/servicios") ? "active" : ""} title="Agenda de Servicios (Alt + 4)">
+          <Link
+            href="/servicios"
+            className={isActive("/servicios") ? "active" : ""}
+            onClick={(e) => handleLinkClick(e, "/servicios")}
+            title="Agenda de Servicios (Alt + 4)"
+          >
             <span className="icon">📅</span>
             <span className="nav-text">Agenda de Servicios</span>
+            <span className="shortcut-badge">Alt + 4</span>
           </Link>
         )}
         {(isAdmin || p.equipo) && (
-          <Link href="/equipo" className={isActive("/equipo") ? "active" : ""} title="Equipo (Alt + 5)">
+          <Link
+            href="/equipo"
+            className={isActive("/equipo") ? "active" : ""}
+            onClick={(e) => handleLinkClick(e, "/equipo")}
+            title="Equipo (Alt + 5)"
+          >
             <span className="icon">👥</span>
             <span className="nav-text">Equipo</span>
+            <span className="shortcut-badge">Alt + 5</span>
           </Link>
         )}
         {(isAdmin || p.inventario) && (
-          <Link href="/inventario" className={isActive("/inventario") ? "active" : ""} title="Almacén e Inventario (Alt + 6)">
+          <Link
+            href="/inventario"
+            className={isActive("/inventario") ? "active" : ""}
+            onClick={(e) => handleLinkClick(e, "/inventario")}
+            title="Almacén e Inventario (Alt + 6)"
+          >
             <span className="icon">📦</span>
             <span className="nav-text">Almacén e Inventario</span>
+            <span className="shortcut-badge">Alt + 6</span>
           </Link>
         )}
         {(isAdmin || p.reportes) && (
-          <Link href="/reportes" className={isActive("/reportes") ? "active" : ""} title="Reportes e Inteligencia (Alt + 7)">
+          <Link
+            href="/reportes"
+            className={isActive("/reportes") ? "active" : ""}
+            onClick={(e) => handleLinkClick(e, "/reportes")}
+            title="Reportes e Inteligencia (Alt + 7)"
+          >
             <span className="icon">📈</span>
             <span className="nav-text">Reportes e Inteligencia</span>
+            <span className="shortcut-badge">Alt + 7</span>
           </Link>
         )}
         {(isAdmin || p.configuracion) && (
-          <Link href="/configuracion" className={isActive("/configuracion") ? "active" : ""} title="Configuración (Alt + 8)">
+          <Link
+            href="/configuracion"
+            className={isActive("/configuracion") ? "active" : ""}
+            onClick={(e) => handleLinkClick(e, "/configuracion")}
+            title="Configuración (Alt + 8)"
+          >
             <span className="icon">⚙️</span>
             <span className="nav-text">Configuración</span>
+            <span className="shortcut-badge">Alt + 8</span>
           </Link>
         )}
       </nav>

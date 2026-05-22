@@ -78,6 +78,19 @@ export default function POSModule() {
   const [tickets, setTickets] = useState<Ticket[]>([
     { id: 1, items: [], discountPct: 0 },
   ]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const hasItems = tickets.some((t) => t.items && t.items.length > 0);
+      (window as any).__ERIKA_HAS_ACTIVE_CART__ = hasItems;
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        delete (window as any).__ERIKA_HAS_ACTIVE_CART__;
+      }
+    };
+  }, [tickets]);
+
   const [activeTicketId, setActiveTicketId] = useState(1);
   const [nextTicketId, setNextTicketId] = useState(2);
   const [cancellations, setCancellations] = useState<

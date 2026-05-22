@@ -326,3 +326,42 @@ body {
   }
 }
 
+/* Badges de Atajos y Feedback Visual de Navegación */
+.sidebar-container .shortcut-badge {
+  opacity: 0;
+  margin-left: auto;
+  font-size: 0.65rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.55);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+  transition: opacity 0.3s ease;
+}
+
+.sidebar-container:hover .shortcut-badge {
+  opacity: 1;
+}
+
+@media (max-width: 768px) {
+  .sidebar-container .shortcut-badge {
+    display: none !important;
+  }
+}
+
+.sidebar-container a.flash-nav {
+  animation: navFlash 0.4s ease-out;
+}
+
+@keyframes navFlash {
+  0% {
+    background: rgba(244, 63, 94, 0.5) !important;
+    box-shadow: 0 0 15px rgba(244, 63, 94, 0.4);
+  }
+  100% {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
