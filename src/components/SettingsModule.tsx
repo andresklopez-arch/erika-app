@@ -58,6 +58,11 @@ export default function SettingsModule() {
     if (bAddr) setBusinessAddress(bAddr);
     if (bLogo) setBusinessLogo(bLogo);
 
+    const savedConnected = localStorage.getItem("ERIKA_PRINTER_CONNECTED");
+    const savedType = localStorage.getItem("ERIKA_PRINTER_TYPE");
+    if (savedConnected !== null) setIsConnected(savedConnected !== "false");
+    if (savedType) setConnectionType(savedType);
+
     fetchUsers();
   }, []);
 
