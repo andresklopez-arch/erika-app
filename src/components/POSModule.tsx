@@ -93,6 +93,23 @@ export default function POSModule() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [pendingOfflineCount, setPendingOfflineCount] = useState(0);
 
+  // Printer Connection States
+  const [isPrinterConnected, setIsPrinterConnected] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("ERIKA_PRINTER_CONNECTED") !== "false";
+    }
+    return true;
+  });
+  const [printerConnectionType, setPrinterConnectionType] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("ERIKA_PRINTER_TYPE") || "system";
+    }
+    return "system";
+  });
+  const [pendingPrintJob, setPendingPrintJob] = useState<any | null>(null);
+  const [showPrinterModal, setShowPrinterModal] = useState<boolean>(false);
+  const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
+
   const activeTicket =
     tickets.find((t) => t.id === activeTicketId) || tickets[0];
 
@@ -504,6 +521,133 @@ export default function POSModule() {
   const finalTotal = rawTotal - discountAmount;
   const iva = finalTotal * 0.16;
   const subtotal = finalTotal - iva;
+
+  const executePrintWindow = (job: any) => {
+    const printWindow = window.open("", "_blank", "width=300,height=500");
+    if (!printWindow) return;
+    if (job.type === "ticket") {
+      const { realTicketId, items, finalTotal } = job.data;
+      const itemsHtml = items.map((i: any) => `
+        <div style="display:flex; justify-content:space-between; font-size:12px;">
+          <span>${i.qty}x ${i.name}</span>
+          <span>$${(i.price * i.qty).toFixed(2)}</span>
+        </div>
+      `).join("");
+      const html = `
+        <html><head><style>body { font-family: 'Courier New', monospace; font-size: 12px; margin: 0; padding: 10px; width: 58mm; color: #000; }</style></head>
+        <body>
+          <h3 style="text-align:center; margin:0 0 5px 0;">FERRETERÍA ERIKA</h3>
+          <p style="text-align:center; margin:0 0 10px 0;">Ticket: #${realTicketId}</p>
+          <div style="border-bottom: 1px dashed #000; margin-bottom: 5px;"></div>
+          ${itemsHtml}
+          <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
+          <div style="display:flex; justify-content:space-between;"><strong>TOTAL:</strong><strong>$${finalTotal.toFixed(2)}</strong></div>
+          <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
+          <div style="text-align:center; margin-top: 15px;">
+            <strong>Auto-Facturación Express</strong><br>
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=http://localhost:3000/facturacion/${realTicketId}" style="width:100px; height:100px; margin: 10px 0;" /><br>
+            <span>Escanea el QR o entra a localhost:3000/facturacion/${realTicketId} para facturar.</span>
+          </div>
+        </body></html>
+      `;
+      printWindow.document.write(html);
+      printWindow.document.close();
+      setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+    } else if (job.type === "layaway") {
+      const { customer, items, finalTotal, downPayment } = job.data;
+      const itemsHtml = items.map((item: any) => `
+        <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px;">
+          <div style="flex: 2;">${item.qty}x ${item.name}</div>
+          <div style="flex: 1; text-align: right;">$${(item.price * item.qty).toFixed(2)}</div>
+        </div>
+      `).join("");
+      const ticketHtml = `
+        <html>
+          <head>
+            <style>
+              body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; width: 58mm; color: #000; background: #fff; }
+              .center { text-align: center; }
+              .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
+              .bold { font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            <div class="center bold" style="font-size: 16px; margin-bottom: 5px;">FERRETERÍA ERIKA</div>
+            <div class="center" style="font-size: 12px;">Comprobante de Apartado</div>
+            <div class="divider"></div>
+            <div style="font-size: 12px; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
+            <div style="font-size: 12px; margin-bottom: 5px;">Cliente: ${customer?.name || "Desconocido"}</div>
+            <div class="divider"></div>
+            ${itemsHtml}
+            <div class="divider"></div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+              <div>Total Mercancía:</div>
+              <div class="bold">$${finalTotal.toFixed(2)}</div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+              <div>Enganche Dado:</div>
+              <div class="bold">$${downPayment.toFixed(2)}</div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+              <div>Saldo Pendiente:</div>
+              <div class="bold">$${(finalTotal - downPayment).toFixed(2)}</div>
+            </div>
+            <div class="divider"></div>
+            <div class="center bold" style="font-size: 12px; margin-bottom: 5px; color: red;">¡ATENCIÓN!</div>
+            <div class="center" style="font-size: 10px;">Vence: ${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
+            <div class="center" style="font-size: 10px; margin-top: 5px;">Pasando esta fecha, la mercancía regresará a piso de ventas.</div>
+          </body>
+        </html>
+      `;
+      printWindow.document.write(ticketHtml);
+      printWindow.document.close();
+      setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+    }
+  };
+
+  const triggerPrint = (job: any) => {
+    if (!isPrinterConnected) {
+      setPendingPrintJob(job);
+      return;
+    }
+    executePrintWindow(job);
+  };
+
+  const handleReconnectPrinter = async (type?: string) => {
+    setIsReconnecting(true);
+    const connType = type || printerConnectionType;
+    
+    // Simular un retardo para la detección física
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    
+    try {
+      if (connType === "usb" && typeof navigator !== "undefined" && "usb" in navigator) {
+        await (navigator.usb as any).requestDevice({ filters: [] });
+      } else if (connType === "serial" && typeof navigator !== "undefined" && "serial" in navigator) {
+        await (navigator.serial as any).requestPort();
+      }
+    } catch (e) {
+      console.warn("Error o cancelación del usuario al conectar puerto físico:", e);
+    }
+    
+    setIsPrinterConnected(true);
+    localStorage.setItem("ERIKA_PRINTER_CONNECTED", "true");
+    if (type) {
+      setPrinterConnectionType(type);
+      localStorage.setItem("ERIKA_PRINTER_TYPE", type);
+    }
+    setIsReconnecting(false);
+    setShowPrinterModal(false);
+    
+    // Si había un trabajo en cola, se reanuda inmediatamente
+    if (pendingPrintJob) {
+      const jobToRun = pendingPrintJob;
+      setPendingPrintJob(null);
+      setTimeout(() => {
+        executePrintWindow(jobToRun);
+      }, 500);
+    }
+  };
 
   const sendWhatsApp = (type: "quote" | "receipt") => {
     if (activeTicket.items.length === 0) return alert("El ticket está vacío.");
@@ -1133,35 +1277,14 @@ export default function POSModule() {
                   );
 
                   // Auto-imprimir ticket térmico
-                  const printWindow = window.open("", "_blank", "width=300,height=500");
-                  if (printWindow) {
-                     const itemsHtml = activeTicket.items.map(i => `
-                       <div style="display:flex; justify-content:space-between; font-size:12px;">
-                         <span>${i.qty}x ${i.name}</span>
-                         <span>$${(i.price * i.qty).toFixed(2)}</span>
-                       </div>
-                     `).join("");
-                     const html = `
-                       <html><head><style>body { font-family: 'Courier New', monospace; font-size: 12px; margin: 0; padding: 10px; width: 58mm; color: #000; }</style></head>
-                       <body>
-                         <h3 style="text-align:center; margin:0 0 5px 0;">FERRETERÍA ERIKA</h3>
-                         <p style="text-align:center; margin:0 0 10px 0;">Ticket: #${realTicketId}</p>
-                         <div style="border-bottom: 1px dashed #000; margin-bottom: 5px;"></div>
-                         ${itemsHtml}
-                         <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
-                         <div style="display:flex; justify-content:space-between;"><strong>TOTAL:</strong><strong>$${finalTotal.toFixed(2)}</strong></div>
-                         <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
-                         <div style="text-align:center; margin-top: 15px;">
-                           <strong>Auto-Facturación Express</strong><br>
-                           <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=http://localhost:3000/facturacion/${realTicketId}" style="width:100px; height:100px; margin: 10px 0;" /><br>
-                           <span>Escanea el QR o entra a localhost:3000/facturacion/${realTicketId} para facturar.</span>
-                         </div>
-                       </body></html>
-                     `;
-                     printWindow.document.write(html);
-                     printWindow.document.close();
-                     setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
-                  }
+                  triggerPrint({
+                    type: "ticket",
+                    data: {
+                      realTicketId,
+                      items: [...activeTicket.items],
+                      finalTotal
+                    }
+                  });
                 }
 
                 setTickets(
@@ -1360,64 +1483,15 @@ export default function POSModule() {
                  }
 
                  // Print Thermal Ticket for Layaway
-                 const ticketWindow = window.open("", "_blank", "width=300,height=500");
-                 if (ticketWindow) {
-                   const itemsHtml = activeTicket.items
-                     .map(
-                       (item) => `
-                         <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px;">
-                           <div style="flex: 2;">${item.qty}x ${item.name}</div>
-                           <div style="flex: 1; text-align: right;">$${(item.price * item.qty).toFixed(2)}</div>
-                         </div>
-                       `,
-                     )
-                     .join("");
-                     
-                   const ticketHtml = `
-                     <html>
-                       <head>
-                         <style>
-                           body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; width: 58mm; color: #000; background: #fff; }
-                           .center { text-align: center; }
-                           .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
-                           .bold { font-weight: bold; }
-                         </style>
-                       </head>
-                       <body>
-                         <div class="center bold" style="font-size: 16px; margin-bottom: 5px;">FERRETERÍA ERIKA</div>
-                         <div class="center" style="font-size: 12px;">Comprobante de Apartado</div>
-                         <div class="divider"></div>
-                         <div style="font-size: 12px; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
-                         <div style="font-size: 12px; margin-bottom: 5px;">Cliente: ${customer?.name || "Desconocido"}</div>
-                         <div class="divider"></div>
-                         ${itemsHtml}
-                         <div class="divider"></div>
-                         <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
-                           <div>Total Mercancía:</div>
-                           <div class="bold">$${finalTotal.toFixed(2)}</div>
-                         </div>
-                         <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
-                           <div>Enganche Dado:</div>
-                           <div class="bold">$${downPayment.toFixed(2)}</div>
-                         </div>
-                         <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
-                           <div>Saldo Pendiente:</div>
-                           <div class="bold">$${(finalTotal - downPayment).toFixed(2)}</div>
-                         </div>
-                         <div class="divider"></div>
-                         <div class="center bold" style="font-size: 12px; margin-bottom: 5px; color: red;">¡ATENCIÓN!</div>
-                         <div class="center" style="font-size: 10px;">Vence: ${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
-                         <div class="center" style="font-size: 10px; margin-top: 5px;">Pasando esta fecha, la mercancía regresará a piso de ventas.</div>
-                       </body>
-                     </html>
-                   `;
-                   ticketWindow.document.write(ticketHtml);
-                   ticketWindow.document.close();
-                   setTimeout(() => {
-                     ticketWindow.print();
-                     ticketWindow.close();
-                   }, 500);
-                 }
+                  triggerPrint({
+                    type: "layaway",
+                    data: {
+                      customer,
+                      items: [...activeTicket.items],
+                      finalTotal,
+                      downPayment
+                    }
+                  });
 
                  alert(`✅ Apartado creado con éxito. Enganche de $${downPayment.toFixed(2)} registrado.\nTiene 30 días para liquidar el saldo de $${(finalTotal - downPayment).toFixed(2)}.`);
                  setTickets(tickets.map(t => t.id === activeTicketId ? { ...t, items: [], discountPct: 0 } : t));
