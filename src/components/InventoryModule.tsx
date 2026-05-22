@@ -5,6 +5,7 @@ import SmartImporter from "./SmartImporter";
 import { supabase } from "../lib/supabaseClient";
 import ClientCaptureModal from "./ClientCaptureModal";
 import SuppliersManagerModal from "./SuppliersManagerModal";
+import AccountsPayableModal from "./AccountsPayableModal";
 
 interface InventoryItem {
   id: string;
@@ -28,6 +29,7 @@ export default function InventoryModule() {
   const [showCritical, setShowCritical] = useState(false);
   const [showClientModal, setShowClientModal] = useState(false);
   const [showSuppliersModal, setShowSuppliersModal] = useState(false);
+  const [showAccountsPayableModal, setShowAccountsPayableModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchInventory = async () => {
@@ -246,6 +248,17 @@ export default function InventoryModule() {
             }}
           >
             🏭 Proveedores
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() => setShowAccountsPayableModal(true)}
+            style={{
+              background: "var(--glass-bg)",
+              border: "1px solid #f59e0b",
+              color: "#f59e0b",
+            }}
+          >
+            💳 Cuentas por Pagar
           </button>
           <button
             className="btn-primary"
@@ -601,6 +614,10 @@ export default function InventoryModule() {
       
       {showSuppliersModal && (
         <SuppliersManagerModal onClose={() => setShowSuppliersModal(false)} />
+      )}
+      
+      {showAccountsPayableModal && (
+        <AccountsPayableModal onClose={() => setShowAccountsPayableModal(false)} />
       )}
     </div>
   );
