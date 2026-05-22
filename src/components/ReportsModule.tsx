@@ -50,7 +50,22 @@ export default function ReportsModule() {
         });
 
         const { data: sessions } = await supabase.from("cash_sessions").select("*").order("closed_at", { ascending: false }).limit(20);
-        if (sessions) setCashSessions(sessions);
+        if (sessions && sessions.length > 0) {
+           const sessionIds = sessions.map(s => s.id);
+           const { data: txs } = await supabase.from("cash_transactions").select("session_id, type, amount").in("session_id", sessionIds);
+           const sessionsWithSales = sessions.map(session => {
+              const sessionTxs = txs ? txs.filter(t => t.session_id === session.id) : [];
+              const sales = sessionTxs.filter(t => t.type === 'sale').reduce((sum, t) => sum + t.amount, 0);
+              return {
+                 ...session,
+                 cash_sales: sales,
+                 card_sales: 0
+              };
+           });
+           setCashSessions(sessionsWithSales);
+        } else if (sessions) {
+           setCashSessions(sessions);
+        }
      };
      fetchData();
   }, []);
@@ -83,16 +98,16 @@ export default function ReportsModule() {
           <p><strong>Apertura:</strong> ${new Date(session.opened_at).toLocaleString()}</p>
           <p><strong>Cierre:</strong> ${session.closed_at ? new Date(session.closed_at).toLocaleString() : 'En curso'}</p>
           <div class="divider"></div>
-          <div class="row"><span>Fondo Inicial:</span><span>$${session.initial_cash.toFixed(2)}</span></div>
-          <div class="row"><span>Ventas Efectivo:</span><span>$${session.cash_sales.toFixed(2)}</span></div>
-          <div class="row"><span>Ventas Tarjeta:</span><span>$${session.card_sales.toFixed(2)}</span></div>
+          <div class="row"><span>Fondo Inicial:</span><span>$${(session.initial_balance ?? 0).toFixed(2)}</span></div>
+          <div class="row"><span>Ventas Efectivo:</span><span>$${(session.cash_sales ?? 0).toFixed(2)}</span></div>
+          <div class="row"><span>Ventas Tarjeta:</span><span>$${(session.card_sales ?? 0).toFixed(2)}</span></div>
           <div class="divider"></div>
-          <div class="row"><span>Efectivo Declarado:</span><span>$${session.declared_cash.toFixed(2)}</span></div>
-          <div class="row bold"><span>Efectivo Esperado:</span><span>$${session.expected_cash.toFixed(2)}</span></div>
+          <div class="row"><span>Efectivo Declarado:</span><span>$${(session.counted_balance ?? 0).toFixed(2)}</span></div>
+          <div class="row bold"><span>Efectivo Esperado:</span><span>$${(session.expected_balance ?? 0).toFixed(2)}</span></div>
           <div class="divider"></div>
           <div class="row bold">
              <span>Descuadre:</span>
-             <span style="color: ${session.discrepancy < 0 ? 'red' : 'inherit'}">$${session.discrepancy.toFixed(2)}</span>
+             <span style="color: ${(session.discrepancy ?? 0) < 0 ? 'red' : 'inherit'}">$${(session.discrepancy ?? 0).toFixed(2)}</span>
           </div>
           <div class="divider"></div>
           <p style="text-align: center; font-size: 10px; margin-top: 20px;">Firma del Cajero</p>
@@ -223,11 +238,11 @@ export default function ReportsModule() {
              <tbody>
                {cashSessions.map(session => (
                  <tr key={session.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                   <td style={{ padding: "10px" }}>{new Date(session.opened_at).toLocaleString()}</td>
-                   <td style={{ padding: "10px" }}>{session.closed_at ? new Date(session.closed_at).toLocaleString() : "En curso"}</td>
-                   <td style={{ padding: "10px" }}>${session.cash_sales.toFixed(2)}</td>
-                   <td style={{ padding: "10px" }}>${session.card_sales.toFixed(2)}</td>
-                   <td style={{ padding: "10px", color: session.discrepancy < 0 ? "#ef4444" : "#10b981" }}>${session.discrepancy.toFixed(2)}</td>
+                    <td style={{ padding: "10px" }}>{session.opened_at ? new Date(session.opened_at).toLocaleString() : "Sin fecha"}</td>
+                    <td style={{ padding: "10px" }}>{session.closed_at ? new Date(session.closed_at).toLocaleString() : "En curso"}</td>
+                    <td style={{ padding: "10px" }}>${(session.cash_sales ?? 0).toFixed(2)}</td>
+                    <td style={{ padding: "10px" }}>${(session.card_sales ?? 0).toFixed(2)}</td>
+                    <td style={{ padding: "10px", color: (session.discrepancy ?? 0) < 0 ? "#ef4444" : "#10b981" }}>${(session.discrepancy ?? 0).toFixed(2)}</td>
                    <td style={{ padding: "10px" }}>
                      <button onClick={() => printCorteCaja(session)} style={{ background: "transparent", color: "#3b82f6", border: "1px solid #3b82f6", padding: "5px 10px", borderRadius: "5px", cursor: "pointer" }}>🖨️ Imprimir Ticket</button>
                    </td>
