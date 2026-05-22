@@ -2,6 +2,21 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 
+interface CashSession {
+  id: string;
+  opened_at: string;
+  closed_at: string | null;
+  opened_by: string;
+  initial_balance: number;
+  expected_balance: number | null;
+  counted_balance: number | null;
+  discrepancy: number | null;
+  status: 'open' | 'closed';
+  cash_sales?: number;
+  card_sales?: number;
+  total_sales?: number;
+}
+
 export default function ReportsModule() {
   const [netProfit, setNetProfit] = useState({
      sales: 0,
@@ -10,7 +25,9 @@ export default function ReportsModule() {
      losses: 0,
      pureProfit: 0
   });
-  const [cashSessions, setCashSessions] = useState<any[]>([]);
+  const [cashSessions, setCashSessions] = useState<CashSession[]>([]);
+  const [searchCajero, setSearchCajero] = useState("");
+  const [filterFecha, setFilterFecha] = useState("todos");
 
   useEffect(() => {
      const fetchData = async () => {
@@ -49,22 +66,32 @@ export default function ReportsModule() {
            pureProfit: sales - costs - totalLosses
         });
 
-        const { data: sessions } = await supabase.from("cash_sessions").select("*").order("closed_at", { ascending: false }).limit(20);
+        const { data: sessions } = await supabase.from("cash_sessions").select("*").order("closed_at", { ascending: false }).limit(50);
         if (sessions && sessions.length > 0) {
-           const sessionIds = sessions.map(s => s.id);
-           const { data: txs } = await supabase.from("cash_transactions").select("session_id, type, amount").in("session_id", sessionIds);
+           const sessionsNeedCalculation = sessions.filter(s => s.total_sales === null || s.total_sales === undefined || s.status === 'open');
+           let txs: any[] = [];
+           if (sessionsNeedCalculation.length > 0) {
+              const sessionIds = sessionsNeedCalculation.map(s => s.id);
+              const { data } = await supabase.from("cash_transactions").select("session_id, type, amount").in("session_id", sessionIds);
+              if (data) txs = data;
+           }
            const sessionsWithSales = sessions.map(session => {
-              const sessionTxs = txs ? txs.filter(t => t.session_id === session.id) : [];
-              const sales = sessionTxs.filter(t => t.type === 'sale').reduce((sum, t) => sum + t.amount, 0);
+              let sales = 0;
+              if (session.total_sales !== null && session.total_sales !== undefined && session.status === 'closed') {
+                 sales = Number(session.total_sales);
+              } else {
+                 const sessionTxs = txs.filter(t => t.session_id === session.id);
+                 sales = sessionTxs.filter(t => t.type === 'sale').reduce((sum, t) => sum + t.amount, 0);
+              }
               return {
                  ...session,
                  cash_sales: sales,
                  card_sales: 0
               };
            });
-           setCashSessions(sessionsWithSales);
+           setCashSessions(sessionsWithSales as CashSession[]);
         } else if (sessions) {
-           setCashSessions(sessions);
+           setCashSessions(sessions as CashSession[]);
         }
      };
      fetchData();
@@ -124,6 +151,27 @@ export default function ReportsModule() {
       printWindow.close();
     }, 500);
   };
+
+  const filteredSessions = cashSessions.filter(session => {
+     if (searchCajero && !session.opened_by.toLowerCase().includes(searchCajero.toLowerCase())) {
+        return false;
+     }
+     if (filterFecha !== "todos") {
+        const openedDate = new Date(session.opened_at);
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        if (filterFecha === "hoy") {
+           if (openedDate < startOfToday) return false;
+        } else if (filterFecha === "semana") {
+           const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+           if (openedDate < sevenDaysAgo) return false;
+        } else if (filterFecha === "mes") {
+           const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+           if (openedDate < startOfThisMonth) return false;
+        }
+     }
+     return true;
+  });
 
   return (
     <div
@@ -223,6 +271,49 @@ export default function ReportsModule() {
 
       <div className="glass-panel">
          <h2 style={{ color: "var(--color-primary)", marginBottom: "15px" }}>🖨️ Historial de Arqueos (Cortes de Caja)</h2>
+         
+         {/* Filtros y Buscador Premium */}
+         <div style={{ display: "flex", gap: "15px", marginBottom: "20px", flexWrap: "wrap" }}>
+           <div style={{ display: "flex", flexDirection: "column", gap: "5px", flex: 1, minWidth: "200px" }}>
+             <label style={{ fontSize: "0.85rem", color: "var(--color-secondary)" }}>👤 Buscar por Cajero</label>
+             <input
+               type="text"
+               placeholder="Escribe nombre del cajero..."
+               value={searchCajero}
+               onChange={(e) => setSearchCajero(e.target.value)}
+               style={{
+                 padding: "10px",
+                 borderRadius: "8px",
+                 background: "rgba(0,0,0,0.3)",
+                 color: "white",
+                 border: "1px solid var(--glass-border)",
+                 outline: "none"
+               }}
+             />
+           </div>
+           <div style={{ display: "flex", flexDirection: "column", gap: "5px", width: "200px" }}>
+             <label style={{ fontSize: "0.85rem", color: "var(--color-secondary)" }}>📅 Filtrar por Fecha</label>
+             <select
+               value={filterFecha}
+               onChange={(e) => setFilterFecha(e.target.value)}
+               style={{
+                 padding: "10px",
+                 borderRadius: "8px",
+                 background: "rgba(0,0,0,0.3)",
+                 color: "white",
+                 border: "1px solid var(--glass-border)",
+                 outline: "none",
+                 cursor: "pointer"
+               }}
+             >
+               <option value="todos" style={{ background: "#1f2937", color: "white" }}>Todos los registros</option>
+               <option value="hoy" style={{ background: "#1f2937", color: "white" }}>Hoy</option>
+               <option value="semana" style={{ background: "#1f2937", color: "white" }}>Últimos 7 días</option>
+               <option value="mes" style={{ background: "#1f2937", color: "white" }}>Este mes</option>
+             </select>
+           </div>
+         </div>
+
          <div style={{ overflowX: "auto" }}>
            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
              <thead>
@@ -235,21 +326,21 @@ export default function ReportsModule() {
                  <th style={{ padding: "10px" }}>Acción</th>
                </tr>
              </thead>
-             <tbody>
-               {cashSessions.map(session => (
-                 <tr key={session.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                    <td style={{ padding: "10px" }}>{session.opened_at ? new Date(session.opened_at).toLocaleString() : "Sin fecha"}</td>
-                    <td style={{ padding: "10px" }}>{session.closed_at ? new Date(session.closed_at).toLocaleString() : "En curso"}</td>
-                    <td style={{ padding: "10px" }}>${(session.cash_sales ?? 0).toFixed(2)}</td>
-                    <td style={{ padding: "10px" }}>${(session.card_sales ?? 0).toFixed(2)}</td>
-                    <td style={{ padding: "10px", color: (session.discrepancy ?? 0) < 0 ? "#ef4444" : "#10b981" }}>${(session.discrepancy ?? 0).toFixed(2)}</td>
-                   <td style={{ padding: "10px" }}>
-                     <button onClick={() => printCorteCaja(session)} style={{ background: "transparent", color: "#3b82f6", border: "1px solid #3b82f6", padding: "5px 10px", borderRadius: "5px", cursor: "pointer" }}>🖨️ Imprimir Ticket</button>
-                   </td>
-                 </tr>
-               ))}
-               {cashSessions.length === 0 && <tr><td colSpan={6} style={{ padding: "20px", textAlign: "center" }}>No hay cortes de caja registrados.</td></tr>}
-             </tbody>
+                <tbody>
+                {filteredSessions.map(session => (
+                  <tr key={session.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                     <td style={{ padding: "10px" }}>{session.opened_at ? new Date(session.opened_at).toLocaleString() : "Sin fecha"}</td>
+                     <td style={{ padding: "10px" }}>{session.closed_at ? new Date(session.closed_at).toLocaleString() : "En curso"}</td>
+                     <td style={{ padding: "10px" }}>${(session.cash_sales ?? 0).toFixed(2)}</td>
+                     <td style={{ padding: "10px" }}>${(session.card_sales ?? 0).toFixed(2)}</td>
+                     <td style={{ padding: "10px", color: (session.discrepancy ?? 0) < 0 ? "#ef4444" : "#10b981" }}>${(session.discrepancy ?? 0).toFixed(2)}</td>
+                    <td style={{ padding: "10px" }}>
+                      <button onClick={() => printCorteCaja(session)} style={{ background: "transparent", color: "#3b82f6", border: "1px solid #3b82f6", padding: "5px 10px", borderRadius: "5px", cursor: "pointer" }}>🖨️ Imprimir Ticket</button>
+                    </td>
+                  </tr>
+                ))}
+                {filteredSessions.length === 0 && <tr><td colSpan={6} style={{ padding: "20px", textAlign: "center" }}>No se encontraron cortes de caja.</td></tr>}
+              </tbody>
            </table>
          </div>
       </div>

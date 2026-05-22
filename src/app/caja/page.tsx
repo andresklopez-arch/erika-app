@@ -178,6 +178,7 @@ export default function CajaModule() {
         counted_balance: countedTotal,
         discrepancy: discrepancy,
         status: "closed",
+        total_sales: expectedSales,
       })
       .eq("id", session.id);
 
