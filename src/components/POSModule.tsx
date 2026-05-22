@@ -948,6 +948,53 @@ export default function POSModule() {
           ))}
         </div>
 
+        {pendingPrintJob && (
+          <div
+            onClick={() => setShowPrinterModal(true)}
+            className="blink"
+            style={{
+              background: "rgba(244, 63, 94, 0.2)",
+              backdropFilter: "blur(8px)",
+              border: "1px solid var(--color-primary)",
+              borderRadius: "12px",
+              padding: "12px 16px",
+              marginBottom: "15px",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              boxShadow: "0 4px 15px rgba(244, 63, 94, 0.15)",
+              transition: "transform 0.2s ease",
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.01)"}
+            onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "1.3rem" }}>⚠️</span>
+              <div>
+                <strong style={{ color: "var(--color-primary)", fontSize: "0.9rem", display: "block" }}>
+                  Impresora Desconectada
+                </strong>
+                <span style={{ fontSize: "0.75rem", opacity: 0.8 }}>
+                  Hay un ticket en espera. Haz clic aquí para reconectar y auto-imprimir.
+                </span>
+              </div>
+            </div>
+            <span
+              style={{
+                background: "var(--color-primary)",
+                color: "white",
+                padding: "4px 10px",
+                borderRadius: "6px",
+                fontSize: "0.75rem",
+                fontWeight: "bold",
+              }}
+            >
+              Reconectar
+            </span>
+          </div>
+        )}
+
         <div
           style={{
             flex: 1,
