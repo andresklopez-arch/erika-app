@@ -187,7 +187,35 @@ export default function InventoryModule() {
             </div>
             <p style="font-size: 1.2rem; margin-top: 50px;">Pegue esta etiqueta en el pasillo correspondiente.</p>
             <script>
-              window.onload = function() { JsBarcode("#barcode", "${productCode}", { format: "CODE128", width: 2.5, height: 100, displayValue: true }); setTimeout(() => { window.print(); }, 800); };
+              window.onload = function() { JsBarcode("#barcode", "${productCode}", { format: "CODE128", width: 2.5, height: 100, displayValue: true }); setTimeout(() => { window.print(); window.close(); }, 800); };
+            </script>
+          </body>
+        </html>
+      `);
+      newWindow.document.close();
+    }
+  };
+
+  const printSingleBarcode = (productName: string, productCode: string) => {
+    const newWindow = window.open("", "_blank", "width=400,height=300");
+    if (newWindow) {
+      newWindow.document.write(`
+        <html>
+          <head>
+            <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+            <style>
+              body { margin: 0; padding: 5px; font-family: sans-serif; text-align: center; width: 50mm; }
+              .name { font-size: 10px; font-weight: bold; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            </style>
+          </head>
+          <body>
+            <div class="name">${productName}</div>
+            <svg id="barcode"></svg>
+            <script>
+              window.onload = function() { 
+                JsBarcode("#barcode", "${productCode}", { format: "CODE128", width: 1.5, height: 40, displayValue: true, fontSize: 12, margin: 0 }); 
+                setTimeout(() => { window.print(); window.close(); }, 500); 
+              };
             </script>
           </body>
         </html>
@@ -526,13 +554,26 @@ export default function InventoryModule() {
                                 item.code || item.id,
                               )
                             }
-                            title="Imprimir Etiqueta"
+                            title="Imprimir Etiqueta Pasillo"
                             className="btn-primary"
                             style={{ padding: "4px 8px", fontSize: "0.9rem" }}
                           >
-                            🖨️
+                            🗺️
                           </button>
                         )}
+                        <button
+                            onClick={() =>
+                              printSingleBarcode(
+                                item.name,
+                                item.code || item.id,
+                              )
+                            }
+                            title="Imprimir Código de Barras Individual"
+                            className="btn-primary"
+                            style={{ padding: "4px 8px", fontSize: "0.9rem", background: "transparent", border: "1px solid var(--color-secondary)", color: "white" }}
+                          >
+                            🏷️
+                        </button>
                       </div>
                     </td>
                     <td

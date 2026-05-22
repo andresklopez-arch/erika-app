@@ -29,9 +29,13 @@ export default function PosCreditModal({
     if (!selectedCustomerId) return alert("Selecciona un cliente.");
     const customer = customers.find((c) => c.id === selectedCustomerId);
     if (customer.balance + finalTotal > customer.credit_limit) {
-      return alert(
-        `❌ Límite de crédito excedido. Disponible: $${customer.credit_limit - customer.balance}`,
+      const pin = window.prompt(
+        `🚩 ALERTA ROJA: Límite de crédito excedido. Disponible: $${(customer.credit_limit - customer.balance).toFixed(2)}\n\nIngrese PIN Maestro para autorizar la venta (Sobregiro):`
       );
+      if (pin !== "admin123") {
+         return alert("❌ Acceso Denegado. Venta a crédito cancelada.");
+      }
+      alert("⚠️ Sobregiro autorizado por Administrador.");
     }
 
     const { error: txError } = await supabase

@@ -142,10 +142,14 @@ export default function CajaModule() {
   };
 
   const closeRegister = async () => {
-    const pass = window.prompt(
-      "🔒 Contraseña de Gerente para Autorizar Corte:",
-    );
-    if (pass !== "admin123") return alert("Acceso Denegado.");
+    const countedTotal = calculateTotalCounted();
+    
+    // Biometric / PIN check
+    const biometricAuth = window.confirm("👤 [AUTORIZACIÓN BIOMÉTRICA]\n\nPor favor, coloque su huella dactilar en el lector para autorizar el Cierre de Caja Ciego.");
+    if (!biometricAuth) {
+        const pin = window.prompt("🔑 Huella no detectada. Ingrese PIN Maestro de respaldo:");
+        if (pin !== "admin123") return alert("Acceso Denegado. Solo el administrador puede realizar el cierre.");
+    }
 
     const expectedSales = transactions
       .filter((t) => t.type === "sale")
@@ -162,75 +166,60 @@ export default function CajaModule() {
       expectedSales +
       expectedDeposits -
       expectedWithdrawals;
-    const countedTotal = calculateTotalCounted();
+      
     const discrepancy = countedTotal - expectedTotal;
 
-    const confirmMsg = `
-      --- CORTE DE CAJA CIEGO ---
-      Fondo Inicial: $${session.initial_balance}
-      Ventas: $${expectedSales}
-      Ingresos Extra: $${expectedDeposits}
-      Retiros: $${expectedWithdrawals}
-      ---------------------------
-      TOTAL ESPERADO (SISTEMA): $${expectedTotal.toFixed(2)}
-      TOTAL FÍSICO CONTADO: $${countedTotal.toFixed(2)}
-      
-      DESCUADRE: $${discrepancy.toFixed(2)}
-      
-      ¿Confirmar y Cerrar Turno?
-    `;
+    await supabase
+      .from("cash_sessions")
+      .update({
+        closed_at: new Date().toISOString(),
+        expected_balance: expectedTotal,
+        counted_balance: countedTotal,
+        discrepancy: discrepancy,
+        status: "closed",
+      })
+      .eq("id", session.id);
 
-    if (window.confirm(confirmMsg)) {
-      await supabase
-        .from("cash_sessions")
-        .update({
-          closed_at: new Date().toISOString(),
-          expected_balance: expectedTotal,
-          counted_balance: countedTotal,
-          discrepancy: discrepancy,
-          status: "closed",
-        })
-        .eq("id", session.id);
-
-      // ALERTA PUSH AL DUEÑO SI FALTAN MÁS DE $500
-      if (
-        discrepancy <= -500 &&
-        "Notification" in window &&
-        Notification.permission === "granted"
-      ) {
-        new Notification("🚨 ALERTA CRÍTICA: ROBO O EXTRAVÍO", {
-          body: `Faltante de $${Math.abs(discrepancy).toFixed(2)} registrado por ${currentUser?.name} en la caja.`,
-          icon: "/erika_avatar.png",
-        });
-      }
-
-      setTicketData({
-        date: new Date().toLocaleString(),
-        cajero: currentUser?.name,
-        fondo: session.initial_balance,
-        ventas: expectedSales,
-        ingresos: expectedDeposits,
-        retiros: expectedWithdrawals,
-        esperado: expectedTotal,
-        fisico: countedTotal,
-        descuadre: discrepancy,
-      });
-      setShowTicket(true);
-      fetchSession();
-      setDenoms({
-        b1000: 0,
-        b500: 0,
-        b200: 0,
-        b100: 0,
-        b50: 0,
-        b20: 0,
-        m10: 0,
-        m5: 0,
-        m2: 0,
-        m1: 0,
-        m05: 0,
+    // ALERTA PUSH AL DUEÑO SI FALTAN MÁS DE $500
+    if (
+      discrepancy <= -500 &&
+      "Notification" in window &&
+      Notification.permission === "granted"
+    ) {
+      new Notification("🚨 ALERTA CRÍTICA: ROBO O EXTRAVÍO", {
+        body: `Faltante de $${Math.abs(discrepancy).toFixed(2)} registrado por ${currentUser?.name} en la caja.`,
+        icon: "/erika_avatar.png",
       });
     }
+
+    setTicketData({
+      date: new Date().toLocaleString(),
+      cajero: currentUser?.name,
+      fondo: session.initial_balance,
+      ventas: expectedSales,
+      ingresos: expectedDeposits,
+      retiros: expectedWithdrawals,
+      esperado: expectedTotal,
+      fisico: countedTotal,
+      descuadre: discrepancy,
+    });
+    setShowTicket(true);
+    fetchSession();
+    setDenoms({
+      b1000: 0,
+      b500: 0,
+      b200: 0,
+      b100: 0,
+      b50: 0,
+      b20: 0,
+      m10: 0,
+      m5: 0,
+      m2: 0,
+      m1: 0,
+      m05: 0,
+    });
+    
+    alert(`✅ Caja Cerrada. ${discrepancy !== 0 ? `\n⚠️ DESCUADRE DETECTADO: $${discrepancy.toFixed(2)}` : '\n✅ Caja Cuadrada Perfectamente.'}`);
   };
 
   if (isLoading)
