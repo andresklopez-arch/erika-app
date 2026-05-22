@@ -236,7 +236,17 @@ export default function InventoryModule() {
         height: "100%",
       }}
     >
-      <div className="glass-panel flex-between" style={{ padding: "20px" }}>
+      <div
+        className="glass-panel"
+        style={{
+          padding: "20px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "15px",
+        }}
+      >
         <div>
           <h3 style={{ margin: 0, color: "var(--color-primary)" }}>
             Módulo de Almacén (Supabase Cloud ☁️)
@@ -245,7 +255,13 @@ export default function InventoryModule() {
             Margen de Utilidad Promedio Actual: {(avgMargin * 100).toFixed(1)}%
           </p>
         </div>
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: "10px",
+            flexWrap: "wrap",
+          }}
+        >
           <button
             className="btn-primary"
             onClick={() => setShowCritical(!showCritical)}
