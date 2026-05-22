@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import {
   BarChart,
@@ -15,7 +16,34 @@ import {
 } from "recharts";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../components/AuthProvider";
-import ReportsModule from "../../components/ReportsModule";
+
+const ReportsModule = dynamic(() => import("../../components/ReportsModule"), {
+  ssr: false,
+  loading: () => (
+    <div style={{
+      padding: "40px",
+      textAlign: "center",
+      color: "var(--color-primary)",
+      background: "rgba(255, 255, 255, 0.02)",
+      borderRadius: "12px",
+      border: "1px dashed rgba(255, 255, 255, 0.1)"
+    }}>
+      <div style={{
+        border: "4px solid rgba(255,255,255,0.1)",
+        width: "36px",
+        height: "36px",
+        borderRadius: "50%",
+        borderLeftColor: "var(--color-primary)",
+        animation: "erika-spin 1s linear infinite",
+        margin: "0 auto 15px auto"
+      }}></div>
+      <span style={{ fontWeight: "bold", fontSize: "1.1rem" }}>Iniciando Erika AI...</span>
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes erika-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      `}} />
+    </div>
+  )
+});
 
 const INVENTORY_DIST_DATA = [
   { name: "Construcción", value: 45 },
@@ -48,12 +76,36 @@ export default function Dashboard() {
   const [overdueLayaways, setOverdueLayaways] = useState<any[]>([]);
   const [overdueCustomers, setOverdueCustomers] = useState<any[]>([]);
 
+  const changeTab = (tab: "dashboard" | "reportes") => {
+    setActiveTab(tab);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tab);
+      window.history.replaceState(null, "", url.pathname + url.search);
+    }
+  };
+
   useEffect(() => {
     if (!activeTab && currentUser) {
-      if (canSeeDashboard) {
+      let initialTab: "dashboard" | "reportes" | "" = "";
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const tabParam = params.get("tab");
+        if (tabParam === "dashboard" || tabParam === "reportes") {
+          initialTab = tabParam;
+        }
+      }
+
+      if (initialTab === "dashboard" && canSeeDashboard) {
         setActiveTab("dashboard");
-      } else if (canSeeReportes) {
+      } else if (initialTab === "reportes" && canSeeReportes) {
         setActiveTab("reportes");
+      } else {
+        if (canSeeDashboard) {
+          setActiveTab("dashboard");
+        } else if (canSeeReportes) {
+          setActiveTab("reportes");
+        }
       }
     }
   }, [currentUser, canSeeDashboard, canSeeReportes, activeTab]);
@@ -248,7 +300,7 @@ export default function Dashboard() {
             boxShadow: "inset 0 2px 4px rgba(0,0,0,0.3)"
           }}>
             <button
-              onClick={() => setActiveTab("dashboard")}
+              onClick={() => changeTab("dashboard")}
               style={{
                 padding: "10px 24px",
                 borderRadius: "8px",
@@ -264,7 +316,7 @@ export default function Dashboard() {
               📊 Métricas y KPIs
             </button>
             <button
-              onClick={() => setActiveTab("reportes")}
+              onClick={() => changeTab("reportes")}
               style={{
                 padding: "10px 24px",
                 borderRadius: "8px",
