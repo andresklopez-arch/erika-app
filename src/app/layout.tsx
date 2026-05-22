@@ -30,7 +30,7 @@ export default function RootLayout({
             style={{ display: "flex", minHeight: "100vh" }}
           >
             <Sidebar />
-            <main className="main-content" style={{ flex: 1, padding: "20px", display: "flex", flexDirection: "column" }}>
+            <main className="main-content" style={{ flex: 1, padding: "20px", display: "flex", flexDirection: "column", minWidth: 0 }}>
               <HomeButton />
               {children}
             </main>

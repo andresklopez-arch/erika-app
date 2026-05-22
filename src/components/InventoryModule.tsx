@@ -245,7 +245,7 @@ export default function InventoryModule() {
             Margen de Utilidad Promedio Actual: {(avgMargin * 100).toFixed(1)}%
           </p>
         </div>
-        <div style={{ display: "flex", gap: "10px" }}>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
           <button
             className="btn-primary"
             onClick={() => setShowCritical(!showCritical)}
@@ -360,7 +360,7 @@ export default function InventoryModule() {
 
       <div
         className="glass-panel"
-        style={{ flex: 1, overflowY: "auto", padding: "0" }}
+        style={{ flex: 1, overflowY: "auto", overflowX: "auto", padding: "0" }}
       >
         {isLoading ? (
           <div
