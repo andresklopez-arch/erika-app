@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap");
 
 :root {
   --bg-primary: #0a0a0f;
@@ -11,9 +11,9 @@
   --glass-bg: rgba(22, 22, 34, 0.65);
   --glass-border: rgba(255, 255, 255, 0.08);
   --shadow-glow: 0 0 30px rgba(244, 63, 94, 0.1);
-  
-  --font-main: 'Outfit', sans-serif;
-  
+
+  --font-main: "Outfit", sans-serif;
+
   /* Spacing system */
   --space-xs: 0.25rem;
   --space-sm: 0.5rem;
@@ -35,8 +35,17 @@ body {
   line-height: 1.6;
   min-height: 100vh;
   overflow-x: hidden;
-  background-image: radial-gradient(circle at 15% 50%, rgba(244, 63, 94, 0.05), transparent 25%),
-                    radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.05), transparent 25%);
+  background-image:
+    radial-gradient(
+      circle at 15% 50%,
+      rgba(244, 63, 94, 0.05),
+      transparent 25%
+    ),
+    radial-gradient(
+      circle at 85% 30%,
+      rgba(139, 92, 246, 0.05),
+      transparent 25%
+    );
 }
 
 .glass-panel {
@@ -47,7 +56,9 @@ body {
   border-radius: 16px;
   box-shadow: var(--shadow-glow);
   padding: var(--space-lg);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
 }
 
 .glass-panel:hover {
@@ -56,7 +67,11 @@ body {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  background: linear-gradient(
+    135deg,
+    var(--color-primary),
+    var(--color-accent)
+  );
   color: white;
   border: none;
   padding: 12px 24px;
@@ -79,8 +94,14 @@ body {
 
 /* Animations */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-fade-in {
@@ -110,4 +131,80 @@ body {
   .grid-cols-2 {
     grid-template-columns: 1fr;
   }
+}
+
+/* Sidebar Auto-Hide */
+.sidebar-container {
+  width: 70px;
+  margin: 20px 0 20px 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  position: relative;
+  z-index: 1000;
+}
+
+.sidebar-container:hover {
+  width: 280px;
+}
+
+.sidebar-container .avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--color-primary);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin: 0 auto;
+  object-fit: cover;
+}
+
+.sidebar-container:hover .avatar {
+  width: 80px;
+  height: 80px;
+  margin-bottom: 10px;
+}
+
+.sidebar-container .title-container {
+  opacity: 0;
+  height: 0;
+  overflow: hidden;
+  transition: opacity 0.2s ease, height 0.3s ease;
+}
+
+.sidebar-container:hover .title-container {
+  opacity: 1;
+  height: auto;
+}
+
+.sidebar-container a {
+  display: flex;
+  align-items: center;
+  color: white;
+  text-decoration: none;
+  padding: 12px 10px;
+  border-radius: 8px;
+  transition: background 0.2s ease;
+}
+
+.sidebar-container a:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-container a .icon {
+  font-size: 1.3rem;
+  width: 30px;
+  text-align: center;
+  flex-shrink: 0;
+  margin-right: 15px;
+}
+
+.sidebar-container a .nav-text {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.sidebar-container:hover a .nav-text {
+  opacity: 1;
 }

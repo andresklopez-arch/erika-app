@@ -6,6 +6,13 @@ import Sidebar from "../components/Sidebar";
 export const metadata: Metadata = {
   title: "ERIKA - Inteligencia en Ferretería",
   description: "Sistema avanzado de administración y punto de venta con IA.",
+  manifest: "/manifest.json",
+  themeColor: "#10b981",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "ERIKA",
+  },
 };
 
 export default function RootLayout({
@@ -17,13 +24,31 @@ export default function RootLayout({
     <html lang="es">
       <body>
         <AuthProvider>
-          <div className="app-container" style={{ display: 'flex', minHeight: '100vh' }}>
+          <div
+            className="app-container"
+            style={{ display: "flex", minHeight: "100vh" }}
+          >
             <Sidebar />
-            <main className="main-content" style={{ flex: 1, padding: '20px' }}>
+            <main className="main-content" style={{ flex: 1, padding: "20px" }}>
               {children}
             </main>
           </div>
         </AuthProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').then(function(registration) {
+                    console.log('ServiceWorker registration successful');
+                  }, function(err) {
+                    console.log('ServiceWorker registration failed: ', err);
+                  });
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );

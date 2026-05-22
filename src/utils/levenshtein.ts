@@ -26,8 +26,8 @@ export function levenshteinDistance(a: string, b: string): number {
           matrix[i - 1][j - 1] + 1, // substitution
           Math.min(
             matrix[i][j - 1] + 1, // insertion
-            matrix[i - 1][j] + 1 // deletion
-          )
+            matrix[i - 1][j] + 1, // deletion
+          ),
         );
       }
     }
@@ -39,19 +39,21 @@ export function fuzzySearch<T>(
   query: string,
   items: T[],
   keySelector: (item: T) => string,
-  maxDistance: number = 3
+  maxDistance: number = 3,
 ): T[] {
   if (!query.trim()) return [];
   const normalizedQuery = normalizeText(query);
-  const queryTerms = normalizedQuery.split(" ").filter(t => t.length > 0);
+  const queryTerms = normalizedQuery.split(" ").filter((t) => t.length > 0);
 
   return items.filter((item) => {
     const itemText = normalizeText(keySelector(item));
     const itemWords = itemText.split(" ");
-    
-    return queryTerms.every(term => {
+
+    return queryTerms.every((term) => {
       if (itemText.includes(term)) return true;
-      return itemWords.some(word => levenshteinDistance(term, word) <= maxDistance);
+      return itemWords.some(
+        (word) => levenshteinDistance(term, word) <= maxDistance,
+      );
     });
   });
 }

@@ -6,10 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "prepare": "husky"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",
+    "firebase": "^12.13.0",
     "html5-qrcode": "^2.3.8",
     "jsbarcode": "^3.12.3",
     "next": "16.2.6",
@@ -24,6 +26,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "husky": "^9.1.7",
     "typescript": "^5"
   }
 }
