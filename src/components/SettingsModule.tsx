@@ -10,6 +10,13 @@ export default function SettingsModule() {
   const [wholesaleMinQty, setWholesaleMinQty] = useState("10");
   const [wholesaleDiscount, setWholesaleDiscount] = useState("10");
 
+  const [businessName, setBusinessName] = useState("Ferretería ERIKA");
+  const [businessRfc, setBusinessRfc] = useState("");
+  const [businessPhone, setBusinessPhone] = useState("");
+  const [businessEmail, setBusinessEmail] = useState("");
+  const [businessAddress, setBusinessAddress] = useState("");
+  const [businessLogo, setBusinessLogo] = useState("");
+
   useEffect(() => {
     const savedVoice = localStorage.getItem("ERIKA_VOICE_KEYWORD");
     if (savedVoice) setVoiceKeyword(savedVoice);
@@ -21,12 +28,26 @@ export default function SettingsModule() {
     const sWholesaleQty = localStorage.getItem("ERIKA_WHOLESALE_QTY");
     const sWholesalePct = localStorage.getItem("ERIKA_WHOLESALE_PCT");
     
+    const bName = localStorage.getItem("ERIKA_BIZ_NAME");
+    const bRfc = localStorage.getItem("ERIKA_BIZ_RFC");
+    const bPhone = localStorage.getItem("ERIKA_BIZ_PHONE");
+    const bEmail = localStorage.getItem("ERIKA_BIZ_EMAIL");
+    const bAddr = localStorage.getItem("ERIKA_BIZ_ADDR");
+    const bLogo = localStorage.getItem("ERIKA_BIZ_LOGO");
+
     if (sEarnRate) setEarnRate(sEarnRate);
     if (sEarnPts) setEarnPoints(sEarnPts);
     if (sRedeem) setRedeemRate(sRedeem);
     if (sTheme) setTheme(sTheme);
     if (sWholesaleQty) setWholesaleMinQty(sWholesaleQty);
     if (sWholesalePct) setWholesaleDiscount(sWholesalePct);
+
+    if (bName) setBusinessName(bName);
+    if (bRfc) setBusinessRfc(bRfc);
+    if (bPhone) setBusinessPhone(bPhone);
+    if (bEmail) setBusinessEmail(bEmail);
+    if (bAddr) setBusinessAddress(bAddr);
+    if (bLogo) setBusinessLogo(bLogo);
   }, []);
 
   const saveConfig = () => {
@@ -57,6 +78,16 @@ export default function SettingsModule() {
     } else {
       document.documentElement.removeAttribute("data-theme");
     }
+  };
+
+  const saveBusinessProfile = () => {
+    localStorage.setItem("ERIKA_BIZ_NAME", businessName);
+    localStorage.setItem("ERIKA_BIZ_RFC", businessRfc);
+    localStorage.setItem("ERIKA_BIZ_PHONE", businessPhone);
+    localStorage.setItem("ERIKA_BIZ_EMAIL", businessEmail);
+    localStorage.setItem("ERIKA_BIZ_ADDR", businessAddress);
+    localStorage.setItem("ERIKA_BIZ_LOGO", businessLogo);
+    alert("✅ Perfil del Negocio guardado exitosamente.");
   };
 
   return (
@@ -148,6 +179,46 @@ export default function SettingsModule() {
               style={{ width: "100%" }}
             >
               💾 Guardar Palabra de Seguridad
+            </button>
+          </div>
+
+          <div className="glass-panel" style={{ border: "1px solid var(--color-secondary)" }}>
+            <h3 style={{ margin: "0 0 20px 0", color: "var(--color-secondary)", display: "flex", alignItems: "center", gap: "10px" }}>
+              🏢 Perfil del Negocio
+            </h3>
+            <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", marginBottom: "15px" }}>
+              Estos datos aparecerán en las cotizaciones impresas, PDFs y tickets de venta.
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "15px" }}>
+              <div>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Nombre del Negocio:</label>
+                <input type="text" value={businessName} onChange={e => setBusinessName(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
+              </div>
+              <div>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>RFC:</label>
+                <input type="text" value={businessRfc} onChange={e => setBusinessRfc(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "15px" }}>
+              <div>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Teléfono:</label>
+                <input type="text" value={businessPhone} onChange={e => setBusinessPhone(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
+              </div>
+              <div>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Correo Electrónico:</label>
+                <input type="text" value={businessEmail} onChange={e => setBusinessEmail(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
+              </div>
+            </div>
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Dirección Física:</label>
+              <textarea value={businessAddress} onChange={e => setBusinessAddress(e.target.value)} rows={2} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
+            </div>
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>URL del Logotipo (Opcional):</label>
+              <input type="text" placeholder="https://ejemplo.com/logo.png" value={businessLogo} onChange={e => setBusinessLogo(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
+            </div>
+            <button className="btn-primary" onClick={saveBusinessProfile} style={{ width: "100%", background: "transparent", border: "1px solid var(--color-secondary)", color: "var(--color-secondary)" }}>
+              💾 Guardar Perfil
             </button>
           </div>
 

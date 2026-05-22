@@ -60,7 +60,18 @@ export default function POSModule() {
       minQty: sWQ > 0 ? sWQ : 10,
       discountPct: sWP > 0 ? sWP : 10
     });
+
+    setBusinessProfile({
+      name: localStorage.getItem("ERIKA_BIZ_NAME") || "Ferretería ERIKA",
+      rfc: localStorage.getItem("ERIKA_BIZ_RFC") || "",
+      phone: localStorage.getItem("ERIKA_BIZ_PHONE") || "",
+      email: localStorage.getItem("ERIKA_BIZ_EMAIL") || "",
+      address: localStorage.getItem("ERIKA_BIZ_ADDR") || "",
+      logo: localStorage.getItem("ERIKA_BIZ_LOGO") || ""
+    });
   }, []);
+
+  const [businessProfile, setBusinessProfile] = useState<any>({});
 
   const [tickets, setTickets] = useState<Ticket[]>([
     { id: 1, items: [], discountPct: 0 },
@@ -207,6 +218,14 @@ export default function POSModule() {
     addedQty: number = 1,
     image_url: string = "",
   ) => {
+    // Client price history logic
+    if (selectedCustomerId) {
+       const historyStr = localStorage.getItem(`ERIKA_CLIENT_HISTORY_${selectedCustomerId}`) || "{}";
+       const historyObj = JSON.parse(historyStr);
+       historyObj[productName] = price;
+       localStorage.setItem(`ERIKA_CLIENT_HISTORY_${selectedCustomerId}`, JSON.stringify(historyObj));
+    }
+
     setTickets(
       tickets.map((t) => {
         if (t.id === activeTicketId) {
@@ -790,6 +809,11 @@ export default function POSModule() {
                            MAYOREO -{wholesaleRules.discountPct}%
                         </span>
                       )}
+                      {selectedCustomerId && JSON.parse(localStorage.getItem(`ERIKA_CLIENT_HISTORY_${selectedCustomerId}`) || "{}")[item.name] && (
+                        <span style={{ display: "block", fontSize: "0.75rem", color: "#f59e0b" }}>
+                          ⭐ Historial cliente: ${JSON.parse(localStorage.getItem(`ERIKA_CLIENT_HISTORY_${selectedCustomerId}`) || "{}")[item.name]}
+                        </span>
+                      )}
                     </div>
                     <strong
                       style={{
@@ -1107,6 +1131,52 @@ export default function POSModule() {
               💳 Crédito
             </button>
           </div>
+          <button
+            className="btn-primary"
+            style={{
+              width: "100%",
+              marginTop: "10px",
+              padding: "10px",
+              background: "transparent",
+              border: "1px solid #ef4444",
+              color: "#ef4444",
+            }}
+            onClick={async () => {
+              const pass = window.prompt("🔒 DEVOLUCIÓN - Requiere contraseña de Administrador:");
+              if (pass !== "admin123") return alert("❌ Contraseña incorrecta.");
+
+              const amountStr = window.prompt("¿Monto a reembolsar/devolver de la Caja? (Ej: 150.00)");
+              const amount = parseFloat(amountStr || "");
+              if (isNaN(amount) || amount <= 0) return alert("Monto inválido.");
+
+              const reason = window.prompt("Motivo de la devolución:");
+              if (!reason) return alert("Debe especificar un motivo.");
+
+              if (!isOffline) {
+                 const { data: session } = await supabase
+                    .from("cash_sessions")
+                    .select("*")
+                    .eq("status", "open")
+                    .order("opened_at", { ascending: false })
+                    .limit(1)
+                    .single();
+                 if (!session) return alert("La caja está cerrada.");
+                 
+                 const { error } = await supabase.from("cash_transactions").insert({
+                    session_id: session.id,
+                    type: "refund",
+                    amount: -amount,
+                    description: `Devolución: ${reason}`
+                 });
+                 if (error) return alert("Error al registrar devolución.");
+                 alert(`✅ Devolución exitosa. Se retiraron $${amount.toFixed(2)} de la caja.`);
+              } else {
+                 alert("❌ Las devoluciones solo se pueden hacer en modo en línea.");
+              }
+            }}
+          >
+            ↩️ Devolución / Reembolso
+          </button>
           <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
             <button
               className="btn-primary"
@@ -1162,6 +1232,22 @@ export default function POSModule() {
               onClick={() => sendWhatsApp("quote")}
             >
               💬 Enviar Cotización por WhatsApp
+            </button>
+            <button
+              className="btn-primary"
+              style={{
+                flex: 1,
+                padding: "10px",
+                background: "transparent",
+                border: "1px solid #6b7280",
+                color: "white",
+              }}
+              onClick={() => {
+                if (activeTicket.items.length === 0) return alert("El ticket está vacío.");
+                window.print();
+              }}
+            >
+              🖨️ Imprimir PDF
             </button>
           </div>
           <button
@@ -1274,6 +1360,84 @@ export default function POSModule() {
           </button>
         </div>
       </div>
+      
+      {/* Printable Receipt Area */}
+      <div id="printable-receipt" className="no-print" style={{ padding: "20mm", fontFamily: "sans-serif", maxWidth: "800px", margin: "0 auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "2px solid #ccc", paddingBottom: "20px", marginBottom: "20px" }}>
+          <div>
+            {businessProfile.logo && <img src={businessProfile.logo} alt="Logo" style={{ maxHeight: "80px", marginBottom: "10px" }} />}
+            <h1 style={{ margin: 0, fontSize: "24px" }}>{businessProfile.name}</h1>
+            <p style={{ margin: "5px 0", color: "#555" }}>RFC: {businessProfile.rfc}</p>
+            <p style={{ margin: "5px 0", color: "#555", whiteSpace: "pre-line" }}>{businessProfile.address}</p>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <h2 style={{ margin: 0, color: "#3b82f6" }}>COTIZACIÓN</h2>
+            <p style={{ margin: "5px 0" }}>Fecha: {new Date().toLocaleDateString()}</p>
+            <p style={{ margin: "5px 0" }}>Tel: {businessProfile.phone}</p>
+            <p style={{ margin: "5px 0" }}>Email: {businessProfile.email}</p>
+          </div>
+        </div>
+        
+        {selectedCustomerId && customers.find(c => c.id === selectedCustomerId) && (
+          <div style={{ marginBottom: "20px", padding: "10px", background: "#f9f9f9", borderRadius: "5px" }}>
+            <strong>Cliente:</strong> {customers.find(c => c.id === selectedCustomerId).name}<br/>
+            <strong>Teléfono:</strong> {customers.find(c => c.id === selectedCustomerId).phone || "N/A"}
+          </div>
+        )}
+
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "30px" }}>
+          <thead>
+            <tr style={{ background: "#f1f5f9" }}>
+              <th style={{ padding: "10px", borderBottom: "1px solid #ccc", textAlign: "left" }}>Cant</th>
+              <th style={{ padding: "10px", borderBottom: "1px solid #ccc", textAlign: "left" }}>Concepto</th>
+              <th style={{ padding: "10px", borderBottom: "1px solid #ccc", textAlign: "right" }}>P. Unitario</th>
+              <th style={{ padding: "10px", borderBottom: "1px solid #ccc", textAlign: "right" }}>Importe</th>
+            </tr>
+          </thead>
+          <tbody>
+            {activeTicket.items.map(item => {
+               const p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
+               return (
+                  <tr key={item.id}>
+                    <td style={{ padding: "10px", borderBottom: "1px solid #eee" }}>{item.qty} {item.unit}</td>
+                    <td style={{ padding: "10px", borderBottom: "1px solid #eee" }}>{item.name}</td>
+                    <td style={{ padding: "10px", borderBottom: "1px solid #eee", textAlign: "right" }}>${p.toFixed(2)}</td>
+                    <td style={{ padding: "10px", borderBottom: "1px solid #eee", textAlign: "right" }}>${(p * item.qty).toFixed(2)}</td>
+                  </tr>
+               );
+            })}
+          </tbody>
+        </table>
+
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <div style={{ width: "250px" }}>
+             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px" }}>
+               <span>Subtotal:</span>
+               <span>${subtotal.toFixed(2)}</span>
+             </div>
+             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px" }}>
+               <span>IVA (16%):</span>
+               <span>${iva.toFixed(2)}</span>
+             </div>
+             {activeTicket.discountPct > 0 && (
+               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px", color: "red" }}>
+                 <span>Descuento:</span>
+                 <span>-${discountAmount.toFixed(2)}</span>
+               </div>
+             )}
+             <div style={{ display: "flex", justifyContent: "space-between", marginTop: "10px", borderTop: "2px solid #ccc", paddingTop: "10px", fontWeight: "bold", fontSize: "18px" }}>
+               <span>TOTAL:</span>
+               <span>${finalTotal.toFixed(2)}</span>
+             </div>
+          </div>
+        </div>
+        
+        <div style={{ marginTop: "50px", textAlign: "center", color: "#888", fontSize: "12px", borderTop: "1px solid #eee", paddingTop: "20px" }}>
+          <p>Esta cotización tiene una vigencia de 15 días.</p>
+          <p>¡Gracias por su preferencia!</p>
+        </div>
+      </div>
+
 
       <PosCreditModal
         show={showCreditModal}
