@@ -743,6 +743,22 @@ export default function POSModule() {
                 </span>
               )}
               <button
+                onClick={() => setShowPrinterModal(true)}
+                className="btn-primary"
+                style={{
+                  background: isPrinterConnected ? "rgba(16, 185, 129, 0.15)" : "rgba(244, 63, 94, 0.15)",
+                  border: isPrinterConnected ? "1px solid var(--color-secondary)" : "1px solid var(--color-primary)",
+                  padding: "6px 12px",
+                  fontSize: "0.85rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                <span>{isPrinterConnected ? "🟢" : "🔴"}</span>
+                <span>{isPrinterConnected ? "Impresora Lista" : "Impresora Off"}</span>
+              </button>
+              <button
                 onClick={() => setShowScanner(true)}
                 className="btn-primary"
                 style={{
