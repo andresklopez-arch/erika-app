@@ -1668,6 +1668,126 @@ export default function POSModule() {
           if (custData) setCustomers(custData);
         }}
       />
+
+      {showPrinterModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
+            background: "rgba(0,0,0,0.7)",
+            backdropFilter: "blur(8px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1100,
+            animation: "fadeIn 0.3s ease",
+          }}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              width: "450px",
+              background: "rgba(22, 22, 34, 0.95)",
+              border: "1px solid var(--glass-border)",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+              padding: "30px",
+              textAlign: "center",
+            }}
+          >
+            <h3 style={{ fontSize: "1.5rem", marginBottom: "15px", color: "var(--color-primary)" }}>
+              🔌 Asistente de Reconexión Rápida
+            </h3>
+            
+            <p style={{ opacity: 0.8, fontSize: "0.9rem", marginBottom: "25px" }}>
+              Reconecta la impresora térmica para imprimir tus tickets de inmediato.
+            </p>
+
+            {isReconnecting ? (
+              <div style={{ margin: "30px 0" }}>
+                <div
+                  style={{
+                    width: "50px",
+                    height: "50px",
+                    border: "4px solid rgba(255,255,255,0.1)",
+                    borderTop: "4px solid var(--color-primary)",
+                    borderRadius: "50%",
+                    margin: "0 auto 15px auto",
+                    animation: "spin 1s linear infinite",
+                  }}
+                />
+                <style>{`
+                  @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                  }
+                `}</style>
+                <p style={{ fontWeight: "bold", color: "var(--color-primary)", fontSize: "0.95rem" }}>
+                  Buscando y reconectando impresora...
+                </p>
+                <p style={{ fontSize: "0.8rem", opacity: 0.6, marginTop: "5px" }}>
+                  Por favor, confirma en el diálogo del navegador si es necesario.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "15px", marginBottom: "30px" }}>
+                <button
+                  onClick={() => handleReconnectPrinter("usb")}
+                  className="btn-primary"
+                  style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "white" }}
+                >
+                  🔌 Conectar vía USB (WebUSB)
+                </button>
+                
+                <button
+                  onClick={() => handleReconnectPrinter("serial")}
+                  className="btn-primary"
+                  style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "white" }}
+                >
+                  📟 Conectar vía Puerto Serie / COM
+                </button>
+
+                <button
+                  onClick={() => handleReconnectPrinter("system")}
+                  className="btn-primary"
+                  style={{ background: "rgba(16, 185, 129, 0.2)", border: "1px solid var(--color-secondary)", color: "white" }}
+                >
+                  🖥️ Impresora del Sistema (Navegador)
+                </button>
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px", paddingTop: "20px", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+              <button
+                onClick={() => {
+                  const newStatus = !isPrinterConnected;
+                  setIsPrinterConnected(newStatus);
+                  localStorage.setItem("ERIKA_PRINTER_CONNECTED", String(newStatus));
+                }}
+                className="btn-primary"
+                style={{
+                  background: isPrinterConnected ? "rgba(239, 68, 68, 0.15)" : "rgba(16, 185, 129, 0.15)",
+                  border: isPrinterConnected ? "1px solid rgba(239, 68, 68, 0.3)" : "1px solid rgba(16, 185, 129, 0.3)",
+                  fontSize: "0.8rem",
+                  padding: "6px 12px",
+                }}
+              >
+                {isPrinterConnected ? "🔌 Simular Desconexión" : "🔌 Simular Conexión"}
+              </button>
+
+              <button
+                onClick={() => setShowPrinterModal(false)}
+                className="btn-primary"
+                style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", fontSize: "0.8rem", padding: "6px 12px" }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
