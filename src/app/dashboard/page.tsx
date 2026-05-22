@@ -10,16 +10,9 @@ import {
   PieChart,
   Pie,
   Cell,
+  Legend
 } from "recharts";
 import { supabase } from "../../lib/supabaseClient";
-
-const TOP_SALES_DATA = [
-  { name: "Cemento Tolteca 50kg", ventas: 12500 },
-  { name: "Pintura Blanca 19L", ventas: 8900 },
-  { name: "Cable Calibre 12", ventas: 4500 },
-  { name: "Martillo Truper", ventas: 3200 },
-  { name: "Brocha 4 pulg", ventas: 1500 },
-];
 
 const INVENTORY_DIST_DATA = [
   { name: "Construcción", value: 45 },
@@ -28,10 +21,6 @@ const INVENTORY_DIST_DATA = [
   { name: "Eléctrico", value: 10 },
 ];
 
-const LOW_STOCK_ALERTS = [
-  { name: "Pintura Blanca 19L Comex", stock: 4, min: 5 },
-  { name: "Brocha 4 pulgadas", stock: 4, min: 10 },
-];
 const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444"];
 
 export default function Dashboard() {
@@ -41,22 +30,42 @@ export default function Dashboard() {
   const [topCustomers, setTopCustomers] = useState<any[]>([]);
   const [inventoryValue, setInventoryValue] = useState(0);
   const [avgMargin, setAvgMargin] = useState(0);
+  
+  // New States
+  const [incomeVsExpenses, setIncomeVsExpenses] = useState<any[]>([]);
+  const [hasPlayedBell, setHasPlayedBell] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
-      // Ventas de Hoy
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+      const todayIso = today.toISOString();
+      const todayStr = today.toISOString().split('T')[0];
+
+      // 1. Check for Debts due today or overdue
+      const { data: debts } = await supabase.from("supplier_debts").select("*").eq("status", "pending").lte("due_date", todayStr);
+      if (debts && debts.length > 0 && !hasPlayedBell) {
+          // Play Bell
+          try {
+             const audio = new Audio("https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=success-1-6297.mp3");
+             audio.volume = 0.5;
+             audio.play().catch(e => console.log("Audio autoplay blocked by browser."));
+             setHasPlayedBell(true);
+             alert(`🔔 ¡ATENCIÓN! Tienes ${debts.length} cuenta(s) por pagar vencida(s) o que vencen HOY.`);
+          } catch(e) {}
+      }
+
+      // 2. Ventas de Hoy
       const { data: txs } = await supabase
         .from("cash_transactions")
         .select("*")
         .eq("type", "sale")
-        .gte("created_at", today.toISOString());
+        .gte("created_at", todayIso);
       if (txs) {
         setSalesToday(txs.reduce((sum, t) => sum + t.amount, 0));
       }
 
-      // Mermas / Descuadres de Caja
+      // 3. Mermas / Descuadres de Caja
       const { data: sessions } = await supabase
         .from("cash_sessions")
         .select("*")
@@ -67,24 +76,19 @@ export default function Dashboard() {
         setDiscrepancies(sessions);
       }
 
-      // 4. Clientes VIP (Con más saldo/movimiento, usando balance actual como métrica rápida)
+      // 4. Clientes VIP
       const { data: customerData } = await supabase
         .from("customers")
         .select("*")
         .order("balance", { ascending: false })
         .limit(5);
-      if (customerData) {
-        setTopCustomers(customerData);
-      }
+      if (customerData) setTopCustomers(customerData);
 
-      // Alertas Críticas e Inventario
+      // 5. Alertas Críticas e Inventario
       const { data: inv } = await supabase.from("inventory").select("*");
       if (inv) {
-        setLowStockAlerts(
-          inv.filter((i) => i.stock <= i.min_stock).slice(0, 5),
-        );
+        setLowStockAlerts(inv.filter((i) => i.stock <= i.min_stock).slice(0, 5));
         setInventoryValue(inv.reduce((sum, i) => sum + i.price * i.stock, 0));
-        
         const margin = inv.length > 0 
           ? inv.reduce((acc, i) => {
               if (!i.cost || i.cost <= 0) return acc;
@@ -93,9 +97,28 @@ export default function Dashboard() {
           : 0.35;
         setAvgMargin(margin);
       }
+
+      // 6. Income vs Expenses Graph (Current Month)
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
+      
+      const { data: monthSales } = await supabase.from("cash_transactions").select("amount").eq("type", "sale").gte("created_at", firstDayOfMonth);
+      const totalSalesMonth = monthSales ? monthSales.reduce((sum, s) => sum + s.amount, 0) : 0;
+
+      const { data: monthPayments } = await supabase.from("supplier_payments").select("amount").gte("created_at", firstDayOfMonth);
+      const totalPaymentsMonth = monthPayments ? monthPayments.reduce((sum, p) => sum + p.amount, 0) : 0;
+
+      const { data: monthLosses } = await supabase.from("business_losses").select("amount").gte("created_at", firstDayOfMonth);
+      const totalLossesMonth = monthLosses ? monthLosses.reduce((sum, l) => sum + l.amount, 0) : 0;
+
+      setIncomeVsExpenses([
+          { name: "Ingresos (Ventas)", Total: totalSalesMonth, fill: "#10b981" },
+          { name: "Abonos a Proveedores", Total: totalPaymentsMonth, fill: "#3b82f6" },
+          { name: "Gastos y Mermas", Total: totalLossesMonth, fill: "#ef4444" }
+      ]);
+
     };
     fetchData();
-  }, []);
+  }, [hasPlayedBell]);
 
   const exportToExcel = async () => {
     const today = new Date();
@@ -219,11 +242,11 @@ export default function Dashboard() {
         {/* Gráfica de Barras */}
         <div className="glass-panel">
           <h3 style={{ color: "var(--color-secondary)", marginBottom: "20px" }}>
-            🏆 Top 5 Productos con Más Ventas ($)
+            📊 Flujo de Efectivo (Mes Actual)
           </h3>
           <div style={{ width: "100%", height: "300px" }}>
             <ResponsiveContainer>
-              <BarChart data={TOP_SALES_DATA}>
+              <BarChart data={incomeVsExpenses}>
                 <XAxis
                   dataKey="name"
                   stroke="#fff"
@@ -234,14 +257,20 @@ export default function Dashboard() {
                   cursor={{ fill: "rgba(255,255,255,0.1)" }}
                   contentStyle={{
                     background: "#111",
-                    border: "1px solid #10b981",
+                    border: "1px solid var(--color-primary)",
                   }}
+                  formatter={(value: any) => `$${Number(value).toFixed(2)}`}
                 />
                 <Bar
-                  dataKey="ventas"
-                  fill="var(--color-primary)"
+                  dataKey="Total"
                   radius={[4, 4, 0, 0]}
-                />
+                >
+                    {
+                      incomeVsExpenses.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))
+                    }
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>

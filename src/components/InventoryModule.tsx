@@ -6,6 +6,7 @@ import { supabase } from "../lib/supabaseClient";
 import ClientCaptureModal from "./ClientCaptureModal";
 import SuppliersManagerModal from "./SuppliersManagerModal";
 import AccountsPayableModal from "./AccountsPayableModal";
+import LossesManagerModal from "./LossesManagerModal";
 
 interface InventoryItem {
   id: string;
@@ -30,6 +31,7 @@ export default function InventoryModule() {
   const [showClientModal, setShowClientModal] = useState(false);
   const [showSuppliersModal, setShowSuppliersModal] = useState(false);
   const [showAccountsPayableModal, setShowAccountsPayableModal] = useState(false);
+  const [showLossesModal, setShowLossesModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchInventory = async () => {
@@ -259,6 +261,17 @@ export default function InventoryModule() {
             }}
           >
             💳 Cuentas por Pagar
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() => setShowLossesModal(true)}
+            style={{
+              background: "var(--glass-bg)",
+              border: "1px solid #ef4444",
+              color: "#ef4444",
+            }}
+          >
+            📉 Gastos y Mermas
           </button>
           <button
             className="btn-primary"
@@ -618,6 +631,10 @@ export default function InventoryModule() {
       
       {showAccountsPayableModal && (
         <AccountsPayableModal onClose={() => setShowAccountsPayableModal(false)} />
+      )}
+      
+      {showLossesModal && (
+        <LossesManagerModal onClose={() => setShowLossesModal(false)} />
       )}
     </div>
   );

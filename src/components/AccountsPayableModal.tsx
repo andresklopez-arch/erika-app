@@ -202,6 +202,12 @@ export default function AccountsPayableModal({ onClose }: AccountsPayableModalPr
     // 3. Print Thermal Ticket
     printThermalTicket(paymentModalDebt, payAmt, newBalance);
 
+    // 4. WhatsApp Option
+    if (confirm("¿Deseas enviar el comprobante por WhatsApp al proveedor?")) {
+        const msg = `Hola ${paymentModalDebt.supplier_name}. Hemos registrado un abono de $${payAmt.toFixed(2)} a la factura/concepto: ${paymentModalDebt.concept}. Su nuevo saldo pendiente es de $${newBalance.toFixed(2)}. Gracias.`;
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, "_blank");
+    }
+
     setPaymentModalDebt(null);
     fetchData();
   };
