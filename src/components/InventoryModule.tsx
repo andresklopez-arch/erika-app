@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import SmartImporter from "./SmartImporter";
 import { supabase } from "../lib/supabaseClient";
+import ClientCaptureModal from "./ClientCaptureModal";
+import SuppliersManagerModal from "./SuppliersManagerModal";
 
 interface InventoryItem {
   id: string;
@@ -24,6 +26,8 @@ export default function InventoryModule() {
   const [importHistory, setImportHistory] = useState<InventoryItem[][]>([]);
   const [showImporter, setShowImporter] = useState(false);
   const [showCritical, setShowCritical] = useState(false);
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [showSuppliersModal, setShowSuppliersModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchInventory = async () => {
@@ -222,6 +226,26 @@ export default function InventoryModule() {
             }}
           >
             🚨 {criticalItems.length} Críticos
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() => setShowClientModal(true)}
+            style={{
+              background: "transparent",
+              border: "1px solid var(--color-primary)",
+            }}
+          >
+            👤 Clientes
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() => setShowSuppliersModal(true)}
+            style={{
+              background: "transparent",
+              border: "1px solid var(--color-accent)",
+            }}
+          >
+            🏭 Proveedores
           </button>
           <button
             className="btn-primary"
@@ -569,6 +593,14 @@ export default function InventoryModule() {
             );
           }}
         />
+      )}
+      
+      {showClientModal && (
+        <ClientCaptureModal onClose={() => setShowClientModal(false)} onSuccess={() => {}} />
+      )}
+      
+      {showSuppliersModal && (
+        <SuppliersManagerModal onClose={() => setShowSuppliersModal(false)} />
       )}
     </div>
   );
