@@ -53,6 +53,19 @@ export default function ClientCaptureModal({ onClose, onSuccess }: ClientCapture
     }
   };
 
+  const handleRfcChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.toUpperCase();
+    setRfc(val);
+    
+    // Auto-completado simulado (Mock SAT API)
+    if (val.length >= 12 && val.length <= 13 && !companyName) {
+      const match = val.match(/^([A-ZÑ&]{3,4})/);
+      if (match) {
+         setCompanyName(match[1] + " EMPRESAS S.A. DE C.V.");
+      }
+    }
+  };
+
   return (
     <div
       style={{
@@ -132,7 +145,7 @@ export default function ClientCaptureModal({ onClose, onSuccess }: ClientCapture
                   type="text"
                   required={requiresInvoice}
                   value={rfc}
-                  onChange={(e) => setRfc(e.target.value.toUpperCase())}
+                  onChange={handleRfcChange}
                   style={{
                     width: "100%",
                     padding: "10px",

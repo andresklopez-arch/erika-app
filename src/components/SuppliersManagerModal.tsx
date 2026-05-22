@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabaseClient";
 
 interface Supplier {
@@ -107,6 +108,43 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
     if (!error && data) {
       setSupplierHistory(data);
     }
+  };
+
+  const exportHistoryToExcel = () => {
+    if (!supplierHistory.length || !historyModalSupplier) return;
+    const ws = XLSX.utils.json_to_sheet(supplierHistory.map(h => ({
+      Fecha: new Date(h.created_at).toLocaleString(),
+      Acción: h.action_type,
+      Notas: h.notes
+    })));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Historial");
+    XLSX.writeFile(wb, `Historial_${historyModalSupplier.name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const [isUploading, setIsUploading] = useState(false);
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files.length || !historyModalSupplier) return;
+    const file = e.target.files[0];
+    setIsUploading(true);
+    
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${historyModalSupplier.id}_${Date.now()}.${fileExt}`;
+    
+    const { data, error } = await supabase.storage.from('invoices').upload(fileName, file);
+    if (error) {
+      alert("Error al subir archivo. ¿Ejecutaste el script SQL para crear el bucket 'invoices'?");
+      console.error(error);
+    } else {
+      const { data: urlData } = supabase.storage.from('invoices').getPublicUrl(fileName);
+      await supabase.from("supplier_orders").insert({
+        supplier_id: historyModalSupplier.id,
+        action_type: 'Archivo Subido',
+        notes: urlData.publicUrl
+      });
+      fetchHistory(historyModalSupplier);
+    }
+    setIsUploading(false);
   };
 
   return (
@@ -278,7 +316,14 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.9)", borderRadius: "16px", padding: "20px", display: "flex", flexDirection: "column", zIndex: 200, backdropFilter: "blur(5px)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
                     <h3 style={{ margin: 0, color: "var(--color-primary)" }}>Historial: {historyModalSupplier.name}</h3>
-                    <button onClick={() => setHistoryModalSupplier(null)} style={{ background: "transparent", border: "none", color: "white", fontSize: "1.5rem", cursor: "pointer" }}>✖</button>
+                    <div style={{ display: "flex", gap: "10px" }}>
+                        <button onClick={exportHistoryToExcel} style={{ background: "#10b981", color: "white", border: "none", padding: "8px 12px", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}>📥 Excel</button>
+                        <label style={{ background: "var(--color-secondary)", color: "white", padding: "8px 12px", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}>
+                            {isUploading ? "Subiendo..." : "📎 Subir Comprobante"}
+                            <input type="file" style={{ display: "none" }} onChange={handleFileUpload} disabled={isUploading} />
+                        </label>
+                        <button onClick={() => setHistoryModalSupplier(null)} style={{ background: "transparent", border: "none", color: "white", fontSize: "1.5rem", cursor: "pointer", marginLeft: "10px" }}>✖</button>
+                    </div>
                 </div>
                 
                 <div style={{ flex: 1, overflowY: "auto" }}>
@@ -298,9 +343,11 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
                                     <tr key={h.id} style={{ borderBottom: "1px solid #222" }}>
                                         <td style={{ padding: "10px" }}>{new Date(h.created_at).toLocaleString()}</td>
                                         <td style={{ padding: "10px", fontWeight: "bold" }}>
-                                            {h.action_type === "Llamada" ? "📞 Llamada" : h.action_type === "Email" ? "✉️ Email" : `💬 WA: ${h.action_type}`}
+                                            {h.action_type === "Llamada" ? "📞 Llamada" : h.action_type === "Email" ? "✉️ Email" : h.action_type === "Archivo Subido" ? "📎 Comprobante" : `💬 WA: ${h.action_type}`}
                                         </td>
-                                        <td style={{ padding: "10px", color: "#bbb" }}>{h.notes}</td>
+                                        <td style={{ padding: "10px", color: "#bbb", wordBreak: "break-all" }}>
+                                            {h.notes?.startsWith("http") ? <a href={h.notes} target="_blank" rel="noreferrer" style={{ color: "var(--color-secondary)" }}>Ver Documento</a> : h.notes}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
