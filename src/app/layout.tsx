@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import AuthProvider from "../components/AuthProvider";
 import Sidebar from "../components/Sidebar";
+import HomeButton from "../components/HomeButton";
 
 export const metadata: Metadata = {
   title: "ERIKA - Inteligencia en Ferretería",
@@ -29,7 +30,8 @@ export default function RootLayout({
             style={{ display: "flex", minHeight: "100vh" }}
           >
             <Sidebar />
-            <main className="main-content" style={{ flex: 1, padding: "20px" }}>
+            <main className="main-content" style={{ flex: 1, padding: "20px", display: "flex", flexDirection: "column" }}>
+              <HomeButton />
               {children}
             </main>
           </div>
