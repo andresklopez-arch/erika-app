@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import { supabase } from "../lib/supabaseClient";
 
 export default function SettingsModule() {
   const [voiceKeyword, setVoiceKeyword] = useState("erika");
@@ -16,6 +17,11 @@ export default function SettingsModule() {
   const [businessEmail, setBusinessEmail] = useState("");
   const [businessAddress, setBusinessAddress] = useState("");
   const [businessLogo, setBusinessLogo] = useState("");
+
+  const [systemUsers, setSystemUsers] = useState<any[]>([]);
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserPin, setNewUserPin] = useState("");
+  const [newUserRole, setNewUserRole] = useState("cajero");
 
   useEffect(() => {
     const savedVoice = localStorage.getItem("ERIKA_VOICE_KEYWORD");
@@ -48,7 +54,14 @@ export default function SettingsModule() {
     if (bEmail) setBusinessEmail(bEmail);
     if (bAddr) setBusinessAddress(bAddr);
     if (bLogo) setBusinessLogo(bLogo);
+
+    fetchUsers();
   }, []);
+
+  const fetchUsers = async () => {
+    const { data } = await supabase.from("users").select("*");
+    if (data) setSystemUsers(data);
+  };
 
   const saveConfig = () => {
     localStorage.setItem("ERIKA_VOICE_KEYWORD", voiceKeyword.toLowerCase());
@@ -88,6 +101,21 @@ export default function SettingsModule() {
     localStorage.setItem("ERIKA_BIZ_ADDR", businessAddress);
     localStorage.setItem("ERIKA_BIZ_LOGO", businessLogo);
     alert("✅ Perfil del Negocio guardado exitosamente.");
+  };
+
+  const handleCreateUser = async () => {
+     if (!newUserName || !newUserPin || newUserPin.length < 4) return alert("Ingresa un nombre y un PIN de 4 dígitos o más.");
+     const { error } = await supabase.from("users").insert({ name: newUserName, pin: newUserPin, role: newUserRole });
+     if (error) return alert("Error al crear usuario.");
+     setNewUserName(""); setNewUserPin("");
+     fetchUsers();
+     alert("✅ Cajero/Usuario creado exitosamente.");
+  };
+
+  const handleDeleteUser = async (id: string, name: string) => {
+     if (!window.confirm(`¿Estás seguro de eliminar al usuario ${name}?`)) return;
+     await supabase.from("users").delete().eq("id", id);
+     fetchUsers();
   };
 
   return (
@@ -245,9 +273,49 @@ export default function SettingsModule() {
 
         </div>
 
-        {/* LICENCIA DEL SISTEMA */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "20px" }}>
-          <div className="glass-panel" style={{ flex: 1, border: "1px solid #10b981" }}>
+          <div className="glass-panel" style={{ flex: 1, border: "1px solid #10b981", display: "flex", flexDirection: "column" }}>
+            <h3 style={{ margin: "0 0 20px 0", color: "#10b981", display: "flex", alignItems: "center", gap: "10px" }}>
+              👥 Gestión de Personal (Roles y Cajeros)
+            </h3>
+            <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", marginBottom: "15px" }}>
+              Crea cuentas de "Cajero" (sin permisos de borrar/devolver) o cuentas de "Admin" (control total).
+            </p>
+            
+            <div style={{ display: "flex", gap: "10px", marginBottom: "15px", flexWrap: "wrap" }}>
+               <input type="text" placeholder="Nombre (ej. Juan)" value={newUserName} onChange={e => setNewUserName(e.target.value)} style={{ flex: 1, padding: "8px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }} />
+               <input type="password" placeholder="PIN (ej. 4321)" value={newUserPin} onChange={e => setNewUserPin(e.target.value)} style={{ width: "100px", padding: "8px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }} />
+               <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)} style={{ padding: "8px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }}>
+                 <option value="cajero">Cajero</option>
+                 <option value="admin">Administrador</option>
+               </select>
+               <button className="btn-primary" onClick={handleCreateUser} style={{ background: "#10b981", border: "none" }}>+ Añadir</button>
+            </div>
+
+            <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "10px" }}>
+              <thead>
+                <tr style={{ background: "rgba(255,255,255,0.05)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                  <th style={{ padding: "10px", textAlign: "left" }}>Nombre</th>
+                  <th style={{ padding: "10px", textAlign: "left" }}>Rol</th>
+                  <th style={{ padding: "10px", textAlign: "center" }}>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                 {systemUsers.map(u => (
+                   <tr key={u.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                     <td style={{ padding: "10px" }}>{u.name}</td>
+                     <td style={{ padding: "10px" }}>
+                       <span style={{ padding: "4px 8px", background: u.role === "admin" ? "rgba(16,185,129,0.2)" : "rgba(59,130,246,0.2)", color: u.role === "admin" ? "#10b981" : "#3b82f6", borderRadius: "4px", fontSize: "0.8rem" }}>{u.role.toUpperCase()}</span>
+                     </td>
+                     <td style={{ padding: "10px", textAlign: "center" }}>
+                        <button onClick={() => handleDeleteUser(u.id, u.name)} style={{ background: "transparent", color: "#ef4444", border: "1px solid #ef4444", padding: "4px 8px", borderRadius: "4px", cursor: "pointer" }}>Eliminar</button>
+                     </td>
+                   </tr>
+                 ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="glass-panel" style={{ border: "1px solid #8b5cf6" }}>
             <h3 style={{ margin: "0 0 20px 0", color: "#10b981", display: "flex", alignItems: "center", gap: "10px" }}>
               🔑 Licencia del Sistema ERIKA
             </h3>
@@ -317,7 +385,6 @@ export default function SettingsModule() {
               </button>
             </div>
           </div>
-        </div>
       </div>
     </div>
   );

@@ -178,6 +178,27 @@ export default function Dashboard() {
         </button>
       </div>
 
+      {/* Alerta Roja de Stock */}
+      {lowStockAlerts.length > 0 && (
+        <div style={{ background: "rgba(239, 68, 68, 0.15)", border: "2px solid #ef4444", borderRadius: "8px", padding: "15px", marginBottom: "20px" }}>
+          <h2 style={{ color: "#ef4444", margin: "0 0 10px 0", display: "flex", alignItems: "center", gap: "10px" }}>
+            🚨 ALERTA CRÍTICA DE INVENTARIO
+          </h2>
+          <p style={{ margin: "0 0 10px 0", color: "#fca5a5" }}>
+            Tienes {lowStockAlerts.length} producto(s) por debajo de su nivel mínimo de seguridad. ¡Reabastece pronto!
+          </p>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+             {lowStockAlerts.map(item => (
+                <div key={item.id} style={{ background: "rgba(0,0,0,0.3)", padding: "8px 12px", borderRadius: "6px", border: "1px solid #ef4444" }}>
+                  <strong style={{ color: "white" }}>{item.name}</strong>
+                  <br />
+                  <span style={{ fontSize: "0.85rem", color: "#fca5a5" }}>Stock: {item.stock} / Mín: {item.min_stock}</span>
+                </div>
+             ))}
+          </div>
+        </div>
+      )}
+
       {/* Kpis Rápidos */}
       <div
         style={{

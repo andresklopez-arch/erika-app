@@ -10,6 +10,7 @@ import {
 } from "../lib/offlineSync";
 import PosScannerModal from "./PosScannerModal";
 import PosCreditModal from "./PosCreditModal";
+import { useAuth } from "./AuthProvider";
 
 interface POSItem {
   id: string;
@@ -29,6 +30,7 @@ interface Ticket {
 }
 
 export default function POSModule() {
+  const { currentUser } = useAuth();
   const [globalCatalog, setGlobalCatalog] = useState<any[]>([]);
   const [offlinePendingCount, setOfflinePendingCount] = useState(0);
 
@@ -275,8 +277,11 @@ export default function POSModule() {
   };
 
   const removeItem = async (itemId: string) => {
-    const pass = window.prompt("🔒 ACCESO RESTRINGIDO: Contraseña requerida:");
-    if (pass !== "admin123") return alert("❌ Contraseña incorrecta.");
+    if (currentUser?.role !== "admin") {
+       const pass = window.prompt("🔒 ACCESO RESTRINGIDO: Contraseña de Administrador requerida:");
+       const { data: admin } = await supabase.from("users").select("*").eq("pin", pass).eq("role", "admin").single();
+       if (!admin) return alert("❌ PIN incorrecto o sin privilegios.");
+    }
 
     const itemToRemove = activeTicket.items.find((i) => i.id === itemId);
     if (itemToRemove) {
@@ -306,7 +311,7 @@ export default function POSModule() {
     );
   };
 
-  const applyDiscount = (mode: "percent" | "fixed") => {
+  const applyDiscount = async (mode: "percent" | "fixed") => {
     if (activeTicket.items.length === 0) return;
     const currentRawTotal = activeTicket.items.reduce((sum, item) => {
       let p = item.price;
@@ -349,11 +354,11 @@ export default function POSModule() {
       );
 
     if (finalPct > 5) {
-      const pin = window.prompt(
-        "⚠️ Descuento mayor al 5%. Requiere PIN de administrador:",
-      );
-      if (pin !== "admin123")
-        return alert("❌ PIN incorrecto. Descuento denegado.");
+      if (currentUser?.role !== "admin") {
+         const pin = window.prompt("⚠️ Descuento mayor al 5%. Requiere PIN de administrador:");
+         const { data: admin } = await supabase.from("users").select("*").eq("pin", pin).eq("role", "admin").single();
+         if (!admin) return alert("❌ PIN incorrecto o sin privilegios. Descuento denegado.");
+      }
     }
 
     setTickets(
@@ -476,6 +481,9 @@ export default function POSModule() {
     }
     return sum + p * item.qty;
   }, 0);
+  
+  const totalCost = activeTicket.items.reduce((sum, item) => sum + (item.cost * item.qty), 0);
+  
   const discountAmount = rawTotal * (activeTicket.discountPct / 100);
   const finalTotal = rawTotal - discountAmount;
   const iva = finalTotal * 0.16;
@@ -1075,7 +1083,7 @@ export default function POSModule() {
                       session_id: session.id,
                       type: "sale",
                       amount: finalTotal,
-                      description: `Venta Ticket #${activeTicket.id}${selectedCustomerId ? ` (Cliente ID: ${selectedCustomerId})` : ""}`,
+                      description: `Venta Ticket #${activeTicket.id}${selectedCustomerId ? ` (Cliente ID: ${selectedCustomerId})` : ""} [COSTO: ${totalCost.toFixed(2)}]`,
                       device_info: navigator.userAgent,
                     });
 
@@ -1142,8 +1150,11 @@ export default function POSModule() {
               color: "#ef4444",
             }}
             onClick={async () => {
-              const pass = window.prompt("🔒 DEVOLUCIÓN - Requiere contraseña de Administrador:");
-              if (pass !== "admin123") return alert("❌ Contraseña incorrecta.");
+              if (currentUser?.role !== "admin") {
+                 const pass = window.prompt("🔒 DEVOLUCIÓN - Requiere contraseña de Administrador:");
+                 const { data: admin } = await supabase.from("users").select("*").eq("pin", pass).eq("role", "admin").single();
+                 if (!admin) return alert("❌ Contraseña incorrecta o sin privilegios.");
+              }
 
               const amountStr = window.prompt("¿Monto a reembolsar/devolver de la Caja? (Ej: 150.00)");
               const amount = parseFloat(amountStr || "");

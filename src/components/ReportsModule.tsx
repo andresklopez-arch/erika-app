@@ -18,9 +18,19 @@ export default function ReportsModule() {
 
         // Ventas brutas y Costos (calculados del historial)
         const { data: txs } = await supabase.from("cash_transactions").select("amount, description").eq("type", "sale").gte("created_at", firstDayOfMonth);
-        const sales = txs ? txs.reduce((s, t) => s + t.amount, 0) : 0;
-        // Asumiremos un costo promedio de 70% de la venta para simplicidad, o se debería extraer del JSON del ticket.
-        const costs = sales * 0.70; 
+        let sales = 0;
+        let costs = 0;
+        if (txs) {
+           txs.forEach(t => {
+              sales += t.amount;
+              const costMatch = t.description?.match(/\[COSTO:\s*([\d.]+)\]/);
+              if (costMatch && costMatch[1]) {
+                 costs += parseFloat(costMatch[1]);
+              } else {
+                 costs += t.amount * 0.70; // fallback para ventas antiguas sin costo registrado
+              }
+           });
+        }
 
         // Gastos y Mermas
         const { data: losses } = await supabase.from("business_losses").select("amount").gte("created_at", firstDayOfMonth);
@@ -119,7 +129,7 @@ export default function ReportsModule() {
                  <span style={{ color: "#10b981", fontWeight: "bold" }}>+ ${netProfit.sales.toFixed(2)}</span>
              </div>
              <div className="flex-between" style={{ padding: "5px 0" }}>
-                 <span>(-) Costo de lo Vendido (Est. 70%):</span>
+                 <span>(-) Costo de lo Vendido (Mercancía):</span>
                  <span style={{ color: "#f59e0b" }}>- ${netProfit.costs.toFixed(2)}</span>
              </div>
              <div className="flex-between" style={{ padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
