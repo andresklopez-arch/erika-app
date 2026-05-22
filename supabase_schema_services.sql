@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS public.services (
 -- Habilitar acceso para todos los usuarios autenticados
 ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
 
+-- Eliminar la política si ya existe para evitar errores al volver a ejecutar el script
+DROP POLICY IF EXISTS "Allow read/write access for all authenticated users" ON public.services;
+
 CREATE POLICY "Allow read/write access for all authenticated users" 
 ON public.services 
 FOR ALL 
