@@ -18,9 +18,17 @@ export default function ClientCaptureModal({ onClose, onSuccess }: ClientCapture
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (requiresInvoice && (!rfc || !companyName)) {
-      alert("⚠️ Si el cliente requiere factura, RFC y Razón Social son obligatorios.");
-      return;
+    if (requiresInvoice) {
+      if (!rfc || !companyName) {
+        alert("⚠️ Si el cliente requiere factura, RFC y Razón Social son obligatorios.");
+        return;
+      }
+      // Validación básica de RFC del SAT (Persona física o moral)
+      const rfcRegex = /^([A-ZÑ&]{3,4})\d{6}([A-Z\d]{3})?$/;
+      if (!rfcRegex.test(rfc)) {
+        alert("❌ El RFC ingresado no tiene un formato válido según el SAT.");
+        return;
+      }
     }
 
     setIsSubmitting(true);
