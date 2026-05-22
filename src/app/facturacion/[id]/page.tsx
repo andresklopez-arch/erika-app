@@ -1,22 +1,66 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
+import { supabase } from "../../../lib/supabaseClient";
 
 export default function FacturacionExpress() {
   const params = useParams();
-  const ticketId = params.id;
+  const ticketId = params.id as string;
   const [rfc, setRfc] = useState("");
   const [name, setName] = useState("");
   const [uso, setUso] = useState("G03");
-  const [status, setStatus] = useState("pending"); // pending, loading, success
+  const [status, setStatus] = useState("loading_ticket"); // loading_ticket, pending, loading, success, error
+  const [errorMsg, setErrorMsg] = useState("");
+  const [ticketData, setTicketData] = useState<any>(null);
 
-  const handleFacturar = (e: React.FormEvent) => {
+  useEffect(() => {
+    const fetchTicket = async () => {
+       const { data, error } = await supabase.from("quotes").select("*").eq("id", ticketId).eq("status", "ticket").single();
+       if (error || !data) {
+          setStatus("error");
+          setErrorMsg("Ticket no encontrado o ya facturado.");
+       } else {
+          setTicketData(data);
+          setStatus("pending");
+       }
+    };
+    if (ticketId) fetchTicket();
+  }, [ticketId]);
+
+  const handleFacturar = async (e: React.FormEvent) => {
     e.preventDefault();
     setStatus("loading");
-    setTimeout(() => {
+    
+    try {
+      const res = await fetch("/api/facturacion", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({
+            ticketId,
+            rfc,
+            name,
+            uso,
+            items: ticketData.items,
+            total: ticketData.total
+         })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Error al facturar.");
+      
       setStatus("success");
-    }, 2000);
+    } catch (err: any) {
+      alert(err.message);
+      setStatus("pending");
+    }
   };
+
+  if (status === "loading_ticket") {
+     return <div style={{ padding: "50px", textAlign: "center" }}>Buscando tu ticket...</div>;
+  }
+
+  if (status === "error") {
+     return <div style={{ padding: "50px", textAlign: "center", color: "red" }}>{errorMsg}</div>;
+  }
 
   if (status === "success") {
      return (
@@ -33,29 +77,43 @@ export default function FacturacionExpress() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#f0f2f5", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-      <div style={{ background: "white", padding: "30px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", maxWidth: "400px", width: "100%" }}>
+      <div style={{ background: "white", padding: "30px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", maxWidth: "500px", width: "100%" }}>
         <div style={{ textAlign: "center", marginBottom: "20px" }}>
            <h1 style={{ margin: "0 0 10px 0", color: "#1e293b", fontSize: "24px" }}>Ferretería Erika</h1>
            <p style={{ margin: 0, color: "#64748b" }}>Auto-Facturación Express</p>
         </div>
         
-        <div style={{ background: "#f8fafc", padding: "15px", borderRadius: "8px", border: "1px dashed #cbd5e1", marginBottom: "20px", textAlign: "center" }}>
-           <span style={{ fontSize: "12px", color: "#64748b", display: "block" }}>Ticket ID</span>
-           <strong style={{ fontSize: "16px", color: "#333" }}>{ticketId}</strong>
+        <div style={{ background: "#f8fafc", padding: "15px", borderRadius: "8px", border: "1px dashed #cbd5e1", marginBottom: "20px" }}>
+           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
+              <span style={{ fontSize: "12px", color: "#64748b" }}>Ticket ID</span>
+              <strong style={{ fontSize: "14px", color: "#333" }}>#{ticketId}</strong>
+           </div>
+           <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: "10px", marginBottom: "10px" }}>
+              <strong style={{ fontSize: "12px", color: "#475569" }}>Resumen de Compra:</strong>
+              <ul style={{ paddingLeft: "20px", margin: "5px 0", fontSize: "12px", color: "#334155" }}>
+                 {ticketData?.items?.map((item: any, i: number) => (
+                    <li key={i}>{item.qty}x {item.name} - ${(item.qty * item.price).toFixed(2)}</li>
+                 ))}
+              </ul>
+           </div>
+           <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #e2e8f0", paddingTop: "10px" }}>
+              <span style={{ fontSize: "14px", color: "#64748b" }}>Total Facturable:</span>
+              <strong style={{ fontSize: "18px", color: "#10b981" }}>${ticketData?.total?.toFixed(2)}</strong>
+           </div>
         </div>
 
         <form onSubmit={handleFacturar} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
           <div>
             <label style={{ display: "block", marginBottom: "5px", fontSize: "14px", color: "#475569", fontWeight: "bold" }}>RFC *</label>
-            <input required type="text" placeholder="ABCD123456EF7" value={rfc} onChange={e => setRfc(e.target.value.toUpperCase())} style={{ width: "100%", padding: "10px", border: "1px solid #cbd5e1", borderRadius: "5px" }} />
+            <input required type="text" placeholder="ABCD123456EF7" value={rfc} onChange={e => setRfc(e.target.value.toUpperCase())} style={{ width: "100%", padding: "10px", border: "1px solid #cbd5e1", borderRadius: "5px", boxSizing: "border-box" }} />
           </div>
           <div>
             <label style={{ display: "block", marginBottom: "5px", fontSize: "14px", color: "#475569", fontWeight: "bold" }}>Nombre o Razón Social</label>
-            <input required type="text" placeholder="Ej. Juan Pérez" value={name} onChange={e => setName(e.target.value)} style={{ width: "100%", padding: "10px", border: "1px solid #cbd5e1", borderRadius: "5px" }} />
+            <input required type="text" placeholder="Ej. Juan Pérez" value={name} onChange={e => setName(e.target.value)} style={{ width: "100%", padding: "10px", border: "1px solid #cbd5e1", borderRadius: "5px", boxSizing: "border-box" }} />
           </div>
           <div>
             <label style={{ display: "block", marginBottom: "5px", fontSize: "14px", color: "#475569", fontWeight: "bold" }}>Uso de CFDI</label>
-            <select value={uso} onChange={e => setUso(e.target.value)} style={{ width: "100%", padding: "10px", border: "1px solid #cbd5e1", borderRadius: "5px", background: "white" }}>
+            <select value={uso} onChange={e => setUso(e.target.value)} style={{ width: "100%", padding: "10px", border: "1px solid #cbd5e1", borderRadius: "5px", background: "white", boxSizing: "border-box" }}>
                <option value="G03">G03 - Gastos en general</option>
                <option value="G01">G01 - Adquisición de mercancías</option>
                <option value="P01">P01 - Por definir</option>

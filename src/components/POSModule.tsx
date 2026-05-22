@@ -1079,6 +1079,7 @@ export default function POSModule() {
                     `⚠️ ¡Cobro Exitoso en Efectivo (Modo Offline)!\nSe sincronizará con la nube cuando regrese el Internet.`,
                   );
                   updateOfflineStatus();
+                  updateOfflineStatus();
                 } else {
                   // MODO ONLINE
                   const { data: session } = await supabase
@@ -1105,6 +1106,16 @@ export default function POSModule() {
 
                   if (error) return alert("Error al cobrar: " + error.message);
 
+                  // Guardar el ticket exacto para la facturación electrónica
+                  let realTicketId = Date.now();
+                  const { data: quoteData } = await supabase.from("quotes").insert({
+                     customer_name: "Venta Mostrador",
+                     items: activeTicket.items,
+                     total: finalTotal,
+                     status: "ticket"
+                  }).select("id").single();
+                  if (quoteData) realTicketId = quoteData.id;
+
                   // Sumar Puntos si hay cliente (según configuración)
                   let puntosGanados = 0;
                   if (selectedCustomerId) {
@@ -1120,6 +1131,37 @@ export default function POSModule() {
                   alert(
                     `✅ ¡Cobro Exitoso en Efectivo por $${finalTotal.toFixed(2)}!\nEl dinero ha sido ingresado a la Caja Fuerte.`,
                   );
+
+                  // Auto-imprimir ticket térmico
+                  const printWindow = window.open("", "_blank", "width=300,height=500");
+                  if (printWindow) {
+                     const itemsHtml = activeTicket.items.map(i => `
+                       <div style="display:flex; justify-content:space-between; font-size:12px;">
+                         <span>${i.qty}x ${i.name}</span>
+                         <span>$${(i.price * i.qty).toFixed(2)}</span>
+                       </div>
+                     `).join("");
+                     const html = `
+                       <html><head><style>body { font-family: 'Courier New', monospace; font-size: 12px; margin: 0; padding: 10px; width: 58mm; color: #000; }</style></head>
+                       <body>
+                         <h3 style="text-align:center; margin:0 0 5px 0;">FERRETERÍA ERIKA</h3>
+                         <p style="text-align:center; margin:0 0 10px 0;">Ticket: #${realTicketId}</p>
+                         <div style="border-bottom: 1px dashed #000; margin-bottom: 5px;"></div>
+                         ${itemsHtml}
+                         <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
+                         <div style="display:flex; justify-content:space-between;"><strong>TOTAL:</strong><strong>$${finalTotal.toFixed(2)}</strong></div>
+                         <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
+                         <div style="text-align:center; margin-top: 15px;">
+                           <strong>Auto-Facturación Express</strong><br>
+                           <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=http://localhost:3000/facturacion/${realTicketId}" style="width:100px; height:100px; margin: 10px 0;" /><br>
+                           <span>Escanea el QR o entra a localhost:3000/facturacion/${realTicketId} para facturar.</span>
+                         </div>
+                       </body></html>
+                     `;
+                     printWindow.document.write(html);
+                     printWindow.document.close();
+                     setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+                  }
                 }
 
                 setTickets(
