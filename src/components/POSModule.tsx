@@ -702,6 +702,7 @@ export default function POSModule() {
       />
 
       <div
+        className="no-print"
         style={{
           flex: 1,
           display: "flex",
@@ -880,7 +881,7 @@ export default function POSModule() {
       </div>
 
       <div
-        className="glass-panel"
+        className="glass-panel no-print"
         style={{ width: "450px", display: "flex", flexDirection: "column" }}
       >
         <div className="flex-between" style={{ marginBottom: "15px" }}>
@@ -1568,7 +1569,7 @@ export default function POSModule() {
       </div>
       
       {/* Printable Receipt Area */}
-      <div id="printable-receipt" className="no-print" style={{ padding: "20mm", fontFamily: "sans-serif", maxWidth: "800px", margin: "0 auto" }}>
+      <div id="printable-receipt" style={{ padding: "20mm", fontFamily: "sans-serif", maxWidth: "800px", margin: "0 auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "2px solid #ccc", paddingBottom: "20px", marginBottom: "20px" }}>
           <div>
             {businessProfile.logo && <img src={businessProfile.logo} alt="Logo" style={{ maxHeight: "80px", marginBottom: "10px" }} />}

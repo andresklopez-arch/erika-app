@@ -233,3 +233,43 @@ body {
   animation: blink-animation 2s infinite ease-in-out;
 }
 
+/* --- ESTILOS DE IMPRESIÓN Y VISTA DE RECIBO --- */
+/* Ocultar la plantilla de recibo en pantalla normal */
+#printable-receipt {
+  display: none !important;
+}
+
+/* Reglas de impresión en el navegador */
+@media print {
+  /* Ocultar todos los elementos con la clase no-print */
+  .no-print {
+    display: none !important;
+  }
+  
+  /* Ocultar barra lateral en impresión */
+  .sidebar-container {
+    display: none !important;
+  }
+  
+  /* Mostrar el recibo */
+  #printable-receipt {
+    display: block !important;
+    background: white !important;
+    color: black !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Asegurar que el contenedor principal no interfiera */
+  body, .app-container, .main-content {
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    box-shadow: none !important;
+  }
+}
+
