@@ -20,10 +20,9 @@ export default function Sidebar() {
       { id: "2", path: "/dashboard", allowed: isAdmin || p.dashboard },
       { id: "3", path: "/caja", allowed: isAdmin || p.caja },
       { id: "4", path: "/servicios", allowed: isAdmin || p.servicios },
-      { id: "5", path: "/equipo", allowed: isAdmin || p.equipo },
-      { id: "6", path: "/inventario", allowed: isAdmin || p.inventario },
-      { id: "7", path: "/reportes", allowed: isAdmin || p.reportes },
-      { id: "8", path: "/configuracion", allowed: isAdmin || p.configuracion },
+      { id: "5", path: "/inventario", allowed: isAdmin || p.inventario },
+      { id: "6", path: "/reportes", allowed: isAdmin || p.reportes },
+      { id: "7", path: "/configuracion", allowed: isAdmin || p.configuracion },
     ];
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -155,28 +154,16 @@ export default function Sidebar() {
             <span className="shortcut-badge">Alt + 4</span>
           </Link>
         )}
-        {(isAdmin || p.equipo) && (
-          <Link
-            href="/equipo"
-            className={isActive("/equipo") ? "active" : ""}
-            onClick={(e) => handleLinkClick(e, "/equipo")}
-            title="Equipo (Alt + 5)"
-          >
-            <span className="icon">👥</span>
-            <span className="nav-text">Equipo</span>
-            <span className="shortcut-badge">Alt + 5</span>
-          </Link>
-        )}
         {(isAdmin || p.inventario) && (
           <Link
             href="/inventario"
             className={isActive("/inventario") ? "active" : ""}
             onClick={(e) => handleLinkClick(e, "/inventario")}
-            title="Almacén e Inventario (Alt + 6)"
+            title="Almacén e Inventario (Alt + 5)"
           >
             <span className="icon">📦</span>
             <span className="nav-text">Almacén e Inventario</span>
-            <span className="shortcut-badge">Alt + 6</span>
+            <span className="shortcut-badge">Alt + 5</span>
           </Link>
         )}
         {(isAdmin || p.reportes) && (
@@ -184,11 +171,11 @@ export default function Sidebar() {
             href="/reportes"
             className={isActive("/reportes") ? "active" : ""}
             onClick={(e) => handleLinkClick(e, "/reportes")}
-            title="Reportes e Inteligencia (Alt + 7)"
+            title="Reportes e Inteligencia (Alt + 6)"
           >
             <span className="icon">📈</span>
             <span className="nav-text">Reportes e Inteligencia</span>
-            <span className="shortcut-badge">Alt + 7</span>
+            <span className="shortcut-badge">Alt + 6</span>
           </Link>
         )}
         {(isAdmin || p.configuracion) && (
@@ -196,11 +183,11 @@ export default function Sidebar() {
             href="/configuracion"
             className={isActive("/configuracion") ? "active" : ""}
             onClick={(e) => handleLinkClick(e, "/configuracion")}
-            title="Configuración (Alt + 8)"
+            title="Configuración (Alt + 7)"
           >
             <span className="icon">⚙️</span>
             <span className="nav-text">Configuración</span>
-            <span className="shortcut-badge">Alt + 8</span>
+            <span className="shortcut-badge">Alt + 7</span>
           </Link>
         )}
       </nav>

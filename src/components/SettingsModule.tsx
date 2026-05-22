@@ -21,7 +21,24 @@ export default function SettingsModule() {
   const [systemUsers, setSystemUsers] = useState<any[]>([]);
   const [newUserName, setNewUserName] = useState("");
   const [newUserPin, setNewUserPin] = useState("");
-  const [newUserRole, setNewUserRole] = useState("cajero");
+  const [roleType, setRoleType] = useState("cajero"); // "cajero", "admin", "custom"
+  const [customRoleName, setCustomRoleName] = useState("");
+  const [newPermissions, setNewPermissions] = useState({
+     pos: true,
+     dashboard: false,
+     caja: true,
+     servicios: false,
+     inventario: false,
+     reportes: false,
+     configuracion: false
+  });
+
+  // Estados de Edición de Usuario (Modal)
+  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPin, setEditPin] = useState("");
+  const [editRole, setEditRole] = useState("");
+  const [editPermissions, setEditPermissions] = useState<any>({});
 
   const [isConnected, setIsConnected] = useState<boolean>(true);
   const [connectionType, setConnectionType] = useState<string>("system");
@@ -111,13 +128,111 @@ export default function SettingsModule() {
     alert("✅ Perfil del Negocio guardado exitosamente.");
   };
 
+  const handleRoleTypeChange = (val: string) => {
+    setRoleType(val);
+    if (val === "admin") {
+      setNewPermissions({
+        pos: true,
+        dashboard: true,
+        caja: true,
+        servicios: true,
+        inventario: true,
+        reportes: true,
+        configuracion: true
+      });
+    } else if (val === "cajero") {
+      setNewPermissions({
+        pos: true,
+        dashboard: false,
+        caja: true,
+        servicios: false,
+        inventario: false,
+        reportes: false,
+        configuracion: false
+      });
+    } else {
+      setNewPermissions({
+        pos: false,
+        dashboard: false,
+        caja: false,
+        servicios: false,
+        inventario: false,
+        reportes: false,
+        configuracion: false
+      });
+    }
+  };
+
   const handleCreateUser = async () => {
      if (!newUserName || !newUserPin || newUserPin.length < 4) return alert("Ingresa un nombre y un PIN de 4 dígitos o más.");
-     const { error } = await supabase.from("users").insert({ name: newUserName, pin: newUserPin, role: newUserRole });
-     if (error) return alert("Error al crear usuario.");
-     setNewUserName(""); setNewUserPin("");
+     const roleToSave = roleType === "custom" ? customRoleName.trim() : roleType;
+     if (!roleToSave) return alert("Ingresa o selecciona un rol válido.");
+
+     const { error } = await supabase.from("users").insert({ 
+        name: newUserName, 
+        pin: newUserPin, 
+        role: roleToSave,
+        permissions: newPermissions
+     });
+     if (error) {
+        console.error("Error al crear usuario:", error);
+        return alert("Error al crear usuario. Asegúrate de que el PIN sea único.");
+     }
+     setNewUserName(""); 
+     setNewUserPin("");
+     setCustomRoleName("");
+     setRoleType("cajero");
+     setNewPermissions({
+        pos: true,
+        dashboard: false,
+        caja: true,
+        servicios: false,
+        inventario: false,
+        reportes: false,
+        configuracion: false
+     });
      fetchUsers();
      alert("✅ Cajero/Usuario creado exitosamente.");
+  };
+
+  const startEditUser = (user: any) => {
+    setEditingUser(user);
+    setEditName(user.name);
+    setEditPin(user.pin);
+    setEditRole(user.role);
+    setEditPermissions({
+      pos: user.permissions?.pos || false,
+      dashboard: user.permissions?.dashboard || false,
+      caja: user.permissions?.caja || false,
+      servicios: user.permissions?.servicios || false,
+      inventario: user.permissions?.inventario || false,
+      reportes: user.permissions?.reportes || false,
+      configuracion: user.permissions?.configuracion || false,
+    });
+  };
+
+  const handleSaveEditUser = async () => {
+    if (!editName || !editPin || editPin.length < 4) return alert("Ingresa un nombre y un PIN de 4 dígitos o más.");
+    if (!editRole) return alert("El rol no puede estar vacío.");
+
+    const { error } = await supabase
+      .from("users")
+      .update({
+        name: editName,
+        pin: editPin,
+        role: editRole.trim(),
+        permissions: editPermissions
+      })
+      .eq("id", editingUser.id);
+
+    if (error) {
+      console.error("Error al actualizar usuario:", error);
+      return alert("Error al actualizar usuario. Asegúrate de que el PIN no esté duplicado.");
+    }
+
+    setEditingUser(null);
+    fetchUsers();
+    alert("✅ Usuario actualizado exitosamente.");
   };
 
   const handleDeleteUser = async (id: string, name: string) => {
@@ -321,42 +436,159 @@ export default function SettingsModule() {
 
           <div className="glass-panel" style={{ flex: 1, border: "1px solid #10b981", display: "flex", flexDirection: "column" }}>
             <h3 style={{ margin: "0 0 20px 0", color: "#10b981", display: "flex", alignItems: "center", gap: "10px" }}>
-              👥 Gestión de Personal (Roles y Cajeros)
+              👥 Gestión de Personal (Roles y Permisos)
             </h3>
             <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", marginBottom: "15px" }}>
-              Crea cuentas de "Cajero" (sin permisos de borrar/devolver) o cuentas de "Admin" (control total).
+              Crea cuentas de personal, define su rol (predeterminado o personalizado) y gestiona los permisos granulares de visibilidad para cada módulo.
             </p>
             
-            <div style={{ display: "flex", gap: "10px", marginBottom: "15px", flexWrap: "wrap" }}>
-               <input type="text" placeholder="Nombre (ej. Juan)" value={newUserName} onChange={e => setNewUserName(e.target.value)} style={{ flex: 1, padding: "8px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }} />
-               <input type="password" placeholder="PIN (ej. 4321)" value={newUserPin} onChange={e => setNewUserPin(e.target.value)} style={{ width: "100px", padding: "8px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }} />
-               <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)} style={{ padding: "8px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }}>
-                 <option value="cajero">Cajero</option>
-                 <option value="admin">Administrador</option>
-               </select>
-               <button className="btn-primary" onClick={handleCreateUser} style={{ background: "#10b981", border: "none" }}>+ Añadir</button>
+            <div style={{ display: "flex", flexDirection: "column", gap: "15px", marginBottom: "20px" }}>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                 <input 
+                   type="text" 
+                   placeholder="Nombre (ej. Juan)" 
+                   value={newUserName} 
+                   onChange={e => setNewUserName(e.target.value)} 
+                   style={{ flex: 1, minWidth: "150px", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }} 
+                 />
+                 <input 
+                   type="text" 
+                   placeholder="PIN (ej. 4321)" 
+                   value={newUserPin} 
+                   onChange={e => setNewUserPin(e.target.value)} 
+                   style={{ width: "120px", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }} 
+                 />
+                 <select 
+                   value={roleType} 
+                   onChange={e => handleRoleTypeChange(e.target.value)} 
+                   style={{ padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }}
+                 >
+                   <option value="cajero">Cajero</option>
+                   <option value="admin">Administrador</option>
+                   <option value="custom">Otro (Personalizado)</option>
+                 </select>
+              </div>
+
+              {roleType === "custom" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                  <label style={{ fontSize: "0.85rem", color: "var(--color-primary)" }}>Nombre del Rol Personalizado:</label>
+                  <input 
+                    type="text" 
+                    placeholder="ej. Supervisor, Vendedor, Contador" 
+                    value={customRoleName} 
+                    onChange={e => setCustomRoleName(e.target.value)} 
+                    style={{ padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--color-primary)" }} 
+                  />
+                </div>
+              )}
+
+              <div>
+                <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--color-secondary)" }}>
+                  Permisos de Visibilidad (Módulos):
+                </label>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "10px", background: "rgba(0,0,0,0.15)", padding: "12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                  {[
+                    { key: "pos", label: "🛒 Punto de Venta" },
+                    { key: "dashboard", label: "📊 Dashboard" },
+                    { key: "caja", label: "💵 Arqueo de Caja" },
+                    { key: "servicios", label: "📅 Agenda de Servicios" },
+                    { key: "inventario", label: "📦 Almacén e Inventario" },
+                    { key: "reportes", label: "📈 Reportes e Inteligencia" },
+                    { key: "configuracion", label: "⚙️ Configuración" },
+                  ].map((mod) => (
+                    <label key={mod.key} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.85rem", color: "white" }} onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={(newPermissions as any)[mod.key] || false}
+                        onChange={(e) => setNewPermissions({ ...newPermissions, [mod.key]: e.target.checked })}
+                      />
+                      {mod.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <button className="btn-primary" onClick={handleCreateUser} style={{ background: "#10b981", border: "none", padding: "12px" }}>
+                + Añadir Usuario / Personal
+              </button>
             </div>
 
-            <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "10px" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "15px" }}>
               <thead>
                 <tr style={{ background: "rgba(255,255,255,0.05)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
                   <th style={{ padding: "10px", textAlign: "left" }}>Nombre</th>
+                  <th style={{ padding: "10px", textAlign: "left" }}>PIN</th>
                   <th style={{ padding: "10px", textAlign: "left" }}>Rol</th>
+                  <th style={{ padding: "10px", textAlign: "left" }}>Módulos Permitidos</th>
                   <th style={{ padding: "10px", textAlign: "center" }}>Acción</th>
                 </tr>
               </thead>
               <tbody>
-                 {systemUsers.map(u => (
-                   <tr key={u.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                     <td style={{ padding: "10px" }}>{u.name}</td>
-                     <td style={{ padding: "10px" }}>
-                       <span style={{ padding: "4px 8px", background: u.role === "admin" ? "rgba(16,185,129,0.2)" : "rgba(59,130,246,0.2)", color: u.role === "admin" ? "#10b981" : "#3b82f6", borderRadius: "4px", fontSize: "0.8rem" }}>{u.role.toUpperCase()}</span>
-                     </td>
-                     <td style={{ padding: "10px", textAlign: "center" }}>
-                        <button onClick={() => handleDeleteUser(u.id, u.name)} style={{ background: "transparent", color: "#ef4444", border: "1px solid #ef4444", padding: "4px 8px", borderRadius: "4px", cursor: "pointer" }}>Eliminar</button>
-                     </td>
-                   </tr>
-                 ))}
+                 {systemUsers.map(u => {
+                   const uPermissions = u.permissions || {};
+                   return (
+                     <tr key={u.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                       <td style={{ padding: "10px", fontWeight: "bold" }}>{u.name}</td>
+                       <td style={{ padding: "10px", fontFamily: "monospace", letterSpacing: "1px" }}>{u.pin}</td>
+                       <td style={{ padding: "10px" }}>
+                         <span style={{ 
+                           padding: "4px 8px", 
+                           background: u.role === "admin" ? "rgba(16,185,129,0.2)" : u.role === "cajero" ? "rgba(59,130,246,0.2)" : "rgba(234,179,8,0.2)", 
+                           color: u.role === "admin" ? "#10b981" : u.role === "cajero" ? "#3b82f6" : "#eab308", 
+                           borderRadius: "4px", 
+                           fontSize: "0.8rem",
+                           fontWeight: "bold"
+                         }}>
+                           {u.role.toUpperCase()}
+                         </span>
+                       </td>
+                       <td style={{ padding: "10px" }}>
+                         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                           {uPermissions.pos && <span title="Punto de Venta" style={{ cursor: "help" }}>🛒</span>}
+                           {uPermissions.dashboard && <span title="Dashboard" style={{ cursor: "help" }}>📊</span>}
+                           {uPermissions.caja && <span title="Arqueo de Caja" style={{ cursor: "help" }}>💵</span>}
+                           {uPermissions.servicios && <span title="Agenda de Servicios" style={{ cursor: "help" }}>📅</span>}
+                           {uPermissions.inventario && <span title="Almacén e Inventario" style={{ cursor: "help" }}>📦</span>}
+                           {uPermissions.reportes && <span title="Reportes e Inteligencia" style={{ cursor: "help" }}>📈</span>}
+                           {uPermissions.configuracion && <span title="Configuración" style={{ cursor: "help" }}>⚙️</span>}
+                           {!Object.values(uPermissions).some(Boolean) && <span style={{ opacity: 0.5, fontSize: "0.85rem" }}>Ninguno</span>}
+                         </div>
+                       </td>
+                       <td style={{ padding: "10px", textAlign: "center" }}>
+                         <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
+                           <button 
+                             onClick={() => startEditUser(u)} 
+                             style={{ 
+                               background: "rgba(59,130,246,0.1)", 
+                               color: "#3b82f6", 
+                               border: "1px solid rgba(59,130,246,0.3)", 
+                               padding: "4px 8px", 
+                               borderRadius: "4px", 
+                               cursor: "pointer",
+                               fontSize: "0.85rem"
+                             }}
+                           >
+                             ✏️ Editar
+                           </button>
+                           <button 
+                             onClick={() => handleDeleteUser(u.id, u.name)} 
+                             style={{ 
+                               background: "transparent", 
+                               color: "#ef4444", 
+                               border: "1px solid #ef4444", 
+                               padding: "4px 8px", 
+                               borderRadius: "4px", 
+                               cursor: "pointer",
+                               fontSize: "0.85rem"
+                             }}
+                           >
+                             Eliminar
+                           </button>
+                         </div>
+                       </td>
+                     </tr>
+                   );
+                 })}
               </tbody>
             </table>
           </div>
@@ -487,6 +719,109 @@ export default function SettingsModule() {
             </div>
           </div>
       </div>
+
+      {editingUser && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+          padding: "20px"
+        }}>
+          <div className="glass-panel animate-fade-in" style={{
+            width: "100%",
+            maxWidth: "500px",
+            padding: "25px",
+            border: "1px solid var(--color-primary)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "15px"
+          }}>
+            <h3 style={{ margin: 0, color: "var(--color-primary)", fontSize: "1.2rem" }}>✏️ Editar Usuario / Personal</h3>
+            
+            <div>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Nombre:</label>
+              <input
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>PIN (Visible):</label>
+              <input
+                type="text"
+                value={editPin}
+                onChange={(e) => setEditPin(e.target.value)}
+                style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Rol / Puesto:</label>
+              <input
+                type="text"
+                value={editRole}
+                onChange={(e) => setEditRole(e.target.value)}
+                placeholder="ej. cajero, admin o rol personalizado"
+                style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }}
+              />
+              <span style={{ fontSize: "0.75rem", opacity: 0.6, marginTop: "4px", display: "block" }}>
+                Ingresa roles predefinidos ('admin', 'cajero') o cualquier rol personalizado que desees asignarle.
+              </span>
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--color-secondary)" }}>Permisos de Visibilidad (Módulos):</label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", background: "rgba(0,0,0,0.15)", padding: "10px", borderRadius: "6px" }}>
+                {[
+                  { key: "pos", label: "🛒 Punto de Venta" },
+                  { key: "dashboard", label: "📊 Dashboard" },
+                  { key: "caja", label: "💵 Arqueo de Caja" },
+                  { key: "servicios", label: "📅 Agenda de Servicios" },
+                  { key: "inventario", label: "📦 Almacén e Inventario" },
+                  { key: "reportes", label: "📈 Reportes e Inteligencia" },
+                  { key: "configuracion", label: "⚙️ Configuración" },
+                ].map((mod) => (
+                  <label key={mod.key} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.85rem", color: "white" }}>
+                    <input
+                      type="checkbox"
+                      checked={editPermissions[mod.key] || false}
+                      onChange={(e) => setEditPermissions({ ...editPermissions, [mod.key]: e.target.checked })}
+                    />
+                    {mod.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", marginTop: "15px" }}>
+              <button
+                className="btn-primary"
+                onClick={handleSaveEditUser}
+                style={{ flex: 1, padding: "10px" }}
+              >
+                💾 Guardar Cambios
+              </button>
+              <button
+                onClick={() => setEditingUser(null)}
+                style={{ flex: 1, padding: "10px", background: "transparent", border: "1px solid rgba(255,255,255,0.2)", color: "white", borderRadius: "6px", cursor: "pointer" }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
