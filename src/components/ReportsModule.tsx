@@ -173,6 +173,31 @@ export default function ReportsModule() {
      return true;
   });
 
+  const exportToCSV = () => {
+    const headers = ["Apertura", "Cierre", "Cajero", "Fondo Inicial", "Ventas Efectivo", "Ventas Tarjeta", "Descuadre", "Estado"];
+    const rows = filteredSessions.map(session => [
+      session.opened_at ? new Date(session.opened_at).toLocaleString() : "",
+      session.closed_at ? new Date(session.closed_at).toLocaleString() : "En curso",
+      session.opened_by || "",
+      (session.initial_balance ?? 0).toFixed(2),
+      (session.cash_sales ?? 0).toFixed(2),
+      (session.card_sales ?? 0).toFixed(2),
+      (session.discrepancy ?? 0).toFixed(2),
+      session.status === 'open' ? 'Abierta' : 'Cerrada'
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+      + [headers.join(","), ...rows.map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(","))].join("\n");
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `reporte_arqueos_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div
       className="animate-fade-in"
@@ -292,26 +317,46 @@ export default function ReportsModule() {
              />
            </div>
            <div style={{ display: "flex", flexDirection: "column", gap: "5px", width: "200px" }}>
-             <label style={{ fontSize: "0.85rem", color: "var(--color-secondary)" }}>📅 Filtrar por Fecha</label>
-             <select
-               value={filterFecha}
-               onChange={(e) => setFilterFecha(e.target.value)}
-               style={{
-                 padding: "10px",
-                 borderRadius: "8px",
-                 background: "rgba(0,0,0,0.3)",
-                 color: "white",
-                 border: "1px solid var(--glass-border)",
-                 outline: "none",
-                 cursor: "pointer"
-               }}
-             >
-               <option value="todos" style={{ background: "#1f2937", color: "white" }}>Todos los registros</option>
-               <option value="hoy" style={{ background: "#1f2937", color: "white" }}>Hoy</option>
-               <option value="semana" style={{ background: "#1f2937", color: "white" }}>Últimos 7 días</option>
-               <option value="mes" style={{ background: "#1f2937", color: "white" }}>Este mes</option>
-             </select>
-           </div>
+              <label style={{ fontSize: "0.85rem", color: "var(--color-secondary)" }}>📅 Filtrar por Fecha</label>
+              <select
+                value={filterFecha}
+                onChange={(e) => setFilterFecha(e.target.value)}
+                style={{
+                  padding: "10px",
+                  borderRadius: "8px",
+                  background: "rgba(0,0,0,0.3)",
+                  color: "white",
+                  border: "1px solid var(--glass-border)",
+                  outline: "none",
+                  cursor: "pointer"
+                }}
+              >
+                <option value="todos" style={{ background: "#1f2937", color: "white" }}>Todos los registros</option>
+                <option value="hoy" style={{ background: "#1f2937", color: "white" }}>Hoy</option>
+                <option value="semana" style={{ background: "#1f2937", color: "white" }}>Últimos 7 días</option>
+                <option value="mes" style={{ background: "#1f2937", color: "white" }}>Este mes</option>
+              </select>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "5px", justifyContent: "flex-end" }}>
+              <button
+                onClick={exportToCSV}
+                style={{
+                  padding: "10px 20px",
+                  borderRadius: "8px",
+                  background: "rgba(16, 185, 129, 0.2)",
+                  border: "1px solid #10b981",
+                  color: "#10b981",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  height: "42px"
+                }}
+              >
+                📥 Exportar a CSV
+              </button>
+            </div>
          </div>
 
          <div style={{ overflowX: "auto" }}>
