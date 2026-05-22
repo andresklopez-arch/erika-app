@@ -27,7 +27,7 @@ export default function ProtectedRoute({ children, permission }: ProtectedRouteP
   }
 
   const isAdmin = currentUser.role === "admin";
-  const hasPermission = currentUser.permissions?.[permission] === true;
+  const hasPermission = permission.split(',').some(p => currentUser.permissions?.[p.trim()] === true);
 
   if (!isAdmin && !hasPermission) {
     return (

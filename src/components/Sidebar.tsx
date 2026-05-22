@@ -17,12 +17,11 @@ export default function Sidebar() {
 
     const menuOptions = [
       { id: "1", path: "/", allowed: isAdmin || p.pos },
-      { id: "2", path: "/dashboard", allowed: isAdmin || p.dashboard },
+      { id: "2", path: "/dashboard", allowed: isAdmin || p.dashboard || p.reportes },
       { id: "3", path: "/caja", allowed: isAdmin || p.caja },
       { id: "4", path: "/servicios", allowed: isAdmin || p.servicios },
       { id: "5", path: "/inventario", allowed: isAdmin || p.inventario },
-      { id: "6", path: "/reportes", allowed: isAdmin || p.reportes },
-      { id: "7", path: "/configuracion", allowed: isAdmin || p.configuracion },
+      { id: "6", path: "/configuracion", allowed: isAdmin || p.configuracion },
     ];
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -118,15 +117,15 @@ export default function Sidebar() {
             <span className="shortcut-badge">Alt + 1</span>
           </Link>
         )}
-        {(isAdmin || p.dashboard) && (
+        {(isAdmin || p.dashboard || p.reportes) && (
           <Link
             href="/dashboard"
             className={isActive("/dashboard") ? "active" : ""}
             onClick={(e) => handleLinkClick(e, "/dashboard")}
-            title="Dashboard (Alt + 2)"
+            title="Dashboard e Inteligencia (Alt + 2)"
           >
             <span className="icon">📊</span>
-            <span className="nav-text">Dashboard</span>
+            <span className="nav-text">Dashboard e Inteligencia</span>
             <span className="shortcut-badge">Alt + 2</span>
           </Link>
         )}
@@ -166,28 +165,16 @@ export default function Sidebar() {
             <span className="shortcut-badge">Alt + 5</span>
           </Link>
         )}
-        {(isAdmin || p.reportes) && (
-          <Link
-            href="/reportes"
-            className={isActive("/reportes") ? "active" : ""}
-            onClick={(e) => handleLinkClick(e, "/reportes")}
-            title="Reportes e Inteligencia (Alt + 6)"
-          >
-            <span className="icon">📈</span>
-            <span className="nav-text">Reportes e Inteligencia</span>
-            <span className="shortcut-badge">Alt + 6</span>
-          </Link>
-        )}
         {(isAdmin || p.configuracion) && (
           <Link
             href="/configuracion"
             className={isActive("/configuracion") ? "active" : ""}
             onClick={(e) => handleLinkClick(e, "/configuracion")}
-            title="Configuración (Alt + 7)"
+            title="Configuración (Alt + 6)"
           >
             <span className="icon">⚙️</span>
             <span className="nav-text">Configuración</span>
-            <span className="shortcut-badge">Alt + 7</span>
+            <span className="shortcut-badge">Alt + 6</span>
           </Link>
         )}
       </nav>
