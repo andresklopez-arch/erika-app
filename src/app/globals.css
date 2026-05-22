@@ -148,14 +148,24 @@ body {
   margin: 20px 0 20px 20px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
   white-space: nowrap;
-  position: relative;
+  position: sticky;
+  top: 20px;
+  height: calc(100vh - 40px);
   z-index: 1000;
   flex-shrink: 0;
   padding: 20px 12px;
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
 }
+
+.sidebar-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
+
 
 .sidebar-container:hover {
   width: 280px;
