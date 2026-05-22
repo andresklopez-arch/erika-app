@@ -126,6 +126,44 @@ export default function SettingsModule() {
      fetchUsers();
   };
 
+  const togglePrinterConnection = () => {
+    const nextVal = !isConnected;
+    setIsConnected(nextVal);
+    localStorage.setItem("ERIKA_PRINTER_CONNECTED", String(nextVal));
+    
+    // Broadcast a custom event so other modules (like POSModule) can react if they are active
+    window.dispatchEvent(new Event("storage"));
+  };
+
+  const testPrint = () => {
+    if (!isConnected) {
+      alert("❌ Error: La impresora está desconectada. No se puede realizar la prueba.");
+      return;
+    }
+    const printWindow = window.open("", "_blank", "width=300,height=400");
+    if (!printWindow) {
+      alert("❌ Error: Bloqueador de ventanas emergentes activado.");
+      return;
+    }
+    const html = `
+      <html><head><style>body { font-family: 'Courier New', monospace; font-size: 12px; margin: 0; padding: 10px; width: 58mm; color: #000; }</style></head>
+      <body>
+        <h3 style="text-align:center; margin:0 0 5px 0;">FERRETERÍA ERIKA</h3>
+        <p style="text-align:center; margin:0 0 10px 0;">TICKET DE PRUEBA</p>
+        <div style="border-bottom: 1px dashed #000; margin-bottom: 5px;"></div>
+        <p style="text-align:center;">¡Impresora térmica configurada correctamente!</p>
+        <p style="font-size:10px; text-align:center;">Fecha: ${new Date().toLocaleString()}</p>
+        <div style="border-bottom: 1px dashed #000; margin-top: 5px;"></div>
+      </body></html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 500);
+  };
+
   return (
     <div
       className="animate-fade-in glass-panel"
