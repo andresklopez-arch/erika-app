@@ -1,10 +1,59 @@
 "use client";
+import { useEffect } from "react";
 import { useAuth } from "./AuthProvider";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function Sidebar() {
   const { currentUser } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const isAdmin = currentUser.role === "admin";
+    const p = currentUser.permissions || {};
+
+    const menuOptions = [
+      { id: "1", path: "/", allowed: isAdmin || p.pos },
+      { id: "2", path: "/dashboard", allowed: isAdmin || p.dashboard },
+      { id: "3", path: "/caja", allowed: isAdmin || p.caja },
+      { id: "4", path: "/servicios", allowed: isAdmin || p.servicios },
+      { id: "5", path: "/equipo", allowed: isAdmin || p.equipo },
+      { id: "6", path: "/inventario", allowed: isAdmin || p.inventario },
+      { id: "7", path: "/reportes", allowed: isAdmin || p.reportes },
+      { id: "8", path: "/configuracion", allowed: isAdmin || p.configuracion },
+    ];
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (activeEl) {
+        const tagName = activeEl.tagName.toLowerCase();
+        const isEditable = activeEl.getAttribute("contenteditable") === "true";
+        if (
+          tagName === "input" ||
+          tagName === "textarea" ||
+          tagName === "select" ||
+          isEditable
+        ) {
+          return;
+        }
+      }
+
+      if (e.altKey && !e.ctrlKey && !e.shiftKey) {
+        const num = e.key;
+        const option = menuOptions.find((o) => o.id === num);
+        if (option && option.allowed) {
+          e.preventDefault();
+          router.push(option.path);
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [currentUser, router]);
 
   if (!currentUser) return null;
 
@@ -29,52 +78,52 @@ export default function Sidebar() {
       </div>
       <nav style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "20px" }}>
         {(isAdmin || p.pos) && (
-          <a href="/" className={isActive("/") ? "active" : ""}>
+          <Link href="/" className={isActive("/") ? "active" : ""} title="Punto de Venta (Alt + 1)">
             <span className="icon">🛒</span>
             <span className="nav-text">Punto de Venta</span>
-          </a>
+          </Link>
         )}
         {(isAdmin || p.dashboard) && (
-          <a href="/dashboard" className={isActive("/dashboard") ? "active" : ""}>
+          <Link href="/dashboard" className={isActive("/dashboard") ? "active" : ""} title="Dashboard (Alt + 2)">
             <span className="icon">📊</span>
             <span className="nav-text">Dashboard</span>
-          </a>
+          </Link>
         )}
         {(isAdmin || p.caja) && (
-          <a href="/caja" className={isActive("/caja") ? "active" : ""}>
+          <Link href="/caja" className={isActive("/caja") ? "active" : ""} title="Arqueo de Caja (Alt + 3)">
             <span className="icon">💵</span>
             <span className="nav-text">Arqueo de Caja</span>
-          </a>
+          </Link>
         )}
         {(isAdmin || p.servicios) && (
-          <a href="/servicios" className={isActive("/servicios") ? "active" : ""}>
+          <Link href="/servicios" className={isActive("/servicios") ? "active" : ""} title="Agenda de Servicios (Alt + 4)">
             <span className="icon">📅</span>
             <span className="nav-text">Agenda de Servicios</span>
-          </a>
+          </Link>
         )}
         {(isAdmin || p.equipo) && (
-          <a href="/equipo" className={isActive("/equipo") ? "active" : ""}>
+          <Link href="/equipo" className={isActive("/equipo") ? "active" : ""} title="Equipo (Alt + 5)">
             <span className="icon">👥</span>
             <span className="nav-text">Equipo</span>
-          </a>
+          </Link>
         )}
         {(isAdmin || p.inventario) && (
-          <a href="/inventario" className={isActive("/inventario") ? "active" : ""}>
+          <Link href="/inventario" className={isActive("/inventario") ? "active" : ""} title="Almacén e Inventario (Alt + 6)">
             <span className="icon">📦</span>
             <span className="nav-text">Almacén e Inventario</span>
-          </a>
+          </Link>
         )}
         {(isAdmin || p.reportes) && (
-          <a href="/reportes" className={isActive("/reportes") ? "active" : ""}>
+          <Link href="/reportes" className={isActive("/reportes") ? "active" : ""} title="Reportes e Inteligencia (Alt + 7)">
             <span className="icon">📈</span>
             <span className="nav-text">Reportes e Inteligencia</span>
-          </a>
+          </Link>
         )}
         {(isAdmin || p.configuracion) && (
-          <a href="/configuracion" className={isActive("/configuracion") ? "active" : ""}>
+          <Link href="/configuracion" className={isActive("/configuracion") ? "active" : ""} title="Configuración (Alt + 8)">
             <span className="icon">⚙️</span>
             <span className="nav-text">Configuración</span>
-          </a>
+          </Link>
         )}
       </nav>
     </aside>
