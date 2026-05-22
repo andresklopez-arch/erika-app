@@ -37,6 +37,12 @@ export default function Sidebar() {
             <span className="nav-text">Arqueo de Caja</span>
           </a>
         )}
+        {(isAdmin || p.servicios) && (
+          <a href="/servicios">
+            <span className="icon">📅</span>
+            <span className="nav-text">Agenda de Servicios</span>
+          </a>
+        )}
         {(isAdmin || p.equipo) && (
           <a href="/equipo">
             <span className="icon">👥</span>
