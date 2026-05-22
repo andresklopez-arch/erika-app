@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import ReportsModule from "@/components/ReportsModule";
+import ProtectedRoute from "../../components/ProtectedRoute";
 
 export default function ReportesPage() {
   const [showBanner, setShowBanner] = useState(false);
@@ -18,8 +19,9 @@ export default function ReportesPage() {
   };
 
   return (
-    <div
-      style={{
+    <ProtectedRoute permission="reportes">
+      <div
+        style={{
         display: "flex",
         flexDirection: "column",
         gap: "20px",
@@ -165,5 +167,6 @@ export default function ReportesPage() {
 
       <ReportsModule />
     </div>
+    </ProtectedRoute>
   );
 }

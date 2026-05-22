@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../components/AuthProvider";
+import ProtectedRoute from "../../components/ProtectedRoute";
 
 export default function EquipoModule() {
   const { currentUser, logout } = useAuth();
@@ -21,6 +22,7 @@ export default function EquipoModule() {
       inventario: false,
       reportes: false,
       configuracion: false,
+      servicios: false,
     },
   });
 
@@ -59,6 +61,7 @@ export default function EquipoModule() {
           inventario: false,
           reportes: false,
           configuracion: false,
+          servicios: false,
         },
       });
     }
@@ -85,6 +88,7 @@ export default function EquipoModule() {
             inventario: true,
             reportes: true,
             configuracion: true,
+            servicios: true,
           }
         : formData.permissions;
 
@@ -124,7 +128,8 @@ export default function EquipoModule() {
   };
 
   return (
-    <div className="animate-fade-in" style={{ padding: "20px" }}>
+    <ProtectedRoute permission="equipo">
+      <div className="animate-fade-in" style={{ padding: "20px" }}>
       <div className="flex-between" style={{ marginBottom: "30px" }}>
         <h1 style={{ color: "var(--color-primary)" }}>
           👥 Gestión de Personal
@@ -476,5 +481,6 @@ export default function EquipoModule() {
         </div>
       )}
     </div>
+    </ProtectedRoute>
   );
 }

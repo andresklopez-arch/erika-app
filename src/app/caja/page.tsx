@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../components/AuthProvider";
+import ProtectedRoute from "../../components/ProtectedRoute";
 
 interface Denominations {
   b1000: number;
@@ -222,24 +223,23 @@ export default function CajaModule() {
     alert(`✅ Caja Cerrada. ${discrepancy !== 0 ? `\n⚠️ DESCUADRE DETECTADO: $${discrepancy.toFixed(2)}` : '\n✅ Caja Cuadrada Perfectamente.'}`);
   };
 
-  if (isLoading)
-    return (
-      <div
-        style={{
-          padding: "40px",
-          textAlign: "center",
-          color: "var(--color-secondary)",
-        }}
-      >
-        ☁️ Conectando con la Bóveda...
-      </div>
-    );
-
   return (
-    <div
-      className="animate-fade-in"
-      style={{ padding: "20px", position: "relative" }}
-    >
+    <ProtectedRoute permission="caja">
+      {isLoading ? (
+        <div
+          style={{
+            padding: "40px",
+            textAlign: "center",
+            color: "var(--color-secondary)",
+          }}
+        >
+          ☁️ Conectando con la Bóveda...
+        </div>
+      ) : (
+        <div
+          className="animate-fade-in"
+          style={{ padding: "20px", position: "relative" }}
+        >
       {showTicket && (
         <div
           style={{
@@ -600,6 +600,8 @@ export default function CajaModule() {
           </div>
         </div>
       )}
-    </div>
+        </div>
+      )}
+    </ProtectedRoute>
   );
 }

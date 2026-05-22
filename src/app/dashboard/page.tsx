@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import ProtectedRoute from "../../components/ProtectedRoute";
 import {
   BarChart,
   Bar,
@@ -164,7 +165,8 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="animate-fade-in" style={{ padding: "20px" }}>
+    <ProtectedRoute permission="dashboard">
+      <div className="animate-fade-in" style={{ padding: "20px" }}>
       <div className="flex-between" style={{ marginBottom: "20px" }}>
         <h1 style={{ color: "var(--color-primary)" }}>
           Centro de Inteligencia de Negocios
@@ -496,5 +498,6 @@ export default function Dashboard() {
         </div>
       </div>
     </div>
+    </ProtectedRoute>
   );
 }
