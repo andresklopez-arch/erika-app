@@ -10,6 +10,7 @@ export default function ReportsModule() {
      losses: 0,
      pureProfit: 0
   });
+  const [cashSessions, setCashSessions] = useState<any[]>([]);
 
   useEffect(() => {
      const fetchData = async () => {
@@ -47,9 +48,67 @@ export default function ReportsModule() {
            losses: totalLosses,
            pureProfit: sales - costs - totalLosses
         });
+
+        const { data: sessions } = await supabase.from("cash_sessions").select("*").order("closed_at", { ascending: false }).limit(20);
+        if (sessions) setCashSessions(sessions);
      };
      fetchData();
   }, []);
+
+  const printCorteCaja = (session: any) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const html = `
+      <html>
+        <head>
+          <title>Corte de Caja - Ferretería Erika</title>
+          <style>
+            @media print {
+              @page { margin: 0; }
+              body { margin: 0; }
+            }
+            body { font-family: 'Courier New', Courier, monospace; font-size: 12px; width: 300px; padding: 10px; color: #000; }
+            h2 { text-align: center; margin: 5px 0; font-size: 16px; }
+            p { margin: 3px 0; }
+            .divider { border-top: 1px dashed #000; margin: 10px 0; }
+            .row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+            .bold { font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h2>FERRETERÍA ERIKA</h2>
+          <p style="text-align: center;">--- CORTE DE CAJA ---</p>
+          <div class="divider"></div>
+          <p><strong>Apertura:</strong> ${new Date(session.opened_at).toLocaleString()}</p>
+          <p><strong>Cierre:</strong> ${session.closed_at ? new Date(session.closed_at).toLocaleString() : 'En curso'}</p>
+          <div class="divider"></div>
+          <div class="row"><span>Fondo Inicial:</span><span>$${session.initial_cash.toFixed(2)}</span></div>
+          <div class="row"><span>Ventas Efectivo:</span><span>$${session.cash_sales.toFixed(2)}</span></div>
+          <div class="row"><span>Ventas Tarjeta:</span><span>$${session.card_sales.toFixed(2)}</span></div>
+          <div class="divider"></div>
+          <div class="row"><span>Efectivo Declarado:</span><span>$${session.declared_cash.toFixed(2)}</span></div>
+          <div class="row bold"><span>Efectivo Esperado:</span><span>$${session.expected_cash.toFixed(2)}</span></div>
+          <div class="divider"></div>
+          <div class="row bold">
+             <span>Descuadre:</span>
+             <span style="color: ${session.discrepancy < 0 ? 'red' : 'inherit'}">$${session.discrepancy.toFixed(2)}</span>
+          </div>
+          <div class="divider"></div>
+          <p style="text-align: center; font-size: 10px; margin-top: 20px;">Firma del Cajero</p>
+          <div style="border-bottom: 1px solid #000; margin: 20px 20px 0 20px;"></div>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 500);
+  };
 
   return (
     <div
@@ -145,6 +204,39 @@ export default function ReportsModule() {
              </p>
           </div>
         </div>
+      </div>
+
+      <div className="glass-panel">
+         <h2 style={{ color: "var(--color-primary)", marginBottom: "15px" }}>🖨️ Historial de Arqueos (Cortes de Caja)</h2>
+         <div style={{ overflowX: "auto" }}>
+           <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+             <thead>
+               <tr style={{ borderBottom: "1px solid var(--glass-border)" }}>
+                 <th style={{ padding: "10px" }}>Apertura</th>
+                 <th style={{ padding: "10px" }}>Cierre</th>
+                 <th style={{ padding: "10px" }}>Efec. Ventas</th>
+                 <th style={{ padding: "10px" }}>Tarj. Ventas</th>
+                 <th style={{ padding: "10px" }}>Descuadre</th>
+                 <th style={{ padding: "10px" }}>Acción</th>
+               </tr>
+             </thead>
+             <tbody>
+               {cashSessions.map(session => (
+                 <tr key={session.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                   <td style={{ padding: "10px" }}>{new Date(session.opened_at).toLocaleString()}</td>
+                   <td style={{ padding: "10px" }}>{session.closed_at ? new Date(session.closed_at).toLocaleString() : "En curso"}</td>
+                   <td style={{ padding: "10px" }}>${session.cash_sales.toFixed(2)}</td>
+                   <td style={{ padding: "10px" }}>${session.card_sales.toFixed(2)}</td>
+                   <td style={{ padding: "10px", color: session.discrepancy < 0 ? "#ef4444" : "#10b981" }}>${session.discrepancy.toFixed(2)}</td>
+                   <td style={{ padding: "10px" }}>
+                     <button onClick={() => printCorteCaja(session)} style={{ background: "transparent", color: "#3b82f6", border: "1px solid #3b82f6", padding: "5px 10px", borderRadius: "5px", cursor: "pointer" }}>🖨️ Imprimir Ticket</button>
+                   </td>
+                 </tr>
+               ))}
+               {cashSessions.length === 0 && <tr><td colSpan={6} style={{ padding: "20px", textAlign: "center" }}>No hay cortes de caja registrados.</td></tr>}
+             </tbody>
+           </table>
+         </div>
       </div>
 
       <div className="glass-panel">

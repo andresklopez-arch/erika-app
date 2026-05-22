@@ -1460,8 +1460,10 @@ export default function POSModule() {
         </div>
         
         <div style={{ marginTop: "50px", textAlign: "center", color: "#888", fontSize: "12px", borderTop: "1px solid #eee", paddingTop: "20px" }}>
-          <p>Esta cotización tiene una vigencia de 15 días.</p>
-          <p>¡Gracias por su preferencia!</p>
+          <p style={{ color: "#000", fontWeight: "bold", marginBottom: "10px" }}>Auto-Facturación Express</p>
+          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=http://localhost:3000/facturacion/${Date.now()}`} alt="QR Code" style={{ width: "100px", height: "100px" }} />
+          <p>Escanea este código o entra a localhost:3000/facturacion</p>
+          <p style={{ marginTop: "20px" }}>¡Gracias por su preferencia!</p>
         </div>
       </div>
 

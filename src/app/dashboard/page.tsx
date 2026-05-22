@@ -31,10 +31,10 @@ export default function Dashboard() {
   const [inventoryValue, setInventoryValue] = useState(0);
   const [avgMargin, setAvgMargin] = useState(0);
   
-  // New States
   const [incomeVsExpenses, setIncomeVsExpenses] = useState<any[]>([]);
   const [hasPlayedBell, setHasPlayedBell] = useState(false);
   const [overdueLayaways, setOverdueLayaways] = useState<any[]>([]);
+  const [overdueCustomers, setOverdueCustomers] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -58,9 +58,16 @@ export default function Dashboard() {
              setHasPlayedBell(true);
              let msg = "🔔 ¡ATENCIÓN!\n";
              if (debts && debts.length > 0) msg += `- Tienes ${debts.length} cuenta(s) por pagar vencida(s) o que vencen HOY.\n`;
-             if (layaways && layaways.length > 0) msg += `- Tienes ${layaways.length} apartado(s) vencido(s).`;
+             if (layaways && layaways.length > 0) msg += `- Tienes ${layaways.length} apartado(s) vencido(s).\n`;
+             if (debts && debts.length > 0) msg += `- Tienes ${debts.length} cuenta(s) por pagar vencida(s) o que vencen HOY.`;
              alert(msg);
           } catch(e) {}
+      }
+
+      // Fetch Overdue Customers (Credit limit exceeded)
+      const { data: custs } = await supabase.from("customers").select("*").gt("balance", 0);
+      if (custs) {
+         setOverdueCustomers(custs.filter((c: any) => c.credit_limit > 0 && c.balance >= c.credit_limit));
       }
 
       // 2. Ventas de Hoy
@@ -177,6 +184,27 @@ export default function Dashboard() {
           📊 Exportar Ventas a Excel
         </button>
       </div>
+
+      {/* Alerta Naranja Cuentas Por Cobrar */}
+      {overdueCustomers.length > 0 && (
+        <div style={{ background: "rgba(245, 158, 11, 0.15)", border: "2px solid #f59e0b", borderRadius: "8px", padding: "15px", marginBottom: "20px" }}>
+          <h2 style={{ color: "#f59e0b", margin: "0 0 10px 0", display: "flex", alignItems: "center", gap: "10px" }}>
+            ⚠️ ALERTA DE CARTERA VENCIDA (CRÉDITO EXCEDIDO)
+          </h2>
+          <p style={{ margin: "0 0 10px 0", color: "#fcd34d" }}>
+            Tienes {overdueCustomers.length} cliente(s) que han superado o igualado su límite de crédito. <strong>Detén sus ventas a crédito.</strong>
+          </p>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+             {overdueCustomers.map(item => (
+                <div key={item.id} style={{ background: "rgba(0,0,0,0.3)", padding: "8px 12px", borderRadius: "6px", border: "1px solid #f59e0b" }}>
+                  <strong style={{ color: "white" }}>{item.name}</strong>
+                  <br />
+                  <span style={{ fontSize: "0.85rem", color: "#fcd34d" }}>Deuda: ${item.balance.toFixed(2)} / Límite: ${item.credit_limit.toFixed(2)}</span>
+                </div>
+             ))}
+          </div>
+        </div>
+      )}
 
       {/* Alerta Roja de Stock */}
       {lowStockAlerts.length > 0 && (
