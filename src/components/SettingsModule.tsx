@@ -4,7 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "./AuthProvider";
 
 export default function SettingsModule() {
-  const { currentUser } = useAuth();
+  const { currentUser, businessSettings, updateBusinessSettings } = useAuth();
 
   const checkAdmin = () => {
     if (currentUser?.role !== "admin") {
@@ -21,8 +21,8 @@ export default function SettingsModule() {
   const [wholesaleMinQty, setWholesaleMinQty] = useState("10");
   const [wholesaleDiscount, setWholesaleDiscount] = useState("10");
 
-  const [targetUtility, setTargetUtility] = useState("50");
-  const [monthlyGoals, setMonthlyGoals] = useState("100000");
+  const [targetUtility, setTargetUtility] = useState("30");
+  const [monthlyGoals, setMonthlyGoals] = useState("0");
 
   const [businessName, setBusinessName] = useState("Ferretería ERIKA");
   const [businessRfc, setBusinessRfc] = useState("");
@@ -65,141 +65,116 @@ export default function SettingsModule() {
   const [connectionType, setConnectionType] = useState<string>("system");
 
   useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
-    const savedVoice = localStorage.getItem("ERIKA_VOICE_KEYWORD");
-    if (savedVoice) setVoiceKeyword(savedVoice);
-
-    const sEarnRate = localStorage.getItem("ERIKA_EARN_RATE");
-    const sEarnPts = localStorage.getItem("ERIKA_EARN_PTS");
-    const sRedeem = localStorage.getItem("ERIKA_REDEEM_RATE");
-    const sTheme = localStorage.getItem("ERIKA_THEME");
-    const sWholesaleQty = localStorage.getItem("ERIKA_WHOLESALE_QTY");
-    const sWholesalePct = localStorage.getItem("ERIKA_WHOLESALE_PCT");
-    
-    const bName = localStorage.getItem("ERIKA_BIZ_NAME");
-    const bRfc = localStorage.getItem("ERIKA_BIZ_RFC");
-    const bPhone = localStorage.getItem("ERIKA_BIZ_PHONE");
-    const bEmail = localStorage.getItem("ERIKA_BIZ_EMAIL");
-    const bAddr = localStorage.getItem("ERIKA_BIZ_ADDR");
-    const bLogo = localStorage.getItem("ERIKA_BIZ_LOGO");
-
-    if (sEarnRate) setEarnRate(sEarnRate);
-    if (sEarnPts) setEarnPoints(sEarnPts);
-    if (sRedeem) setRedeemRate(sRedeem);
-    if (sTheme) setTheme(sTheme);
-    if (sWholesaleQty) setWholesaleMinQty(sWholesaleQty);
-    if (sWholesalePct) setWholesaleDiscount(sWholesalePct);
-    
-    const sTargetUtility = localStorage.getItem("ERIKA_TARGET_UTILITY");
-    const sMonthlyGoals = localStorage.getItem("ERIKA_MONTHLY_GOALS");
-    if (sTargetUtility) setTargetUtility(sTargetUtility);
-    if (sMonthlyGoals) setMonthlyGoals(sMonthlyGoals);
-
-    const fetchDbSettings = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("business_settings")
-          .select("target_utility, monthly_goals")
-          .eq("id", "erika_global")
-          .single();
-        if (data && !error) {
-          setTargetUtility(String(data.target_utility));
-          setMonthlyGoals(String(data.monthly_goals));
-          localStorage.setItem("ERIKA_TARGET_UTILITY", String(data.target_utility));
-          localStorage.setItem("ERIKA_MONTHLY_GOALS", String(data.monthly_goals));
-        }
-      } catch (e) {
-        console.warn("Fallo al leer business_settings en Supabase:", e);
-      }
-    };
-    fetchDbSettings();
-
-    if (bName) setBusinessName(bName);
-    if (bRfc) setBusinessRfc(bRfc);
-    if (bPhone) setBusinessPhone(bPhone);
-    if (bEmail) setBusinessEmail(bEmail);
-    if (bAddr) setBusinessAddress(bAddr);
-    if (bLogo) setBusinessLogo(bLogo);
-
-    const savedConnected = localStorage.getItem("ERIKA_PRINTER_CONNECTED");
-    const savedType = localStorage.getItem("ERIKA_PRINTER_TYPE");
-    if (savedConnected !== null) setIsConnected(savedConnected !== "false");
-    if (savedType) setConnectionType(savedType);
-
+    if (businessSettings) {
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setVoiceKeyword(businessSettings.config.voice_keyword);
+      setEarnRate(String(businessSettings.config.earn_rate));
+      setEarnPoints(String(businessSettings.config.earn_points));
+      setRedeemRate(String(businessSettings.config.redeem_rate));
+      setTheme(businessSettings.config.theme);
+      setWholesaleMinQty(String(businessSettings.config.wholesale_min_qty));
+      setWholesaleDiscount(String(businessSettings.config.wholesale_discount));
+      setTargetUtility(String(businessSettings.target_utility));
+      setMonthlyGoals(String(businessSettings.monthly_goals));
+      setBusinessName(businessSettings.config.business_name);
+      setBusinessRfc(businessSettings.config.business_rfc);
+      setBusinessPhone(businessSettings.config.business_phone);
+      setBusinessEmail(businessSettings.config.business_email);
+      setBusinessAddress(businessSettings.config.business_address);
+      setBusinessLogo(businessSettings.config.business_logo);
+      setIsConnected(businessSettings.config.printer_connected);
+      setConnectionType(businessSettings.config.printer_type);
+      /* eslint-enable react-hooks/set-state-in-effect */
+    }
     fetchUsers();
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
+  }, [businessSettings]);
 
   async function fetchUsers() {
     const { data } = await supabase.from("users").select("*");
     if (data) setSystemUsers(data);
   }
 
-  const saveConfig = () => {
+  const saveConfig = async () => {
     if (!checkAdmin()) return;
-    localStorage.setItem("ERIKA_VOICE_KEYWORD", voiceKeyword.toLowerCase());
-    alert(
-      "✅ Configuración guardada. El Cajero Inteligente de Voz pedirá esta palabra clave antes de ejecutar las órdenes de venta.",
-    );
+    const success = await updateBusinessSettings({
+      config: {
+        voice_keyword: voiceKeyword.toLowerCase(),
+      }
+    });
+    if (success) {
+      alert(
+        "✅ Configuración guardada. El Cajero Inteligente de Voz pedirá esta palabra clave antes de ejecutar las órdenes de venta.",
+      );
+    }
   };
 
-  const saveLoyaltyConfig = () => {
+  const saveLoyaltyConfig = async () => {
     if (!checkAdmin()) return;
-    localStorage.setItem("ERIKA_EARN_RATE", earnRate);
-    localStorage.setItem("ERIKA_EARN_PTS", earnPoints);
-    localStorage.setItem("ERIKA_REDEEM_RATE", redeemRate);
-    alert("✅ Tasas del Programa de Lealtad actualizadas.");
+    const success = await updateBusinessSettings({
+      config: {
+        earn_rate: Number(earnRate) || 100,
+        earn_points: Number(earnPoints) || 1,
+        redeem_rate: Number(redeemRate) || 10,
+      }
+    });
+    if (success) {
+      alert("✅ Tasas del Programa de Lealtad actualizadas.");
+    }
   };
 
-  const saveWholesaleConfig = () => {
+  const saveWholesaleConfig = async () => {
     if (!checkAdmin()) return;
-    localStorage.setItem("ERIKA_WHOLESALE_QTY", wholesaleMinQty);
-    localStorage.setItem("ERIKA_WHOLESALE_PCT", wholesaleDiscount);
-    alert("✅ Configuración de Mayoreo Automático guardada.");
+    const success = await updateBusinessSettings({
+      config: {
+        wholesale_min_qty: Number(wholesaleMinQty) || 10,
+        wholesale_discount: Number(wholesaleDiscount) || 10,
+      }
+    });
+    if (success) {
+      alert("✅ Configuración de Mayoreo Automático guardada.");
+    }
   };
 
   const saveUtilityAndGoalsConfig = async () => {
     if (!checkAdmin()) return;
-    localStorage.setItem("ERIKA_TARGET_UTILITY", targetUtility);
-    localStorage.setItem("ERIKA_MONTHLY_GOALS", monthlyGoals);
-
-    try {
-      const { error } = await supabase
-        .from("business_settings")
-        .upsert({
-          id: "erika_global",
-          target_utility: parseFloat(targetUtility) || 0,
-          monthly_goals: parseFloat(monthlyGoals) || 0,
-          updated_at: new Date().toISOString()
-        });
-      if (error) {
-        console.warn("Fallo al actualizar business_settings en Supabase:", error.message);
-      }
-    } catch (e) {
-      console.warn("Error de red al actualizar configuracion de metas en Supabase:", e);
+    const success = await updateBusinessSettings({
+      target_utility: parseFloat(targetUtility) || 0,
+      monthly_goals: parseFloat(monthlyGoals) || 0,
+    });
+    if (success) {
+      alert("✅ Utilidad y Metas de Venta actualizadas (sincronizado con la nube).");
     }
-    alert("✅ Utilidad y Metas de Venta actualizadas (sincronizado con la nube).");
   };
 
-  const toggleTheme = (newTheme: string) => {
+  const toggleTheme = async (newTheme: string) => {
     setTheme(newTheme);
-    localStorage.setItem("ERIKA_THEME", newTheme);
     if (newTheme === "light") {
       document.documentElement.setAttribute("data-theme", "light");
     } else {
       document.documentElement.removeAttribute("data-theme");
     }
+    await updateBusinessSettings({
+      config: {
+        theme: newTheme,
+      }
+    });
   };
 
-  const saveBusinessProfile = () => {
+  const saveBusinessProfile = async () => {
     if (!checkAdmin()) return;
-    localStorage.setItem("ERIKA_BIZ_NAME", businessName);
-    localStorage.setItem("ERIKA_BIZ_RFC", businessRfc);
-    localStorage.setItem("ERIKA_BIZ_PHONE", businessPhone);
-    localStorage.setItem("ERIKA_BIZ_EMAIL", businessEmail);
-    localStorage.setItem("ERIKA_BIZ_ADDR", businessAddress);
-    localStorage.setItem("ERIKA_BIZ_LOGO", businessLogo);
-    alert("✅ Perfil del Negocio guardado exitosamente.");
+    const success = await updateBusinessSettings({
+      config: {
+        business_name: businessName,
+        business_rfc: businessRfc,
+        business_phone: businessPhone,
+        business_email: businessEmail,
+        business_address: businessAddress,
+        business_logo: businessLogo,
+      }
+    });
+    if (success) {
+      alert("✅ Perfil del Negocio guardado exitosamente.");
+    }
   };
 
   const handleRoleTypeChange = (val: string) => {
@@ -243,31 +218,45 @@ export default function SettingsModule() {
      const roleToSave = roleType === "custom" ? customRoleName.trim() : roleType;
      if (!roleToSave) return alert("Ingresa o selecciona un rol válido.");
 
-     const { error } = await supabase.from("users").insert({ 
-        name: newUserName, 
-        pin: newUserPin, 
-        role: roleToSave,
-        permissions: newPermissions
-     });
-     if (error) {
-        console.error("Error al crear usuario:", error);
-        return alert("Error al crear usuario. Asegúrate de que el PIN sea único.");
+     try {
+       const response = await fetch("/api/admin/users", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({
+           adminPin: currentUser.pin,
+           user: {
+             name: newUserName,
+             pin: newUserPin,
+             role: roleToSave,
+             permissions: newPermissions
+           }
+         })
+       });
+
+       const result = await response.json();
+       if (response.ok && result.success) {
+         setNewUserName(""); 
+         setNewUserPin("");
+         setCustomRoleName("");
+         setRoleType("cajero");
+         setNewPermissions({
+            pos: true,
+            dashboard: false,
+            caja: true,
+            servicios: false,
+            inventario: false,
+            reportes: false,
+            configuracion: false
+         });
+         fetchUsers();
+         alert("✅ Cajero/Usuario creado exitosamente.");
+       } else {
+         alert(`❌ Error al crear usuario: ${result.error || "Desconocido"}`);
+       }
+     } catch (e) {
+       console.error("Error al crear usuario:", e);
+       alert("Error de red al crear usuario.");
      }
-     setNewUserName(""); 
-     setNewUserPin("");
-     setCustomRoleName("");
-     setRoleType("cajero");
-     setNewPermissions({
-        pos: true,
-        dashboard: false,
-        caja: true,
-        servicios: false,
-        inventario: false,
-        reportes: false,
-        configuracion: false
-     });
-     fetchUsers();
-     alert("✅ Cajero/Usuario creado exitosamente.");
   };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -292,40 +281,69 @@ export default function SettingsModule() {
     if (!editName || !editPin || editPin.length < 4) return alert("Ingresa un nombre y un PIN de 4 dígitos o más.");
     if (!editRole) return alert("El rol no puede estar vacío.");
 
-    const { error } = await supabase
-      .from("users")
-      .update({
-        name: editName,
-        pin: editPin,
-        role: editRole.trim(),
-        permissions: editPermissions
-      })
-      .eq("id", editingUser.id);
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          adminPin: currentUser.pin,
+          userId: editingUser.id,
+          user: {
+            name: editName,
+            pin: editPin,
+            role: editRole.trim(),
+            permissions: editPermissions
+          }
+        })
+      });
 
-    if (error) {
-      console.error("Error al actualizar usuario:", error);
-      return alert("Error al actualizar usuario. Asegúrate de que el PIN no esté duplicado.");
+      const result = await response.json();
+      if (response.ok && result.success) {
+        setEditingUser(null);
+        fetchUsers();
+        alert("✅ Usuario actualizado exitosamente.");
+      } else {
+        alert(`❌ Error al actualizar usuario: ${result.error || "Desconocido"}`);
+      }
+    } catch (e) {
+      console.error("Error al actualizar usuario:", e);
+      alert("Error de red al actualizar usuario.");
     }
-
-    setEditingUser(null);
-    fetchUsers();
-    alert("✅ Usuario actualizado exitosamente.");
   };
 
   const handleDeleteUser = async (id: string, name: string) => {
      if (!checkAdmin()) return;
      if (!window.confirm(`¿Estás seguro de eliminar al usuario ${name}?`)) return;
-     await supabase.from("users").delete().eq("id", id);
-     fetchUsers();
+
+     try {
+       const response = await fetch(`/api/admin/users?adminPin=${currentUser.pin}&userId=${id}`, {
+         method: "DELETE"
+       });
+
+       const result = await response.json();
+       if (response.ok && result.success) {
+         fetchUsers();
+         alert("✅ Usuario eliminado exitosamente.");
+       } else {
+         alert(`❌ Error al eliminar usuario: ${result.error || "Desconocido"}`);
+       }
+     } catch (e) {
+       console.error("Error al eliminar usuario:", e);
+       alert("Error de red al eliminar usuario.");
+     }
   };
 
-  const togglePrinterConnection = () => {
+  const togglePrinterConnection = async () => {
     const nextVal = !isConnected;
     setIsConnected(nextVal);
-    localStorage.setItem("ERIKA_PRINTER_CONNECTED", String(nextVal));
-    
-    // Broadcast a custom event so other modules (like POSModule) can react if they are active
-    window.dispatchEvent(new Event("storage"));
+    const success = await updateBusinessSettings({
+      config: {
+        printer_connected: nextVal,
+      }
+    });
+    if (success) {
+      window.dispatchEvent(new Event("storage"));
+    }
   };
 
   const testPrint = () => {
