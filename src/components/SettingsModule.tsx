@@ -11,6 +11,9 @@ export default function SettingsModule() {
   const [wholesaleMinQty, setWholesaleMinQty] = useState("10");
   const [wholesaleDiscount, setWholesaleDiscount] = useState("10");
 
+  const [targetUtility, setTargetUtility] = useState("50");
+  const [monthlyGoals, setMonthlyGoals] = useState("100000");
+
   const [businessName, setBusinessName] = useState("Ferretería ERIKA");
   const [businessRfc, setBusinessRfc] = useState("");
   const [businessPhone, setBusinessPhone] = useState("");
@@ -67,6 +70,11 @@ export default function SettingsModule() {
     if (sTheme) setTheme(sTheme);
     if (sWholesaleQty) setWholesaleMinQty(sWholesaleQty);
     if (sWholesalePct) setWholesaleDiscount(sWholesalePct);
+    
+    const sTargetUtility = localStorage.getItem("ERIKA_TARGET_UTILITY");
+    const sMonthlyGoals = localStorage.getItem("ERIKA_MONTHLY_GOALS");
+    if (sTargetUtility) setTargetUtility(sTargetUtility);
+    if (sMonthlyGoals) setMonthlyGoals(sMonthlyGoals);
 
     if (bName) setBusinessName(bName);
     if (bRfc) setBusinessRfc(bRfc);
@@ -106,6 +114,12 @@ export default function SettingsModule() {
     localStorage.setItem("ERIKA_WHOLESALE_QTY", wholesaleMinQty);
     localStorage.setItem("ERIKA_WHOLESALE_PCT", wholesaleDiscount);
     alert("✅ Configuración de Mayoreo Automático guardada.");
+  };
+
+  const saveUtilityAndGoalsConfig = () => {
+    localStorage.setItem("ERIKA_TARGET_UTILITY", targetUtility);
+    localStorage.setItem("ERIKA_MONTHLY_GOALS", monthlyGoals);
+    alert("✅ Utilidad y Metas de Venta actualizadas.");
   };
 
   const toggleTheme = (newTheme: string) => {
@@ -717,6 +731,36 @@ export default function SettingsModule() {
                 ☀️ Modo Claro
               </button>
             </div>
+          </div>
+
+          <div className="glass-panel" style={{ border: "1px solid #3b82f6" }}>
+            <h3 style={{ margin: "0 0 20px 0", color: "#3b82f6", display: "flex", alignItems: "center", gap: "10px" }}>
+              🧠 Utilidad y Metas de Venta ERIKA
+            </h3>
+            <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", marginBottom: "15px" }}>
+              Configura el porcentaje de utilidad objetivo para importaciones y la meta de ventas mensuales del negocio.
+            </p>
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>% de Utilidad Objetivo (Margen):</label>
+              <input 
+                type="number" 
+                value={targetUtility} 
+                onChange={e => setTargetUtility(e.target.value)} 
+                style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }} 
+              />
+            </div>
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Meta de Venta Mensual ($):</label>
+              <input 
+                type="number" 
+                value={monthlyGoals} 
+                onChange={e => setMonthlyGoals(e.target.value)} 
+                style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }} 
+              />
+            </div>
+            <button className="btn-primary" onClick={saveUtilityAndGoalsConfig} style={{ width: "100%", background: "transparent", border: "1px solid #3b82f6", color: "#3b82f6" }}>
+              💾 Guardar Utilidad y Metas
+            </button>
           </div>
       </div>
 
