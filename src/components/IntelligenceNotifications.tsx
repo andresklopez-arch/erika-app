@@ -92,6 +92,7 @@ export default function IntelligenceNotifications() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAlerts();
     // Re-escanear alertas cada 2 minutos
     const interval = setInterval(fetchAlerts, 120000);
