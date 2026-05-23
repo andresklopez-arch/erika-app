@@ -21,7 +21,23 @@ export const BusinessConfigSchema = z.object({
 export const BusinessSettingsSchema = z.object({
   target_utility: z.number().min(0).max(100).default(30),
   monthly_goals: z.number().nonnegative().default(0),
-  config: BusinessConfigSchema.default({}),
+  config: BusinessConfigSchema.default({
+    voice_keyword: "erika",
+    earn_rate: 100,
+    earn_points: 1,
+    redeem_rate: 10,
+    wholesale_min_qty: 10,
+    wholesale_discount: 10,
+    theme: "dark",
+    business_name: "Ferretería ERIKA",
+    business_rfc: "",
+    business_phone: "",
+    business_email: "",
+    business_address: "",
+    business_logo: "",
+    printer_connected: true,
+    printer_type: "system",
+  }),
 });
 
 export type BusinessConfig = z.infer<typeof BusinessConfigSchema>;
