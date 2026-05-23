@@ -36,6 +36,7 @@ export default function ReportsModule() {
   useEffect(() => {
      const storedGoal = localStorage.getItem("ERIKA_MONTHLY_GOALS");
      if (storedGoal) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setMonthlyGoal(parseFloat(storedGoal));
      }
 
@@ -138,13 +139,13 @@ export default function ReportsModule() {
                  total_sales: totalSales
               };
            });
-           setCashSessions(sessionsWithSales as any[]);
+           setCashSessions(sessionsWithSales as CashSession[]);
         }
      };
      fetchData();
   }, []);
 
-  const printCorteCaja = (session: any) => {
+  const printCorteCaja = (session: CashSession) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
@@ -348,7 +349,7 @@ export default function ReportsModule() {
                 borderRadius: "8px",
               }}
             >
-              🚀 <strong>Productos Estrella:</strong> El "Cemento Tolteca"
+              🚀 <strong>Productos Estrella:</strong> El &ldquo;Cemento Tolteca&rdquo;
               incrementó ventas un 25%. Sugiero pedir un 10% más en la próxima
               orden para obtener mejor margen.
             </li>
@@ -360,7 +361,7 @@ export default function ReportsModule() {
                 borderRadius: "8px",
               }}
             >
-              ⚠️ <strong>Posible Fuga:</strong> El inventario de "Brochas" tiene
+              ⚠️ <strong>Posible Fuga:</strong> El inventario de &ldquo;Brochas&rdquo; tiene
               discrepancias (faltan 3 piezas vs ventas). Sugiero hacer un
               inventario parcial hoy.
             </li>
