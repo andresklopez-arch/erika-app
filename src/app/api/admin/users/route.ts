@@ -7,7 +7,7 @@ const UserInputSchema = z.object({
   name: z.string().min(1, "El nombre es requerido."),
   pin: z.string().min(4, "El PIN debe tener al menos 4 dígitos."),
   role: z.string().min(1, "El rol es requerido."),
-  permissions: z.record(z.boolean()).default({}),
+  permissions: z.record(z.string(), z.boolean()).default({}),
 });
 
 export async function POST(request: Request) {
