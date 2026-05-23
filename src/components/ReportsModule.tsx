@@ -14,6 +14,7 @@ interface CashSession {
   status: 'open' | 'closed';
   cash_sales?: number;
   card_sales?: number;
+  transfer_sales?: number;
   total_sales?: number;
 }
 
@@ -26,12 +27,18 @@ export default function ReportsModule() {
      pureProfit: 0
   });
   const [cashSessions, setCashSessions] = useState<CashSession[]>([]);
+  const [monthlyGoal, setMonthlyGoal] = useState(0);
   const [searchCajero, setSearchCajero] = useState("");
   const [filterFecha, setFilterFecha] = useState("todos");
   const [exporting, setExporting] = useState(false);
   const [showToast, setShowToast] = useState(false);
 
   useEffect(() => {
+     const storedGoal = localStorage.getItem("ERIKA_MONTHLY_GOALS");
+     if (storedGoal) {
+        setMonthlyGoal(parseFloat(storedGoal));
+     }
+
      const fetchData = async () => {
         const today = new Date();
         const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
@@ -70,30 +77,68 @@ export default function ReportsModule() {
 
         const { data: sessions } = await supabase.from("cash_sessions").select("*").order("closed_at", { ascending: false }).limit(50);
         if (sessions && sessions.length > 0) {
-           const sessionsNeedCalculation = sessions.filter(s => s.total_sales === null || s.total_sales === undefined || s.status === 'open');
-           let txs: any[] = [];
-           if (sessionsNeedCalculation.length > 0) {
-              const sessionIds = sessionsNeedCalculation.map(s => s.id);
-              const { data } = await supabase.from("cash_transactions").select("session_id, type, amount").in("session_id", sessionIds);
-              if (data) txs = data;
-           }
+           const sessionIds = sessions.map(s => s.id);
+           const { data: txs } = await supabase
+              .from("cash_transactions")
+              .select("session_id, type, amount, description, payment_method, cash_amount, card_amount, transfer_amount")
+              .in("session_id", sessionIds);
+           
            const sessionsWithSales = sessions.map(session => {
-              let sales = 0;
-              if (session.total_sales !== null && session.total_sales !== undefined && session.status === 'closed') {
-                 sales = Number(session.total_sales);
-              } else {
-                 const sessionTxs = txs.filter(t => t.session_id === session.id);
-                 sales = sessionTxs.filter(t => t.type === 'sale').reduce((sum, t) => sum + t.amount, 0);
-              }
+              const sessionTxs = txs ? txs.filter(t => t.session_id === session.id) : [];
+              
+              let cashSales = 0;
+              let cardSales = 0;
+              let transferSales = 0;
+              let totalSales = 0;
+
+              sessionTxs.filter(t => t.type === 'sale').forEach(t => {
+                 totalSales += t.amount;
+                 
+                 // Cash
+                 let c = 0;
+                 if (t.cash_amount !== undefined && t.cash_amount !== null) {
+                    c = Number(t.cash_amount);
+                 } else if (t.description) {
+                    const match = t.description.match(/\[CASH:([\d.]+)\]/);
+                    if (match) c = parseFloat(match[1]);
+                    else if (!t.description.includes("[METODO:tarjeta]") && !t.description.includes("[METODO:transferencia]")) c = t.amount;
+                 } else {
+                    c = t.amount;
+                 }
+                 cashSales += c;
+
+                 // Card
+                 let crd = 0;
+                 if (t.card_amount !== undefined && t.card_amount !== null) {
+                    crd = Number(t.card_amount);
+                 } else if (t.description) {
+                    const match = t.description.match(/\[CARD:([\d.]+)\]/);
+                    if (match) crd = parseFloat(match[1]);
+                    else if (t.description.includes("[METODO:tarjeta]")) crd = t.amount;
+                 }
+                 cardSales += crd;
+
+                 // Transfer
+                 let trsf = 0;
+                 if (t.transfer_amount !== undefined && t.transfer_amount !== null) {
+                    trsf = Number(t.transfer_amount);
+                 } else if (t.description) {
+                    const match = t.description.match(/\[TRANS:([\d.]+)\]/);
+                    if (match) trsf = parseFloat(match[1]);
+                    else if (t.description.includes("[METODO:transferencia]")) trsf = t.amount;
+                 }
+                 transferSales += trsf;
+              });
+
               return {
                  ...session,
-                 cash_sales: sales,
-                 card_sales: 0
+                 cash_sales: cashSales,
+                 card_sales: cardSales,
+                 transfer_sales: transferSales,
+                 total_sales: totalSales
               };
            });
-           setCashSessions(sessionsWithSales as CashSession[]);
-        } else if (sessions) {
-           setCashSessions(sessions as CashSession[]);
+           setCashSessions(sessionsWithSales as any[]);
         }
      };
      fetchData();
@@ -130,6 +175,8 @@ export default function ReportsModule() {
           <div class="row"><span>Fondo Inicial:</span><span>$${(session.initial_balance ?? 0).toFixed(2)}</span></div>
           <div class="row"><span>Ventas Efectivo:</span><span>$${(session.cash_sales ?? 0).toFixed(2)}</span></div>
           <div class="row"><span>Ventas Tarjeta:</span><span>$${(session.card_sales ?? 0).toFixed(2)}</span></div>
+          <div class="row"><span>Ventas Transf.:</span><span>$${(session.transfer_sales ?? 0).toFixed(2)}</span></div>
+          <div class="row bold"><span>Total Ventas:</span><span>$${(session.total_sales ?? 0).toFixed(2)}</span></div>
           <div class="divider"></div>
           <div class="row"><span>Efectivo Declarado:</span><span>$${(session.counted_balance ?? 0).toFixed(2)}</span></div>
           <div class="row bold"><span>Efectivo Esperado:</span><span>$${(session.expected_balance ?? 0).toFixed(2)}</span></div>
@@ -180,7 +227,7 @@ export default function ReportsModule() {
     setExporting(true);
 
     try {
-      const headers = ["Apertura", "Cierre", "Cajero", "Fondo Inicial", "Ventas Efectivo", "Ventas Tarjeta", "Descuadre", "Estado"];
+      const headers = ["Apertura", "Cierre", "Cajero", "Fondo Inicial", "Ventas Efectivo", "Ventas Tarjeta", "Ventas Transferencia", "Ventas Totales", "Descuadre", "Estado"];
       const rows = filteredSessions.map(session => [
         session.opened_at ? new Date(session.opened_at).toLocaleString() : "",
         session.closed_at ? new Date(session.closed_at).toLocaleString() : "En curso",
@@ -188,6 +235,8 @@ export default function ReportsModule() {
         (session.initial_balance ?? 0).toFixed(2),
         (session.cash_sales ?? 0).toFixed(2),
         (session.card_sales ?? 0).toFixed(2),
+        (session.transfer_sales ?? 0).toFixed(2),
+        (session.total_sales ?? 0).toFixed(2),
         (session.discrepancy ?? 0).toFixed(2),
         session.status === 'open' ? 'Abierta' : 'Cerrada'
       ]);
@@ -217,6 +266,64 @@ export default function ReportsModule() {
       className="animate-fade-in"
       style={{ display: "flex", flexDirection: "column", gap: "20px" }}
     >
+      {/* Meta de Ventas Mensual */}
+      {monthlyGoal > 0 && (
+         <div
+           className="glass-panel"
+           style={{
+             background: "linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(59, 130, 246, 0.15))",
+             border: "1px solid rgba(16, 185, 129, 0.3)",
+             display: "flex",
+             flexDirection: "column",
+             gap: "15px"
+           }}
+         >
+           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+             <div>
+               <h3 style={{ color: "#10b981", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+                 🎯 Meta de Ventas Mensual ERIKA
+               </h3>
+               <p style={{ margin: "5px 0 0 0", fontSize: "0.85rem", opacity: 0.8 }}>
+                 Objetivo acumulado para el mes actual
+               </p>
+             </div>
+             <div style={{ textAlign: "right" }}>
+               <span style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#10b981" }}>
+                 ${netProfit.sales.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+               </span>
+               <span style={{ opacity: 0.6, fontSize: "0.9rem" }}> / ${monthlyGoal.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+             </div>
+           </div>
+           
+           <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: "10px", height: "24px", width: "100%", overflow: "hidden", position: "relative", border: "1px solid rgba(255,255,255,0.1)" }}>
+             <div
+               style={{
+                 width: `${Math.min((netProfit.sales / monthlyGoal) * 100, 100)}%`,
+                 background: "linear-gradient(90deg, #10b981, #3b82f6)",
+                 height: "100%",
+                 borderRadius: "10px",
+                 transition: "width 1s cubic-bezier(0.4, 0, 0.2, 1)",
+                 display: "flex",
+                 alignItems: "center",
+                 justifyContent: "flex-end",
+                 paddingRight: (netProfit.sales / monthlyGoal) * 100 > 10 ? "10px" : "0"
+               }}
+             >
+               {(netProfit.sales / monthlyGoal) * 100 > 5 && (
+                 <span style={{ color: "white", fontSize: "0.75rem", fontWeight: "bold" }}>
+                   {((netProfit.sales / monthlyGoal) * 100).toFixed(1)}%
+                 </span>
+               )}
+             </div>
+           </div>
+           <p style={{ margin: 0, fontSize: "0.85rem", fontStyle: "italic", opacity: 0.8 }}>
+             {netProfit.sales >= monthlyGoal 
+               ? "🎉 ¡Felicidades! Se ha superado la meta mensual de ventas del negocio." 
+               : `Faltan $${(monthlyGoal - netProfit.sales).toLocaleString("es-MX", { minimumFractionDigits: 2 })} para lograr la meta. ¡Vamos con todo!`}
+           </p>
+         </div>
+      )}
+
       {/* Resumen de Inteligencia */}
       <div className="grid-cols-2">
         <div
@@ -376,35 +483,39 @@ export default function ReportsModule() {
             </div>
          </div>
 
-         <div style={{ overflowX: "auto" }}>
-           <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
-             <thead>
-               <tr style={{ borderBottom: "1px solid var(--glass-border)" }}>
-                 <th style={{ padding: "10px" }}>Apertura</th>
-                 <th style={{ padding: "10px" }}>Cierre</th>
-                 <th style={{ padding: "10px" }}>Efec. Ventas</th>
-                 <th style={{ padding: "10px" }}>Tarj. Ventas</th>
-                 <th style={{ padding: "10px" }}>Descuadre</th>
-                 <th style={{ padding: "10px" }}>Acción</th>
-               </tr>
-             </thead>
-                <tbody>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--glass-border)" }}>
+                  <th style={{ padding: "10px" }}>Apertura</th>
+                  <th style={{ padding: "10px" }}>Cierre</th>
+                  <th style={{ padding: "10px" }}>Efec. Ventas</th>
+                  <th style={{ padding: "10px" }}>Tarj. Ventas</th>
+                  <th style={{ padding: "10px" }}>Transf. Ventas</th>
+                  <th style={{ padding: "10px" }}>Tot. Ventas</th>
+                  <th style={{ padding: "10px" }}>Descuadre</th>
+                  <th style={{ padding: "10px" }}>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
                 {filteredSessions.map(session => (
                   <tr key={session.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                     <td style={{ padding: "10px" }}>{session.opened_at ? new Date(session.opened_at).toLocaleString() : "Sin fecha"}</td>
-                     <td style={{ padding: "10px" }}>{session.closed_at ? new Date(session.closed_at).toLocaleString() : "En curso"}</td>
-                     <td style={{ padding: "10px" }}>${(session.cash_sales ?? 0).toFixed(2)}</td>
-                     <td style={{ padding: "10px" }}>${(session.card_sales ?? 0).toFixed(2)}</td>
-                     <td style={{ padding: "10px", color: (session.discrepancy ?? 0) < 0 ? "#ef4444" : "#10b981" }}>${(session.discrepancy ?? 0).toFixed(2)}</td>
+                    <td style={{ padding: "10px" }}>{session.opened_at ? new Date(session.opened_at).toLocaleString() : "Sin fecha"}</td>
+                    <td style={{ padding: "10px" }}>{session.closed_at ? new Date(session.closed_at).toLocaleString() : "En curso"}</td>
+                    <td style={{ padding: "10px" }}>${(session.cash_sales ?? 0).toFixed(2)}</td>
+                    <td style={{ padding: "10px" }}>${(session.card_sales ?? 0).toFixed(2)}</td>
+                    <td style={{ padding: "10px" }}>${(session.transfer_sales ?? 0).toFixed(2)}</td>
+                    <td style={{ padding: "10px", fontWeight: "bold" }}>${(session.total_sales ?? 0).toFixed(2)}</td>
+                    <td style={{ padding: "10px", color: (session.discrepancy ?? 0) < 0 ? "#ef4444" : "#10b981" }}>${(session.discrepancy ?? 0).toFixed(2)}</td>
                     <td style={{ padding: "10px" }}>
                       <button onClick={() => printCorteCaja(session)} style={{ background: "transparent", color: "#3b82f6", border: "1px solid #3b82f6", padding: "5px 10px", borderRadius: "5px", cursor: "pointer" }}>🖨️ Imprimir Ticket</button>
                     </td>
                   </tr>
                 ))}
-                {filteredSessions.length === 0 && <tr><td colSpan={6} style={{ padding: "20px", textAlign: "center" }}>No se encontraron cortes de caja.</td></tr>}
+                {filteredSessions.length === 0 && <tr><td colSpan={8} style={{ padding: "20px", textAlign: "center" }}>No se encontraron cortes de caja.</td></tr>}
               </tbody>
-           </table>
-         </div>
+            </table>
+          </div>
       </div>
 
       <div className="glass-panel">
