@@ -152,9 +152,60 @@ export default function CajaModule() {
         if (pin !== "admin123") return alert("Acceso Denegado. Solo el administrador puede realizar el cierre.");
     }
 
-    const expectedSales = transactions
+    const getCashAmount = (t: any) => {
+      if (t.cash_amount !== undefined && t.cash_amount !== null) {
+        return Number(t.cash_amount);
+      }
+      if (t.description) {
+        const match = t.description.match(/\[CASH:([\d.]+)\]/);
+        if (match) return parseFloat(match[1]);
+        if (t.description.includes("[METODO:tarjeta]") || t.description.includes("[METODO:transferencia]")) {
+          return 0;
+        }
+      }
+      return Number(t.amount || 0);
+    };
+
+    const getCardAmount = (t: any) => {
+      if (t.card_amount !== undefined && t.card_amount !== null) {
+        return Number(t.card_amount);
+      }
+      if (t.description) {
+        const match = t.description.match(/\[CARD:([\d.]+)\]/);
+        if (match) return parseFloat(match[1]);
+        if (t.description.includes("[METODO:tarjeta]")) {
+          return Number(t.amount || 0);
+        }
+      }
+      return 0;
+    };
+
+    const getTransferAmount = (t: any) => {
+      if (t.transfer_amount !== undefined && t.transfer_amount !== null) {
+        return Number(t.transfer_amount);
+      }
+      if (t.description) {
+        const match = t.description.match(/\[TRANS:([\d.]+)\]/);
+        if (match) return parseFloat(match[1]);
+        if (t.description.includes("[METODO:transferencia]")) {
+          return Number(t.amount || 0);
+        }
+      }
+      return 0;
+    };
+
+    const expectedCashSales = transactions
       .filter((t) => t.type === "sale")
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + getCashAmount(t), 0);
+
+    const expectedCardSales = transactions
+      .filter((t) => t.type === "sale")
+      .reduce((sum, t) => sum + getCardAmount(t), 0);
+
+    const expectedTransferSales = transactions
+      .filter((t) => t.type === "sale")
+      .reduce((sum, t) => sum + getTransferAmount(t), 0);
+
     const expectedDeposits = transactions
       .filter((t) => t.type === "deposit")
       .reduce((sum, t) => sum + t.amount, 0);
@@ -164,7 +215,7 @@ export default function CajaModule() {
 
     const expectedTotal =
       Number(session.initial_balance) +
-      expectedSales +
+      expectedCashSales +
       expectedDeposits -
       expectedWithdrawals;
       
@@ -178,7 +229,7 @@ export default function CajaModule() {
         counted_balance: countedTotal,
         discrepancy: discrepancy,
         status: "closed",
-        total_sales: expectedSales,
+        total_sales: expectedCashSales + expectedCardSales + expectedTransferSales,
       })
       .eq("id", session.id);
 
@@ -198,7 +249,10 @@ export default function CajaModule() {
       date: new Date().toLocaleString(),
       cajero: currentUser?.name,
       fondo: session.initial_balance,
-      ventas: expectedSales,
+      ventas: expectedCashSales + expectedCardSales + expectedTransferSales,
+      ventasEfectivo: expectedCashSales,
+      ventasTarjeta: expectedCardSales,
+      ventasTransferencia: expectedTransferSales,
       ingresos: expectedDeposits,
       retiros: expectedWithdrawals,
       esperado: expectedTotal,
@@ -297,9 +351,12 @@ export default function CajaModule() {
               style={{ borderBottom: "1px dashed black", margin: "10px 0" }}
             ></div>
             <p>Fondo Inicial: ${ticketData.fondo}</p>
-            <p>Ventas (+): ${ticketData.ventas}</p>
-            <p>Ingresos (+): ${ticketData.ingresos}</p>
-            <p>Retiros (-): ${ticketData.retiros}</p>
+            <p>Ventas Totales (+): ${ticketData.ventas.toFixed(2)}</p>
+            <p style={{ paddingLeft: "15px", fontSize: "0.85rem", margin: "2px 0" }}>↳ Efec: ${ticketData.ventasEfectivo.toFixed(2)}</p>
+            <p style={{ paddingLeft: "15px", fontSize: "0.85rem", margin: "2px 0" }}>↳ Tarj: ${ticketData.ventasTarjeta.toFixed(2)}</p>
+            <p style={{ paddingLeft: "15px", fontSize: "0.85rem", margin: "2px 0" }}>↳ Trans: ${ticketData.ventasTransferencia.toFixed(2)}</p>
+            <p>Ingresos (+): ${ticketData.ingresos.toFixed(2)}</p>
+            <p>Retiros (-): ${ticketData.retiros.toFixed(2)}</p>
             <div
               style={{ borderBottom: "1px dashed black", margin: "10px 0" }}
             ></div>
@@ -452,10 +509,12 @@ export default function CajaModule() {
                   >
                     <span>
                       {t.type === "sale"
-                        ? "🛒 Venta"
-                        : t.type === "deposit"
-                          ? "⬇️ Ingreso"
-                          : "⬆️ Retiro"}
+                        ? `🛒 Venta [${(t.payment_method || t.description?.match(/\[METODO:(\w+)\]/)?.[1] || "efectivo").toUpperCase()}]`
+                        : t.type === "refund"
+                          ? "↩️ Devolución"
+                          : t.type === "deposit"
+                            ? "⬇️ Ingreso"
+                            : "⬆️ Retiro"}
                       {t.description && (
                         <span
                           style={{
