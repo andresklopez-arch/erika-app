@@ -12,6 +12,14 @@ interface Supplier {
   notes: string;
 }
 
+interface SupplierOrder {
+  id: string;
+  created_at: string;
+  supplier_id: string;
+  action_type: string;
+  notes: string;
+}
+
 interface SuppliersManagerModalProps {
   onClose: () => void;
 }
@@ -23,7 +31,7 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
 
   // Historial states
   const [historyModalSupplier, setHistoryModalSupplier] = useState<Supplier | null>(null);
-  const [supplierHistory, setSupplierHistory] = useState<any[]>([]);
+  const [supplierHistory, setSupplierHistory] = useState<SupplierOrder[]>([]);
   
   // WhatsApp Dropdown state
   const [waMenuOpen, setWaMenuOpen] = useState<string | null>(null);
@@ -43,6 +51,7 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchSuppliers();
   }, []);
 
@@ -131,7 +140,7 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
     const fileExt = file.name.split('.').pop();
     const fileName = `${historyModalSupplier.id}_${Date.now()}.${fileExt}`;
     
-    const { data, error } = await supabase.storage.from('invoices').upload(fileName, file);
+    const { error } = await supabase.storage.from('invoices').upload(fileName, file);
     if (error) {
       alert("Error al subir archivo. ¿Ejecutaste el script SQL para crear el bucket 'invoices'?");
       console.error(error);
