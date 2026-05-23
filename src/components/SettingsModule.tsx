@@ -57,6 +57,7 @@ export default function SettingsModule() {
   const [connectionType, setConnectionType] = useState<string>("system");
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     const savedVoice = localStorage.getItem("ERIKA_VOICE_KEYWORD");
     if (savedVoice) setVoiceKeyword(savedVoice);
 
@@ -117,14 +118,15 @@ export default function SettingsModule() {
     if (savedConnected !== null) setIsConnected(savedConnected !== "false");
     if (savedType) setConnectionType(savedType);
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
     fetchUsers();
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
-  const fetchUsers = async () => {
+  async function fetchUsers() {
     const { data } = await supabase.from("users").select("*");
     if (data) setSystemUsers(data);
-  };
+  }
 
   const saveConfig = () => {
     if (!checkAdmin()) return;
