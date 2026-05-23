@@ -79,8 +79,8 @@ export default function SmartImporter({
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: "binary" });
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         const rawData = XLSX.utils.sheet_to_json(worksheet, {
@@ -168,11 +168,12 @@ export default function SmartImporter({
           setIsProcessing(false);
         }, 1000);
       } catch (err) {
-        alert("Error al leer el Excel. Revisa el formato de columnas.");
+        console.error("Error procesando Excel:", err);
+        alert("Error al leer el Excel. Asegúrate de que no esté dañado o encriptado y revisa las columnas.");
         setIsProcessing(false);
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   };
 
   const processAIFile = async (file: File) => {

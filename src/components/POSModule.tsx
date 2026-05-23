@@ -108,6 +108,7 @@ export default function POSModule() {
   const [cashPayAmount, setCashPayAmount] = useState("");
   const [cardPayAmount, setCardPayAmount] = useState("");
   const [transferPayAmount, setTransferPayAmount] = useState("");
+  const [applyIva, setApplyIva] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [pendingOfflineCount, setPendingOfflineCount] = useState(0);
 
@@ -692,9 +693,10 @@ export default function POSModule() {
   const totalCost = activeTicket.items.reduce((sum, item) => sum + (item.cost * item.qty), 0);
   
   const discountAmount = rawTotal * (activeTicket.discountPct / 100);
-  const finalTotal = rawTotal - discountAmount;
-  const iva = finalTotal * 0.16;
-  const subtotal = finalTotal - iva;
+  const subtotalNeto = rawTotal - discountAmount;
+  const iva = applyIva ? subtotalNeto * 0.16 : 0;
+  const finalTotal = subtotalNeto + iva;
+  const subtotal = subtotalNeto;
 
   const executePrintWindow = (job: any) => {
     const printWindow = window.open("", "_blank", "width=300,height=500");
@@ -707,14 +709,14 @@ export default function POSModule() {
           <span>$${(i.price * i.qty).toFixed(2)}</span>
         </div>
       `).join("");
-      const html = `
-        <html><head><style>body { font-family: 'Courier New', monospace; font-size: 12px; margin: 0; padding: 10px; width: 58mm; color: #000; }</style></head>
-        <body>
           <h3 style="text-align:center; margin:0 0 5px 0;">FERRETERÍA ERIKA</h3>
           <p style="text-align:center; margin:0 0 10px 0;">Ticket: #${realTicketId}</p>
           <div style="border-bottom: 1px dashed #000; margin-bottom: 5px;"></div>
           ${itemsHtml}
           <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
+          ${applyIva ? `<div style="display:flex; justify-content:space-between; font-size: 12px;"><span>Subtotal:</span><span>$${subtotalNeto.toFixed(2)}</span></div>
+          <div style="display:flex; justify-content:space-between; font-size: 12px;"><span>IVA (16%):</span><span>$${iva.toFixed(2)}</span></div>
+          <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>` : ''}
           <div style="display:flex; justify-content:space-between;"><strong>TOTAL:</strong><strong>$${finalTotal.toFixed(2)}</strong></div>
           <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
           <div style="text-align:center; margin-top: 15px;">
@@ -754,6 +756,14 @@ export default function POSModule() {
             <div class="divider"></div>
             ${itemsHtml}
             <div class="divider"></div>
+            ${applyIva ? `<div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+              <div>Subtotal:</div>
+              <div>$${subtotalNeto.toFixed(2)}</div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+              <div>IVA (16%):</div>
+              <div>$${iva.toFixed(2)}</div>
+            </div>` : ''}
             <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
               <div>Total Mercancía:</div>
               <div class="bold">$${finalTotal.toFixed(2)}</div>
@@ -837,7 +847,7 @@ export default function POSModule() {
     
     const title = type === "quote" ? "*COTIZACIÓN - FERRETERÍA ERIKA*" : "*RECIBO DE COMPRA - FERRETERÍA ERIKA*";
     const itemsText = activeTicket.items.map(i => `▪️ ${i.qty}x ${i.name} - $${(i.price * i.qty).toFixed(2)}`).join("%0A");
-    const totalText = `*TOTAL: $${finalTotal.toFixed(2)}*`;
+    const totalText = applyIva ? `*SUBTOTAL: $${subtotalNeto.toFixed(2)}*%0A*IVA (16%): $${iva.toFixed(2)}*%0A*TOTAL: $${finalTotal.toFixed(2)}*` : `*TOTAL: $${finalTotal.toFixed(2)}*`;
     
     const msg = `${title}%0A%0A${itemsText}%0A%0A${totalText}%0A%0A¡Gracias por su preferencia!`;
     window.open(`https://wa.me/52${phone}?text=${msg}`, "_blank");
@@ -1342,6 +1352,21 @@ export default function POSModule() {
             <span>Subtotal</span>
             <span>${subtotal.toFixed(2)}</span>
           </div>
+          
+          {activeTicket.discountPct > 0 && (
+             <div className="flex-between" style={{ marginBottom: "10px", color: "#10b981" }}>
+               <span>Descuento ({activeTicket.discountPct}%):</span>
+               <span>-${discountAmount.toFixed(2)}</span>
+             </div>
+          )}
+
+          {applyIva && (
+             <div className="flex-between" style={{ marginBottom: "10px", color: "#3b82f6" }}>
+               <span>IVA (16%):</span>
+               <span>+${iva.toFixed(2)}</span>
+             </div>
+          )}
+
           <div
             className="flex-between"
             style={{
@@ -1357,6 +1382,14 @@ export default function POSModule() {
               ${finalTotal.toFixed(2)}
             </span>
           </div>
+
+          <div style={{ marginBottom: "15px", display: "flex", justifyContent: "flex-end" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.9rem", color: applyIva ? "#3b82f6" : "var(--color-secondary)" }}>
+              <input type="checkbox" checked={applyIva} onChange={(e) => setApplyIva(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#3b82f6" }} />
+              Cobrar IVA (16%)
+            </label>
+          </div>
+
           <div style={{ marginBottom: "15px" }}>
             <select
               value={selectedCustomerId}

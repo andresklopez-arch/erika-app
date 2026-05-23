@@ -29,6 +29,7 @@ export default function InboundModal({ onClose, onSuccess }: InboundModalProps) 
   const [cost, setCost] = useState("");
   const [entries, setEntries] = useState<InboundEntry[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [applyIva, setApplyIva] = useState(false);
 
   const fetchItems = async () => {
     const { data } = await supabase.from("inventory").select("id, name, stock, cost, price");
@@ -76,9 +77,10 @@ export default function InboundModal({ onClose, onSuccess }: InboundModalProps) 
     let hasError = false;
     for (const entry of entries) {
       const newStock = entry.item.stock + entry.qtyReceived;
+      const finalCost = applyIva ? entry.newCost * 1.16 : entry.newCost;
       const { error } = await supabase
         .from("inventory")
-        .update({ stock: newStock, cost: entry.newCost })
+        .update({ stock: newStock, cost: finalCost })
         .eq("id", entry.item.id);
       if (error) {
          console.error(error);
@@ -164,7 +166,19 @@ export default function InboundModal({ onClose, onSuccess }: InboundModalProps) 
 
         <div style={{ marginTop: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
            <div>
-              <strong style={{ fontSize: "1.2rem", color: "#10b981" }}>Total Factura: ${entries.reduce((sum, e) => sum + (e.qtyReceived * e.newCost), 0).toFixed(2)}</strong>
+              <strong style={{ fontSize: "1.2rem", color: "#10b981" }}>Subtotal Factura: ${entries.reduce((sum, e) => sum + (e.qtyReceived * e.newCost), 0).toFixed(2)}</strong>
+              {applyIva && (
+                <>
+                  <br/>
+                  <strong style={{ fontSize: "1.2rem", color: "#3b82f6" }}>Total (+IVA): ${(entries.reduce((sum, e) => sum + (e.qtyReceived * e.newCost), 0) * 1.16).toFixed(2)}</strong>
+                </>
+              )}
+              <div style={{ marginTop: "10px" }}>
+                 <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", color: "white" }}>
+                    <input type="checkbox" checked={applyIva} onChange={(e) => setApplyIva(e.target.checked)} style={{ width: "18px", height: "18px", accentColor: "#10b981" }} />
+                    Agregar IVA (16%) al costo de los productos
+                 </label>
+              </div>
            </div>
            <button className="btn-primary" onClick={handleSave} disabled={entries.length === 0 || isSaving} style={{ background: "#10b981", border: "none", padding: "12px 24px", fontSize: "1.1rem" }}>
              {isSaving ? "Guardando..." : "✅ Confirmar Entrada al Inventario"}
