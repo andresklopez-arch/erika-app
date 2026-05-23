@@ -30,14 +30,15 @@ export default function InboundModal({ onClose, onSuccess }: InboundModalProps) 
   const [entries, setEntries] = useState<InboundEntry[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
-  useEffect(() => {
-    fetchItems();
-  }, []);
-
   const fetchItems = async () => {
     const { data } = await supabase.from("inventory").select("id, name, stock, cost, price");
     if (data) setItems(data);
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchItems();
+  }, []);
 
   const filteredItems = searchTerm.length > 1 
     ? items.filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase())).slice(0, 5)
