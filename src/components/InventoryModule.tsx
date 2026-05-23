@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams, useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import SmartImporter from "./SmartImporter";
@@ -33,6 +34,7 @@ export default function InventoryModule() {
 
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   // Derived state from tab search param to prevent state out-of-sync and click-blocking modals
   const showClientModal = tab === "clientes";
@@ -60,6 +62,7 @@ export default function InventoryModule() {
   };
 
   useEffect(() => {
+    setMounted(true);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchInventory(false);
   }, []);
@@ -663,7 +666,7 @@ export default function InventoryModule() {
         )}
       </div>
 
-      {showImporter && (
+      {mounted && showImporter && createPortal(
         <SmartImporter
           avgMargin={avgMargin}
           existingItems={items}
@@ -710,37 +713,44 @@ export default function InventoryModule() {
               `✅ ERIKA Procesó la Importación en la NUBE.\n\n📊 Actualizados: ${updatedCount} productos.\n🆕 Nuevos: ${newCount} productos.`,
             );
           }}
-        />
+        />,
+        document.body
       )}
       
-      {showClientModal && (
-        <ClientCaptureModal onClose={clearTabParam} onSuccess={() => {}} />
+      {mounted && showClientModal && createPortal(
+        <ClientCaptureModal onClose={clearTabParam} onSuccess={() => {}} />,
+        document.body
       )}
       
-      {showSuppliersModal && (
-        <SuppliersManagerModal onClose={clearTabParam} />
+      {mounted && showSuppliersModal && createPortal(
+        <SuppliersManagerModal onClose={clearTabParam} />,
+        document.body
       )}
       
-      {showAccountsPayableModal && (
-        <AccountsPayableModal onClose={clearTabParam} />
+      {mounted && showAccountsPayableModal && createPortal(
+        <AccountsPayableModal onClose={clearTabParam} />,
+        document.body
       )}
       
-      {showLossesModal && (
-        <LossesManagerModal onClose={clearTabParam} />
+      {mounted && showLossesModal && createPortal(
+        <LossesManagerModal onClose={clearTabParam} />,
+        document.body
       )}
 
-      {showLayaways && (
-        <LayawayModal show={showLayaways} onClose={clearTabParam} />
+      {mounted && showLayaways && createPortal(
+        <LayawayModal show={showLayaways} onClose={clearTabParam} />,
+        document.body
       )}
       
-      {showInboundModal && (
+      {mounted && showInboundModal && createPortal(
         <InboundModal 
           onClose={clearTabParam} 
           onSuccess={async () => {
             await fetchInventory(true);
             clearTabParam();
           }} 
-        />
+        />,
+        document.body
       )}
     </div>
   );
