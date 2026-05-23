@@ -6,6 +6,7 @@ export default function CustomersModule() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
   const [payAmount, setPayAmount] = useState("");
@@ -128,8 +129,30 @@ export default function CustomersModule() {
           >
             Directorio de Clientes
           </h3>
+          <div style={{ margin: "10px 0" }}>
+            <input 
+              type="text" 
+              placeholder="🔍 Buscar por nombre, teléfono o RFC..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                borderRadius: "6px",
+                border: "1px solid var(--glass-border)",
+                background: "rgba(0,0,0,0.3)",
+                color: "white",
+                fontSize: "0.85rem",
+                outline: "none"
+              }}
+            />
+          </div>
           <ul style={{ listStyle: "none", padding: 0, marginTop: "10px" }}>
-            {customers.map((c) => (
+            {customers.filter(c => 
+              c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              (c.phone && c.phone.includes(searchQuery)) ||
+              (c.rfc && c.rfc.toLowerCase().includes(searchQuery.toLowerCase()))
+            ).map((c) => (
               <li
                 key={c.id}
                 onClick={() => setSelectedCustomerId(c.id)}
