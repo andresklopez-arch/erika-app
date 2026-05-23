@@ -97,15 +97,8 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="glass-panel sidebar-container">
-      <div className="flex-center" style={{ flexDirection: "column", textAlign: "center" }}>
-        <img src="/erika_avatar.png" alt="ERIKA" className="avatar" />
-        <div className="title-container">
-          <h2 style={{ color: "var(--color-primary)" }}>ERIKA</h2>
-          <span style={{ fontSize: "0.8rem", color: "var(--color-secondary)" }}>Sistema Online</span>
-        </div>
-      </div>
-      <nav style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "20px" }}>
+    <aside className="glass-panel sidebar-container" style={{ padding: "15px 8px" }}>
+      <nav style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
         {(isAdmin || p.pos) && (
           <Link
             href="/"
@@ -179,7 +172,7 @@ export default function Sidebar() {
               <span className="shortcut-badge">Alt + 5</span>
             </Link>
             {isActive("/inventario") && (
-              <div className="submenu-container" style={{ paddingLeft: "25px", display: "flex", flexDirection: "column", gap: "6px", fontSize: "0.85rem", borderLeft: "1px dashed rgba(255,255,255,0.1)", marginLeft: "12px", marginBottom: "10px" }}>
+              <div className="submenu-container" style={{ paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.8rem", borderLeft: "1px dashed rgba(255,255,255,0.1)", marginLeft: "12px", marginBottom: "6px" }}>
                 <Link href="/inventario" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
                   <span>📂</span><span>General</span>
                 </Link>
