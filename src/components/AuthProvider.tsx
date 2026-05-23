@@ -12,7 +12,7 @@ interface User {
 export interface BusinessSettings {
   target_utility: number;
   monthly_goals: number;
-  config: Record<string, any>;
+  config: Record<string, unknown>;
 }
 
 interface AuthContextType {
@@ -43,10 +43,21 @@ export default function AuthProvider({
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
-  const [businessSettings, setBusinessSettings] = useState<BusinessSettings>({
-    target_utility: 30,
-    monthly_goals: 0,
-    config: {},
+  const [businessSettings, setBusinessSettings] = useState<BusinessSettings>(() => {
+    if (typeof window !== "undefined") {
+      const sTarget = localStorage.getItem("ERIKA_TARGET_UTILITY");
+      const sGoal = localStorage.getItem("ERIKA_MONTHLY_GOALS");
+      return {
+        target_utility: sTarget ? parseFloat(sTarget) : 30,
+        monthly_goals: sGoal ? parseFloat(sGoal) : 0,
+        config: {},
+      };
+    }
+    return {
+      target_utility: 30,
+      monthly_goals: 0,
+      config: {},
+    };
   });
 
   const refreshSettings = async () => {
@@ -121,17 +132,6 @@ export default function AuthProvider({
       document.documentElement.removeAttribute("data-theme");
     }
 
-    // Load initial fallback values from local storage
-    const sTarget = localStorage.getItem("ERIKA_TARGET_UTILITY");
-    const sGoal = localStorage.getItem("ERIKA_MONTHLY_GOALS");
-    if (sTarget || sGoal) {
-      setBusinessSettings(prev => ({
-        ...prev,
-        target_utility: sTarget ? parseFloat(sTarget) : prev.target_utility,
-        monthly_goals: sGoal ? parseFloat(sGoal) : prev.monthly_goals,
-      }));
-    }
-
     const saved = localStorage.getItem("ERIKA_USER");
     if (saved) setCurrentUser(JSON.parse(saved));
     setIsLoading(false);
@@ -143,7 +143,7 @@ export default function AuthProvider({
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    const { data: user, error: dbError } = await supabase
+    const { data: user } = await supabase
       .from("users")
       .select("*")
       .eq("pin", pinInput)
