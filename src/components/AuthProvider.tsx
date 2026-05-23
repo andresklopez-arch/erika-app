@@ -1,7 +1,7 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { BusinessSettings, BusinessSettingsSchema } from "../lib/settingsSchema";
+import { BusinessSettings, BusinessSettingsSchema, BusinessConfig } from "../lib/settingsSchema";
 
 interface User {
   id: string;
@@ -15,7 +15,7 @@ interface AuthContextType {
   currentUser: User | null;
   logout: () => void;
   businessSettings: BusinessSettings;
-  updateBusinessSettings: (settings: Partial<BusinessSettings>) => Promise<boolean>;
+  updateBusinessSettings: (settings: { target_utility?: number; monthly_goals?: number; config?: Partial<BusinessConfig> }) => Promise<boolean>;
   refreshSettings: () => Promise<void>;
 }
 
@@ -152,7 +152,7 @@ export default function AuthProvider({
     }
   };
 
-  const updateBusinessSettings = async (newSettings: Partial<BusinessSettings>): Promise<boolean> => {
+  const updateBusinessSettings = async (newSettings: { target_utility?: number; monthly_goals?: number; config?: Partial<BusinessConfig> }): Promise<boolean> => {
     if (currentUser?.role !== "admin") {
       alert("❌ Acceso Denegado. Se requieren privilegios de Administrador para cambiar configuraciones.");
       return false;
