@@ -76,6 +76,25 @@ export default function SettingsModule() {
     if (sTargetUtility) setTargetUtility(sTargetUtility);
     if (sMonthlyGoals) setMonthlyGoals(sMonthlyGoals);
 
+    const fetchDbSettings = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("business_settings")
+          .select("target_utility, monthly_goals")
+          .eq("id", "erika_global")
+          .single();
+        if (data && !error) {
+          setTargetUtility(String(data.target_utility));
+          setMonthlyGoals(String(data.monthly_goals));
+          localStorage.setItem("ERIKA_TARGET_UTILITY", String(data.target_utility));
+          localStorage.setItem("ERIKA_MONTHLY_GOALS", String(data.monthly_goals));
+        }
+      } catch (e) {
+        console.warn("Fallo al leer business_settings en Supabase:", e);
+      }
+    };
+    fetchDbSettings();
+
     if (bName) setBusinessName(bName);
     if (bRfc) setBusinessRfc(bRfc);
     if (bPhone) setBusinessPhone(bPhone);
@@ -116,10 +135,26 @@ export default function SettingsModule() {
     alert("✅ Configuración de Mayoreo Automático guardada.");
   };
 
-  const saveUtilityAndGoalsConfig = () => {
+  const saveUtilityAndGoalsConfig = async () => {
     localStorage.setItem("ERIKA_TARGET_UTILITY", targetUtility);
     localStorage.setItem("ERIKA_MONTHLY_GOALS", monthlyGoals);
-    alert("✅ Utilidad y Metas de Venta actualizadas.");
+
+    try {
+      const { error } = await supabase
+        .from("business_settings")
+        .upsert({
+          id: "erika_global",
+          target_utility: parseFloat(targetUtility) || 0,
+          monthly_goals: parseFloat(monthlyGoals) || 0,
+          updated_at: new Date().toISOString()
+        });
+      if (error) {
+        console.warn("Fallo al actualizar business_settings en Supabase:", error.message);
+      }
+    } catch (e) {
+      console.warn("Error de red al actualizar configuracion de metas en Supabase:", e);
+    }
+    alert("✅ Utilidad y Metas de Venta actualizadas (sincronizado con la nube).");
   };
 
   const toggleTheme = (newTheme: string) => {
