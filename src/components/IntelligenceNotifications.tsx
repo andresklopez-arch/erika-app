@@ -100,13 +100,16 @@ export default function IntelligenceNotifications() {
     // Suscripción Realtime a cambios en base de datos para alertas inmediatas
     const channel = supabase
       .channel("erika-alerts-channel")
-      .on("postgres_changes", { event: "*", schema: "public", table: "inventory" }, () => {
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "inventory" }, () => {
          fetchAlerts();
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "cash_sessions" }, () => {
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "cash_sessions" }, () => {
          fetchAlerts();
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "business_losses" }, () => {
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "cash_sessions" }, () => {
+         fetchAlerts();
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "business_losses" }, () => {
          fetchAlerts();
       })
       .subscribe();
