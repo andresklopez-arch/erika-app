@@ -103,6 +103,11 @@ export default function POSModule() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"efectivo" | "tarjeta" | "transferencia" | "mixto" | "credito">("efectivo");
+  const [cashPayAmount, setCashPayAmount] = useState("");
+  const [cardPayAmount, setCardPayAmount] = useState("");
+  const [transferPayAmount, setTransferPayAmount] = useState("");
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [pendingOfflineCount, setPendingOfflineCount] = useState(0);
 
@@ -556,6 +561,112 @@ export default function POSModule() {
     };
 
     recognition.start();
+  };
+
+  const handleCheckoutSubmit = async (selectedMethod: "efectivo" | "tarjeta" | "transferencia" | "mixto", cashAmt: number, cardAmt: number, transferAmt: number) => {
+    if (activeTicket.items.length === 0)
+      return alert("El ticket está vacío.");
+
+    const totalAmt = finalTotal;
+
+    if (isOffline) {
+      await saveTransactionOffline({
+        session_id: 0,
+        type: "sale",
+        amount: totalAmt,
+        description: `Venta Offline Ticket #${activeTicket.id} [Método: ${selectedMethod}]`,
+        device_info: navigator.userAgent,
+      });
+      alert(
+        `⚠️ ¡Cobro Exitoso en ${selectedMethod.toUpperCase()} (Modo Offline)!\nSe sincronizará con la nube cuando regrese el Internet.`,
+      );
+      updateOfflineStatus();
+    } else {
+      const { data: session } = await supabase
+        .from("cash_sessions")
+        .select("*")
+        .eq("status", "open")
+        .order("opened_at", { ascending: false })
+        .limit(1)
+        .single();
+      if (!session)
+        return alert(
+          "❌ LA CAJA ESTÁ CERRADA. Ve al menú 'Arqueo de Caja' para iniciar tu turno y declarar el fondo inicial.",
+        );
+
+      const descriptionText = `Venta Ticket #${activeTicket.id}${selectedCustomerId ? ` (Cliente ID: ${selectedCustomerId})` : ""} [METODO:${selectedMethod}] [CASH:${cashAmt}] [CARD:${cardAmt}] [TRANS:${transferAmt}] [COSTO:${totalCost.toFixed(2)}]`;
+
+      const { error } = await supabase
+        .from("cash_transactions")
+        .insert({
+          session_id: session.id,
+          type: "sale",
+          amount: totalAmt,
+          description: descriptionText,
+          device_info: navigator.userAgent,
+          payment_method: selectedMethod,
+          cash_amount: cashAmt,
+          card_amount: cardAmt,
+          transfer_amount: transferAmt
+        });
+
+      if (error) {
+        console.warn("Falla al insertar nuevas columnas de método de pago, reintentando con fallback...");
+        const { error: fallbackError } = await supabase
+          .from("cash_transactions")
+          .insert({
+            session_id: session.id,
+            type: "sale",
+            amount: totalAmt,
+            description: descriptionText,
+            device_info: navigator.userAgent
+          });
+        
+        if (fallbackError) return alert("Error al cobrar: " + fallbackError.message);
+      }
+
+      let realTicketId = Date.now();
+      const { data: quoteData } = await supabase.from("quotes").insert({
+         customer_name: selectedCustomerId ? (customers.find(c => c.id === selectedCustomerId)?.name || "Venta Registrada") : "Venta Mostrador",
+         items: activeTicket.items,
+         total: totalAmt,
+         status: "ticket"
+      }).select("id").single();
+      if (quoteData) realTicketId = quoteData.id;
+
+      let puntosGanados = 0;
+      if (selectedCustomerId) {
+         const customer = customers.find(c => c.id === selectedCustomerId);
+         if (customer) {
+            puntosGanados = Math.floor(totalAmt / loyaltyRates.earnRate) * loyaltyRates.earnPoints;
+            if (puntosGanados > 0) {
+               await supabase.from("customers").update({ points: (customer.points || 0) + puntosGanados }).eq("id", selectedCustomerId);
+               alert(`⭐ El cliente ganó ${puntosGanados} Erika Puntos.`);
+            }
+         }
+      }
+      alert(
+        `✅ ¡Cobro Exitoso por $${totalAmt.toFixed(2)} [Método: ${selectedMethod.toUpperCase()}]!\nEl dinero ha sido ingresado a la Caja.`,
+      );
+
+      triggerPrint({
+        type: "ticket",
+        data: {
+          realTicketId,
+          items: [...activeTicket.items],
+          finalTotal: totalAmt
+        }
+      });
+    }
+
+    setTickets(
+      tickets.map((t) =>
+        t.id === activeTicketId
+          ? { ...t, items: [], discountPct: 0 }
+          : t
+      )
+    );
+    setShowCheckoutModal(false);
   };
 
   const getCrossSellSuggestions = () => {
@@ -1330,100 +1441,21 @@ export default function POSModule() {
               style={{
                 flex: 1,
                 padding: "15px",
-                background: "transparent",
-                border: "1px solid var(--color-primary)",
+                background: "linear-gradient(135deg, var(--color-primary), #059669)",
+                border: "none",
+                fontWeight: "bold",
+                color: "white"
               }}
-              onClick={async () => {
-                if (activeTicket.items.length === 0)
-                  return alert("El ticket está vacío.");
-
-                if (isOffline) {
-                  // MODO OFFLINE: Guardar localmente
-                  await saveTransactionOffline({
-                    session_id: 0, // Mock id for offline
-                    type: "sale",
-                    amount: finalTotal,
-                    description: `Venta Offline Ticket #${activeTicket.id}`,
-                    device_info: navigator.userAgent,
-                  });
-                  alert(
-                    `⚠️ ¡Cobro Exitoso en Efectivo (Modo Offline)!\nSe sincronizará con la nube cuando regrese el Internet.`,
-                  );
-                  updateOfflineStatus();
-                  updateOfflineStatus();
-                } else {
-                  // MODO ONLINE
-                  const { data: session } = await supabase
-                    .from("cash_sessions")
-                    .select("*")
-                    .eq("status", "open")
-                    .order("opened_at", { ascending: false })
-                    .limit(1)
-                    .single();
-                  if (!session)
-                    return alert(
-                      "❌ LA CAJA ESTÁ CERRADA. Ve al menú 'Arqueo de Caja' para iniciar tu turno y declarar el fondo inicial.",
-                    );
-
-                  const { error } = await supabase
-                    .from("cash_transactions")
-                    .insert({
-                      session_id: session.id,
-                      type: "sale",
-                      amount: finalTotal,
-                      description: `Venta Ticket #${activeTicket.id}${selectedCustomerId ? ` (Cliente ID: ${selectedCustomerId})` : ""} [COSTO: ${totalCost.toFixed(2)}]`,
-                      device_info: navigator.userAgent,
-                    });
-
-                  if (error) return alert("Error al cobrar: " + error.message);
-
-                  // Guardar el ticket exacto para la facturación electrónica
-                  let realTicketId = Date.now();
-                  const { data: quoteData } = await supabase.from("quotes").insert({
-                     customer_name: "Venta Mostrador",
-                     items: activeTicket.items,
-                     total: finalTotal,
-                     status: "ticket"
-                  }).select("id").single();
-                  if (quoteData) realTicketId = quoteData.id;
-
-                  // Sumar Puntos si hay cliente (según configuración)
-                  let puntosGanados = 0;
-                  if (selectedCustomerId) {
-                     const customer = customers.find(c => c.id === selectedCustomerId);
-                     if (customer) {
-                        puntosGanados = Math.floor(finalTotal / loyaltyRates.earnRate) * loyaltyRates.earnPoints;
-                        if (puntosGanados > 0) {
-                           await supabase.from("customers").update({ points: (customer.points || 0) + puntosGanados }).eq("id", selectedCustomerId);
-                           alert(`⭐ El cliente ganó ${puntosGanados} Erika Puntos.`);
-                        }
-                     }
-                  }
-                  alert(
-                    `✅ ¡Cobro Exitoso en Efectivo por $${finalTotal.toFixed(2)}!\nEl dinero ha sido ingresado a la Caja Fuerte.`,
-                  );
-
-                  // Auto-imprimir ticket térmico
-                  triggerPrint({
-                    type: "ticket",
-                    data: {
-                      realTicketId,
-                      items: [...activeTicket.items],
-                      finalTotal
-                    }
-                  });
-                }
-
-                setTickets(
-                  tickets.map((t) =>
-                    t.id === activeTicketId
-                      ? { ...t, items: [], discountPct: 0 }
-                      : t,
-                  ),
-                );
+              onClick={() => {
+                if (activeTicket.items.length === 0) return alert("El ticket está vacío.");
+                setPaymentMethod("efectivo");
+                setCashPayAmount(finalTotal.toFixed(2));
+                setCardPayAmount("");
+                setTransferPayAmount("");
+                setShowCheckoutModal(true);
               }}
             >
-              💰 Efectivo
+              💰 Cobrar / Pagar
             </button>
             <button
               className="btn-primary"
@@ -1732,6 +1764,168 @@ export default function POSModule() {
           if (custData) setCustomers(custData);
         }}
       />
+
+      {showCheckoutModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.85)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backdropFilter: "blur(5px)"
+          }}
+        >
+          <div className="glass-panel animate-fade-in" style={{ width: "450px", padding: "30px", border: "1px solid var(--color-primary)", position: "relative" }}>
+            <button
+              onClick={() => setShowCheckoutModal(false)}
+              style={{ position: "absolute", top: "15px", right: "15px", background: "transparent", color: "white", border: "none", cursor: "pointer", fontSize: "1.2rem" }}
+            >
+              ✖
+            </button>
+
+            <h3 style={{ color: "var(--color-primary)", marginBottom: "15px", textAlign: "center" }}>
+              💵 Registrar Pago de Venta
+            </h3>
+            
+            <div style={{ background: "rgba(255,255,255,0.05)", padding: "15px", borderRadius: "8px", marginBottom: "20px", textAlign: "center" }}>
+              <span style={{ fontSize: "0.9rem", opacity: 0.7 }}>TOTAL A COBRAR</span>
+              <h1 style={{ color: "var(--color-secondary)", margin: "5px 0 0 0", fontSize: "2.5rem" }}>
+                ${finalTotal.toFixed(2)}
+              </h1>
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--color-secondary)" }}>
+                Método de Pago:
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                {[
+                  { id: "efectivo", label: "💵 Efectivo" },
+                  { id: "tarjeta", label: "💳 Tarjeta" },
+                  { id: "transferencia", label: "📟 Transfer" },
+                  { id: "mixto", label: "🔀 Mixto" }
+                ].map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => {
+                      setPaymentMethod(m.id as any);
+                      if (m.id === "efectivo") {
+                        setCashPayAmount(finalTotal.toFixed(2));
+                        setCardPayAmount("");
+                        setTransferPayAmount("");
+                      } else if (m.id === "tarjeta") {
+                        setCashPayAmount("");
+                        setCardPayAmount(finalTotal.toFixed(2));
+                        setTransferPayAmount("");
+                      } else if (m.id === "transferencia") {
+                        setCashPayAmount("");
+                        setCardPayAmount("");
+                        setTransferPayAmount(finalTotal.toFixed(2));
+                      } else {
+                        setCashPayAmount("");
+                        setCardPayAmount("");
+                        setTransferPayAmount("");
+                      }
+                    }}
+                    className="btn-primary"
+                    style={{
+                      background: paymentMethod === m.id ? "var(--color-primary)" : "rgba(255,255,255,0.05)",
+                      border: paymentMethod === m.id ? "1px solid var(--color-primary)" : "1px solid rgba(255,255,255,0.1)",
+                      color: "white",
+                      padding: "10px",
+                      fontSize: "0.9rem"
+                    }}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {paymentMethod === "mixto" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", background: "rgba(0,0,0,0.3)", padding: "15px", borderRadius: "8px", marginBottom: "20px" }}>
+                <div>
+                  <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem" }}>💵 Monto Efectivo:</label>
+                  <input
+                    type="number"
+                    value={cashPayAmount}
+                    onChange={e => setCashPayAmount(e.target.value)}
+                    placeholder="0.00"
+                    style={{ width: "100%", padding: "8px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem" }}>💳 Monto Tarjeta:</label>
+                  <input
+                    type="number"
+                    value={cardPayAmount}
+                    onChange={e => setCardPayAmount(e.target.value)}
+                    placeholder="0.00"
+                    style={{ width: "100%", padding: "8px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem" }}>📟 Monto Transferencia:</label>
+                  <input
+                    type="number"
+                    value={transferPayAmount}
+                    onChange={e => setTransferPayAmount(e.target.value)}
+                    placeholder="0.00"
+                    style={{ width: "100%", padding: "8px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }}
+                  />
+                </div>
+                
+                {(() => {
+                  const totalPaid = (parseFloat(cashPayAmount) || 0) + (parseFloat(cardPayAmount) || 0) + (parseFloat(transferPayAmount) || 0);
+                  const diff = finalTotal - totalPaid;
+                  return (
+                    <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "10px", fontSize: "0.85rem" }}>
+                      <span>Suma: ${totalPaid.toFixed(2)}</span>
+                      <span style={{ color: Math.abs(diff) < 0.01 ? "#10b981" : "#ef4444", fontWeight: "bold" }}>
+                        {Math.abs(diff) < 0.01 ? "✓ Cuadrado" : `Resta: $${diff.toFixed(2)}`}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            <button
+              className="btn-primary"
+              onClick={() => {
+                const cash = parseFloat(cashPayAmount) || 0;
+                const card = parseFloat(cardPayAmount) || 0;
+                const transfer = parseFloat(transferPayAmount) || 0;
+                
+                if (paymentMethod === "mixto") {
+                  const totalPaid = cash + card + transfer;
+                  if (Math.abs(finalTotal - totalPaid) >= 0.01) {
+                    return alert("❌ La suma de los montos no coincide con el total de la venta.");
+                  }
+                }
+                
+                handleCheckoutSubmit(paymentMethod === "mixto" ? "mixto" : paymentMethod as any, cash, card, transfer);
+              }}
+              style={{
+                width: "100%",
+                padding: "12px",
+                background: "var(--color-primary)",
+                border: "none",
+                fontWeight: "bold",
+                fontSize: "1.1rem"
+              }}
+            >
+              Confirmar Pago
+            </button>
+          </div>
+        </div>
+      )}
 
       {showPrinterModal && (
         <div
