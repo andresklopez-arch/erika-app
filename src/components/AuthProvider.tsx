@@ -6,6 +6,7 @@ import { BusinessSettings, BusinessSettingsSchema } from "../lib/settingsSchema"
 interface User {
   id: string;
   name: string;
+  pin: string;
   role: "admin" | "cajero";
   permissions?: Record<string, boolean>;
 }
