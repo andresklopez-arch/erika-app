@@ -31,12 +31,20 @@ export default function SettingsModule() {
   const [businessAddress, setBusinessAddress] = useState("");
   const [businessLogo, setBusinessLogo] = useState("");
 
-  const [systemUsers, setSystemUsers] = useState<any[]>([]);
+  interface UserItem {
+    id: string;
+    name: string;
+    pin: string;
+    role: string;
+    permissions?: Record<string, boolean>;
+  }
+
+  const [systemUsers, setSystemUsers] = useState<UserItem[]>([]);
   const [newUserName, setNewUserName] = useState("");
   const [newUserPin, setNewUserPin] = useState("");
   const [roleType, setRoleType] = useState("cajero"); // "cajero", "admin", "custom"
   const [customRoleName, setCustomRoleName] = useState("");
-  const [newPermissions, setNewPermissions] = useState({
+  const [newPermissions, setNewPermissions] = useState<Record<string, boolean>>({
      pos: true,
      dashboard: false,
      caja: true,
@@ -47,11 +55,11 @@ export default function SettingsModule() {
   });
 
   // Estados de Edición de Usuario (Modal)
-  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [editingUser, setEditingUser] = useState<UserItem | null>(null);
   const [editName, setEditName] = useState("");
   const [editPin, setEditPin] = useState("");
   const [editRole, setEditRole] = useState("");
-  const [editPermissions, setEditPermissions] = useState<any>({});
+  const [editPermissions, setEditPermissions] = useState<Record<string, boolean>>({});
 
   const [isConnected, setIsConnected] = useState<boolean>(true);
   const [connectionType, setConnectionType] = useState<string>("system");
@@ -118,7 +126,6 @@ export default function SettingsModule() {
     if (savedConnected !== null) setIsConnected(savedConnected !== "false");
     if (savedType) setConnectionType(savedType);
 
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
     fetchUsers();
     /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
