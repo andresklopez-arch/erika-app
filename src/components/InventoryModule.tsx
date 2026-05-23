@@ -67,6 +67,17 @@ export default function InventoryModule() {
     fetchInventory(false);
   }, []);
 
+  useEffect(() => {
+    if (tab && tab !== "criticos") {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [tab]);
+
   const avgMargin =
     items.length > 0
       ? items.reduce((acc, i) => {
