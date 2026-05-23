@@ -22,6 +22,7 @@ export default function Sidebar() {
       { id: "4", path: "/servicios", allowed: isAdmin || p.servicios },
       { id: "5", path: "/inventario", allowed: isAdmin || p.inventario },
       { id: "6", path: "/configuracion", allowed: isAdmin || p.configuracion },
+      { id: "7", path: "/clientes", allowed: isAdmin || p.pos || p.inventario },
     ];
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -141,6 +142,18 @@ export default function Sidebar() {
             <span className="shortcut-badge">Alt + 3</span>
           </Link>
         )}
+        {(isAdmin || p.pos || p.inventario) && (
+          <Link
+            href="/clientes"
+            className={isActive("/clientes") ? "active" : ""}
+            onClick={(e) => handleLinkClick(e, "/clientes")}
+            title="Clientes y Crédito (Alt + 7)"
+          >
+            <span className="icon">👥</span>
+            <span className="nav-text">Clientes y Crédito</span>
+            <span className="shortcut-badge">Alt + 7</span>
+          </Link>
+        )}
         {(isAdmin || p.servicios) && (
           <Link
             href="/servicios"
@@ -154,16 +167,43 @@ export default function Sidebar() {
           </Link>
         )}
         {(isAdmin || p.inventario) && (
-          <Link
-            href="/inventario"
-            className={isActive("/inventario") ? "active" : ""}
-            onClick={(e) => handleLinkClick(e, "/inventario")}
-            title="Almacén e Inventario (Alt + 5)"
-          >
-            <span className="icon">📦</span>
-            <span className="nav-text">Almacén e Inventario</span>
-            <span className="shortcut-badge">Alt + 5</span>
-          </Link>
+          <>
+            <Link
+              href="/inventario"
+              className={isActive("/inventario") ? "active" : ""}
+              onClick={(e) => handleLinkClick(e, "/inventario")}
+              title="Almacén e Inventario (Alt + 5)"
+            >
+              <span className="icon">📦</span>
+              <span className="nav-text">Almacén e Inventario</span>
+              <span className="shortcut-badge">Alt + 5</span>
+            </Link>
+            {isActive("/inventario") && (
+              <div className="submenu-container" style={{ paddingLeft: "25px", display: "flex", flexDirection: "column", gap: "6px", fontSize: "0.85rem", borderLeft: "1px dashed rgba(255,255,255,0.1)", marginLeft: "12px", marginBottom: "10px" }}>
+                <Link href="/inventario" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                  <span>📂</span><span>General</span>
+                </Link>
+                <Link href="/inventario?tab=recibir" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                  <span>📥</span><span>Recibir Mercancía</span>
+                </Link>
+                <Link href="/inventario?tab=proveedores" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                  <span>🏭</span><span>Proveedores</span>
+                </Link>
+                <Link href="/inventario?tab=cuentas" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                  <span>💳</span><span>Cuentas por Pagar</span>
+                </Link>
+                <Link href="/inventario?tab=gastos" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                  <span>📉</span><span>Gastos y Mermas</span>
+                </Link>
+                <Link href="/inventario?tab=apartados" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                  <span>📦</span><span>Apartados</span>
+                </Link>
+                <Link href="/inventario?tab=carga" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                  <span>⚡</span><span>Carga Inteligente</span>
+                </Link>
+              </div>
+            )}
+          </>
         )}
         {(isAdmin || p.configuracion) && (
           <Link
