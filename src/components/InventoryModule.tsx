@@ -32,34 +32,24 @@ export default function InventoryModule() {
   const tab = searchParams ? searchParams.get("tab") : null;
 
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [importHistory, setImportHistory] = useState<InventoryItem[][]>([]);
-  const [showImporter, setShowImporter] = useState(false);
-  const [showCritical, setShowCritical] = useState(false);
-  const [showClientModal, setShowClientModal] = useState(false);
-  const [showSuppliersModal, setShowSuppliersModal] = useState(false);
-  const [showAccountsPayableModal, setShowAccountsPayableModal] = useState(false);
-  const [showLossesModal, setShowLossesModal] = useState(false);
-  const [showLayaways, setShowLayaways] = useState(false);
-  const [showInboundModal, setShowInboundModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Derived state from tab search param to prevent state out-of-sync and click-blocking modals
+  const showClientModal = tab === "clientes";
+  const showInboundModal = tab === "recibir";
+  const showSuppliersModal = tab === "proveedores";
+  const showAccountsPayableModal = tab === "cuentas";
+  const showLossesModal = tab === "gastos";
+  const showLayaways = tab === "apartados";
+  const showImporter = tab === "carga";
+  const showCritical = tab === "criticos";
 
   const clearTabParam = () => {
     router.push("/inventario");
   };
 
-  useEffect(() => {
-    setShowClientModal(tab === "clientes");
-    setShowInboundModal(tab === "recibir");
-    setShowSuppliersModal(tab === "proveedores");
-    setShowAccountsPayableModal(tab === "cuentas");
-    setShowLossesModal(tab === "gastos");
-    setShowLayaways(tab === "apartados");
-    setShowImporter(tab === "carga");
-    setShowCritical(tab === "criticos");
-  }, [tab]);
-
-  const fetchInventory = async () => {
-    setIsLoading(true);
+  const fetchInventory = async (showLoading = false) => {
+    if (showLoading) setIsLoading(true);
     const { data, error } = await supabase
       .from("inventory")
       .select("*")
@@ -70,7 +60,8 @@ export default function InventoryModule() {
   };
 
   useEffect(() => {
-    fetchInventory();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchInventory(false);
   }, []);
 
   const avgMargin =
@@ -85,7 +76,7 @@ export default function InventoryModule() {
   const exportPurchaseOrders = () => {
     if (criticalItems.length === 0) return alert("No hay productos críticos.");
     const wb = XLSX.utils.book_new();
-    const grouped: Record<string, any[]> = {};
+    const grouped: Record<string, Record<string, string | number | undefined>[]> = {};
 
     criticalItems.forEach((i) => {
       const sup = i.supplier || "SIN_PROVEEDOR";
@@ -676,7 +667,7 @@ export default function InventoryModule() {
         <SmartImporter
           avgMargin={avgMargin}
           existingItems={items}
-          onClose={() => { setShowImporter(false); clearTabParam(); }}
+          onClose={clearTabParam}
           onImport={async (newProducts) => {
             setIsLoading(true);
             let updatedCount = 0;
@@ -714,7 +705,7 @@ export default function InventoryModule() {
                 newCount++;
               }
             }
-            await fetchInventory();
+            await fetchInventory(true);
             alert(
               `✅ ERIKA Procesó la Importación en la NUBE.\n\n📊 Actualizados: ${updatedCount} productos.\n🆕 Nuevos: ${newCount} productos.`,
             );
@@ -723,29 +714,32 @@ export default function InventoryModule() {
       )}
       
       {showClientModal && (
-        <ClientCaptureModal onClose={() => { setShowClientModal(false); clearTabParam(); }} onSuccess={() => {}} />
+        <ClientCaptureModal onClose={clearTabParam} onSuccess={() => {}} />
       )}
       
       {showSuppliersModal && (
-        <SuppliersManagerModal onClose={() => { setShowSuppliersModal(false); clearTabParam(); }} />
+        <SuppliersManagerModal onClose={clearTabParam} />
       )}
       
       {showAccountsPayableModal && (
-        <AccountsPayableModal onClose={() => { setShowAccountsPayableModal(false); clearTabParam(); }} />
+        <AccountsPayableModal onClose={clearTabParam} />
       )}
       
       {showLossesModal && (
-        <LossesManagerModal onClose={() => { setShowLossesModal(false); clearTabParam(); }} />
+        <LossesManagerModal onClose={clearTabParam} />
       )}
 
       {showLayaways && (
-        <LayawayModal show={showLayaways} onClose={() => { setShowLayaways(false); clearTabParam(); }} />
+        <LayawayModal show={showLayaways} onClose={clearTabParam} />
       )}
       
       {showInboundModal && (
         <InboundModal 
-          onClose={() => { setShowInboundModal(false); clearTabParam(); }} 
-          onSuccess={() => { setShowInboundModal(false); fetchInventory(); clearTabParam(); }} 
+          onClose={clearTabParam} 
+          onSuccess={async () => {
+            await fetchInventory(true);
+            clearTabParam();
+          }} 
         />
       )}
     </div>
