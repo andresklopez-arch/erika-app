@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/navigation";
+import { useAuth } from "./AuthProvider";
 
 interface AlertItem {
   id: string;
@@ -12,6 +13,7 @@ interface AlertItem {
 
 export default function IntelligenceNotifications() {
   const router = useRouter();
+  const { currentUser, logout } = useAuth();
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -151,7 +153,22 @@ export default function IntelligenceNotifications() {
       }}
       className="no-print"
     >
-      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: "10px",
+          cursor: "pointer",
+          transition: "transform 0.2s ease"
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = "scale(1.02)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = "scale(1)";
+        }}
+      >
         {/* ERIKA Logo/Avatar & Status Badge */}
         <div
           style={{
@@ -178,16 +195,22 @@ export default function IntelligenceNotifications() {
             }}
           />
           <span style={{ fontSize: "0.85rem", fontWeight: "bold", color: "white" }}>
-            ERIKA
+            {currentUser?.name || "ERIKA"}
           </span>
-          <span style={{ fontSize: "0.7rem", color: "var(--color-secondary)", fontWeight: "600" }}>
-            Online
+          <span style={{ 
+            fontSize: "0.7rem", 
+            background: currentUser?.role === "admin" ? "rgba(244, 63, 94, 0.15)" : "rgba(16, 185, 129, 0.15)",
+            color: currentUser?.role === "admin" ? "var(--color-primary)" : "var(--color-secondary)",
+            padding: "2px 6px",
+            borderRadius: "10px",
+            fontWeight: "600"
+          }}>
+            {currentUser?.role?.toUpperCase() || "OFFLINE"}
           </span>
         </div>
 
-        {/* Botón flotante superior minimalista y elegante */}
-        <button
-          onClick={() => setIsOpen(!isOpen)}
+        {/* Botón flotante de Erika Inteligencia */}
+        <div
           style={{
             background: hasUrgentAlerts 
               ? "linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(220, 38, 38, 0.95))"
@@ -197,7 +220,6 @@ export default function IntelligenceNotifications() {
             color: "white",
             padding: "8px 16px",
             borderRadius: "20px",
-            cursor: "pointer",
             fontSize: "0.85rem",
             fontWeight: "bold",
             display: "flex",
@@ -206,18 +228,11 @@ export default function IntelligenceNotifications() {
             boxShadow: hasUrgentAlerts 
               ? "0 4px 15px rgba(239, 68, 68, 0.4), 0 0 0 1px rgba(239,68,68,0.2)"
               : "0 4px 12px rgba(0,0,0,0.3)",
-            transition: "all 0.3s ease",
             animation: hasUrgentAlerts ? "pulse-alert 2s infinite" : "none"
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = "scale(1.03)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = "scale(1)";
           }}
         >
           <span>{hasUrgentAlerts ? "🚨" : "🧠"}</span>
-          <span>Erika Inteligencia</span>
+          <span>{hasUrgentAlerts ? `${alerts.length} Alertas` : "Erika Inteligencia"}</span>
           {alerts.length > 0 && alerts[0].id !== "erika-ok" && (
             <span style={{
               background: "white",
@@ -234,60 +249,108 @@ export default function IntelligenceNotifications() {
               {alerts.length}
             </span>
           )}
-        </button>
+        </div>
       </div>
 
-      {/* Menú de Notificaciones Desplegable */}
+      {/* Panel Unificado Desplegable (Perfil + Alertas) */}
       {isOpen && (
         <div
           className="glass-panel animate-fade-in"
+          onClick={(e) => e.stopPropagation()}
           style={{
             position: "absolute",
             top: "50px",
-            width: "350px",
-            background: "rgba(22, 22, 34, 0.95)",
+            width: "360px",
+            background: "rgba(22, 22, 34, 0.96)",
             border: "1px solid var(--glass-border)",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
-            borderRadius: "12px",
+            boxShadow: "0 15px 35px rgba(0,0,0,0.6)",
+            borderRadius: "16px",
             overflow: "hidden",
-            padding: "10px"
+            padding: "16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "14px"
           }}
         >
-          <div style={{ padding: "8px 10px", borderBottom: "1px solid rgba(255,255,255,0.08)", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <strong style={{ fontSize: "0.85rem", color: "var(--color-primary)" }}>Alertas y Notificaciones</strong>
-            <button 
-              onClick={fetchAlerts} 
-              style={{ background: "transparent", border: "none", color: "var(--color-secondary)", cursor: "pointer", fontSize: "0.75rem" }}
+          {/* SECCIÓN PERFIL DE EMPLEADO */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: "12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <img
+                src="/erika_avatar.png"
+                alt="Avatar"
+                style={{ width: "36px", height: "36px", borderRadius: "50%", border: "2px solid var(--color-primary)", objectFit: "cover" }}
+              />
+              <div style={{ display: "flex", flexDirection: "column", textAlign: "left" }}>
+                <span style={{ fontSize: "0.9rem", fontWeight: "bold", color: "white" }}>{currentUser?.name || "Cajero"}</span>
+                <span style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)" }}>Sesión de {currentUser?.role === "admin" ? "Administrador" : "Cajero"}</span>
+              </div>
+            </div>
+            
+            <button
+              onClick={() => { logout(); setIsOpen(false); }}
+              style={{
+                background: "rgba(239, 68, 68, 0.15)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+                color: "#ef4444",
+                padding: "6px 12px",
+                borderRadius: "12px",
+                fontSize: "0.75rem",
+                fontWeight: "bold",
+                cursor: "pointer",
+                transition: "all 0.2s ease"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(239, 68, 68, 0.25)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "rgba(239, 68, 68, 0.15)";
+              }}
             >
-              🔄 Recargar
+              🚪 Salir
             </button>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "250px", overflowY: "auto" }}>
-            {alerts.map((alert) => {
-              const borderCol = alert.type === "critical" ? "#ef4444" : alert.type === "warning" ? "#eab308" : "#10b981";
-              return (
-                <div
-                  key={alert.id}
-                  onClick={() => handleAlertClick(alert.targetPath)}
-                  style={{
-                    background: "rgba(0,0,0,0.3)",
-                    borderLeft: `4px solid ${borderCol}`,
-                    padding: "10px",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                    fontSize: "0.8rem",
-                    color: "white",
-                    transition: "background 0.2s ease",
-                    textAlign: "left"
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
-                  onMouseLeave={(e) => e.currentTarget.style.background = "rgba(0,0,0,0.3)"}
-                >
-                  {alert.message}
-                </div>
-              );
-            })}
+          {/* SECCIÓN ALERTAS DE INTELIGENCIA */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+              <strong style={{ fontSize: "0.85rem", color: "var(--color-primary)" }}>Alertas de Inteligencia</strong>
+              <button 
+                onClick={(e) => { e.stopPropagation(); fetchAlerts(); }} 
+                style={{ background: "transparent", border: "none", color: "var(--color-secondary)", cursor: "pointer", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "3px" }}
+              >
+                🔄 Actualizar
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "250px", overflowY: "auto" }}>
+              {alerts.map((alert) => {
+                const borderCol = alert.type === "critical" ? "#ef4444" : alert.type === "warning" ? "#eab308" : "#10b981";
+                const bgCol = alert.type === "critical" ? "rgba(239, 68, 68, 0.05)" : alert.type === "warning" ? "rgba(234, 179, 8, 0.05)" : "rgba(16, 185, 129, 0.05)";
+                return (
+                  <div
+                    key={alert.id}
+                    onClick={() => handleAlertClick(alert.targetPath)}
+                    style={{
+                      background: bgCol,
+                      borderLeft: `4px solid ${borderCol}`,
+                      border: `1px solid rgba(255,255,255,0.03)`,
+                      borderLeftWidth: "4px",
+                      padding: "10px",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      fontSize: "0.8rem",
+                      color: "white",
+                      transition: "all 0.2s ease",
+                      textAlign: "left"
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+                    onMouseLeave={(e) => e.currentTarget.style.background = bgCol}
+                  >
+                    {alert.message}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
