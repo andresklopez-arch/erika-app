@@ -66,6 +66,7 @@ export default function CajaModule() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchSession();
     // Pedir permisos de Notificación Push al cargar la caja
     if ("Notification" in window && Notification.permission !== "granted") {
@@ -152,7 +153,15 @@ export default function CajaModule() {
         if (pin !== "admin123") return alert("Acceso Denegado. Solo el administrador puede realizar el cierre.");
     }
 
-    const getCashAmount = (t: any) => {
+    interface TransactionItem {
+      cash_amount?: number | null;
+      card_amount?: number | null;
+      transfer_amount?: number | null;
+      amount: number;
+      description?: string | null;
+    }
+
+    const getCashAmount = (t: TransactionItem) => {
       if (t.cash_amount !== undefined && t.cash_amount !== null) {
         return Number(t.cash_amount);
       }
@@ -166,7 +175,7 @@ export default function CajaModule() {
       return Number(t.amount || 0);
     };
 
-    const getCardAmount = (t: any) => {
+    const getCardAmount = (t: TransactionItem) => {
       if (t.card_amount !== undefined && t.card_amount !== null) {
         return Number(t.card_amount);
       }
@@ -180,7 +189,7 @@ export default function CajaModule() {
       return 0;
     };
 
-    const getTransferAmount = (t: any) => {
+    const getTransferAmount = (t: TransactionItem) => {
       if (t.transfer_amount !== undefined && t.transfer_amount !== null) {
         return Number(t.transfer_amount);
       }
