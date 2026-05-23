@@ -9,14 +9,26 @@ interface User {
   permissions?: Record<string, boolean>;
 }
 
+export interface BusinessSettings {
+  target_utility: number;
+  monthly_goals: number;
+  config: Record<string, any>;
+}
+
 interface AuthContextType {
   currentUser: User | null;
   logout: () => void;
+  businessSettings: BusinessSettings;
+  updateBusinessSettings: (settings: Partial<BusinessSettings>) => Promise<boolean>;
+  refreshSettings: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   currentUser: null,
   logout: () => {},
+  businessSettings: { target_utility: 30, monthly_goals: 0, config: {} },
+  updateBusinessSettings: async () => false,
+  refreshSettings: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -31,6 +43,75 @@ export default function AuthProvider({
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
+  const [businessSettings, setBusinessSettings] = useState<BusinessSettings>({
+    target_utility: 30,
+    monthly_goals: 0,
+    config: {},
+  });
+
+  const refreshSettings = async () => {
+    try {
+      const { data, error: dbError } = await supabase
+        .from("business_settings")
+        .select("target_utility, monthly_goals, config")
+        .eq("id", "erika_global")
+        .single();
+      if (data && !dbError) {
+        // Enforce types and validation rules (Zod-like validation)
+        const target_utility = Math.max(0, Math.min(100, Number(data.target_utility) || 30));
+        const monthly_goals = Math.max(0, Number(data.monthly_goals) || 0);
+        const config = typeof data.config === "object" && data.config !== null ? data.config : {};
+        
+        setBusinessSettings({ target_utility, monthly_goals, config });
+        localStorage.setItem("ERIKA_TARGET_UTILITY", String(target_utility));
+        localStorage.setItem("ERIKA_MONTHLY_GOALS", String(monthly_goals));
+      }
+    } catch (e) {
+      console.warn("Fallo al sincronizar business_settings:", e);
+    }
+  };
+
+  const updateBusinessSettings = async (newSettings: Partial<BusinessSettings>): Promise<boolean> => {
+    if (currentUser?.role !== "admin") {
+      alert("❌ Acceso Denegado. Se requieren privilegios de Administrador para cambiar configuraciones.");
+      return false;
+    }
+
+    try {
+      const updated = {
+        ...businessSettings,
+        ...newSettings,
+      };
+      
+      // Validation check (Zod-like schema enforcement)
+      updated.target_utility = Math.max(0, Math.min(100, updated.target_utility));
+      updated.monthly_goals = Math.max(0, updated.monthly_goals);
+
+      const { error: dbError } = await supabase
+        .from("business_settings")
+        .upsert({
+          id: "erika_global",
+          target_utility: updated.target_utility,
+          monthly_goals: updated.monthly_goals,
+          config: updated.config,
+          updated_at: new Date().toISOString()
+        });
+
+      if (!dbError) {
+        setBusinessSettings(updated);
+        localStorage.setItem("ERIKA_TARGET_UTILITY", String(updated.target_utility));
+        localStorage.setItem("ERIKA_MONTHLY_GOALS", String(updated.monthly_goals));
+        return true;
+      } else {
+        console.error("Error actualizando configuracion en Supabase:", dbError.message);
+        return false;
+      }
+    } catch (e) {
+      console.error("Fallo de red al actualizar configuracion:", e);
+      return false;
+    }
+  };
+
   useEffect(() => {
     // Apply Theme
     const savedTheme = localStorage.getItem("ERIKA_THEME") || "dark";
@@ -40,10 +121,24 @@ export default function AuthProvider({
       document.documentElement.removeAttribute("data-theme");
     }
 
+    // Load initial fallback values from local storage
+    const sTarget = localStorage.getItem("ERIKA_TARGET_UTILITY");
+    const sGoal = localStorage.getItem("ERIKA_MONTHLY_GOALS");
+    if (sTarget || sGoal) {
+      setBusinessSettings(prev => ({
+        ...prev,
+        target_utility: sTarget ? parseFloat(sTarget) : prev.target_utility,
+        monthly_goals: sGoal ? parseFloat(sGoal) : prev.monthly_goals,
+      }));
+    }
+
     const saved = localStorage.getItem("ERIKA_USER");
     if (saved) setCurrentUser(JSON.parse(saved));
     setIsLoading(false);
-  }, []);
+
+    // Initial config fetch
+    refreshSettings();
+  }, [currentUser]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,7 +250,7 @@ export default function AuthProvider({
   }
 
   return (
-    <AuthContext.Provider value={{ currentUser, logout }}>
+    <AuthContext.Provider value={{ currentUser, logout, businessSettings, updateBusinessSettings, refreshSettings }}>
       {children}
     </AuthContext.Provider>
   );
