@@ -111,6 +111,7 @@ export default function ClientCaptureModal({ onClose, onSuccess }: ClientCapture
               Nombre Completo / Alias *
             </label>
             <input
+              autoFocus
               type="text"
               required
               value={name}
