@@ -276,7 +276,7 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
             <div style={{ display: "flex", gap: "15px" }}>
               <div style={{ flex: 1 }}>
                 <label style={{ display: "block", marginBottom: "5px", color: "var(--color-secondary)" }}>Empresa / Marca *</label>
-                <input required value={name} onChange={e => setName(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }} placeholder="Ej. Truper" />
+                <input autoFocus required value={name} onChange={e => setName(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }} placeholder="Ej. Truper" />
               </div>
               <div style={{ flex: 1 }}>
                 <label style={{ display: "block", marginBottom: "5px", color: "var(--color-secondary)" }}>Nombre del Agente/Contacto</label>
