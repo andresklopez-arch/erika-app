@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS business_settings (
   id TEXT PRIMARY KEY DEFAULT 'erika_global',
   target_utility NUMERIC DEFAULT 30,
   monthly_goals NUMERIC DEFAULT 0,
+  config JSONB DEFAULT '{}'::jsonb,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -20,6 +21,6 @@ CREATE POLICY "Permitir actualizacion pública de configuracion" ON business_set
   FOR UPDATE USING (true);
 
 -- Insertar registro por defecto si no existe
-INSERT INTO business_settings (id, target_utility, monthly_goals)
-VALUES ('erika_global', 30, 0)
+INSERT INTO business_settings (id, target_utility, monthly_goals, config)
+VALUES ('erika_global', 30, 0, '{}'::jsonb)
 ON CONFLICT (id) DO NOTHING;
