@@ -228,12 +228,11 @@ export default function AuthProvider({
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrentUser(JSON.parse(saved));
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(false);
 
     // Initial config fetch
     refreshSettings();
-  }, [currentUser]);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
