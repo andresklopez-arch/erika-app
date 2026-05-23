@@ -1,8 +1,18 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "./AuthProvider";
 
 export default function SettingsModule() {
+  const { currentUser } = useAuth();
+
+  const checkAdmin = () => {
+    if (currentUser?.role !== "admin") {
+      alert("❌ Acceso Denegado. Esta acción requiere privilegios de Administrador.");
+      return false;
+    }
+    return true;
+  };
   const [voiceKeyword, setVoiceKeyword] = useState("erika");
   const [earnRate, setEarnRate] = useState("100"); // Gasta $100
   const [earnPoints, setEarnPoints] = useState("1"); // Gana 1 punto
@@ -116,6 +126,7 @@ export default function SettingsModule() {
   };
 
   const saveConfig = () => {
+    if (!checkAdmin()) return;
     localStorage.setItem("ERIKA_VOICE_KEYWORD", voiceKeyword.toLowerCase());
     alert(
       "✅ Configuración guardada. El Cajero Inteligente de Voz pedirá esta palabra clave antes de ejecutar las órdenes de venta.",
@@ -123,6 +134,7 @@ export default function SettingsModule() {
   };
 
   const saveLoyaltyConfig = () => {
+    if (!checkAdmin()) return;
     localStorage.setItem("ERIKA_EARN_RATE", earnRate);
     localStorage.setItem("ERIKA_EARN_PTS", earnPoints);
     localStorage.setItem("ERIKA_REDEEM_RATE", redeemRate);
@@ -130,12 +142,14 @@ export default function SettingsModule() {
   };
 
   const saveWholesaleConfig = () => {
+    if (!checkAdmin()) return;
     localStorage.setItem("ERIKA_WHOLESALE_QTY", wholesaleMinQty);
     localStorage.setItem("ERIKA_WHOLESALE_PCT", wholesaleDiscount);
     alert("✅ Configuración de Mayoreo Automático guardada.");
   };
 
   const saveUtilityAndGoalsConfig = async () => {
+    if (!checkAdmin()) return;
     localStorage.setItem("ERIKA_TARGET_UTILITY", targetUtility);
     localStorage.setItem("ERIKA_MONTHLY_GOALS", monthlyGoals);
 
@@ -168,6 +182,7 @@ export default function SettingsModule() {
   };
 
   const saveBusinessProfile = () => {
+    if (!checkAdmin()) return;
     localStorage.setItem("ERIKA_BIZ_NAME", businessName);
     localStorage.setItem("ERIKA_BIZ_RFC", businessRfc);
     localStorage.setItem("ERIKA_BIZ_PHONE", businessPhone);
@@ -213,6 +228,7 @@ export default function SettingsModule() {
   };
 
   const handleCreateUser = async () => {
+     if (!checkAdmin()) return;
      if (!newUserName || !newUserPin || newUserPin.length < 4) return alert("Ingresa un nombre y un PIN de 4 dígitos o más.");
      const roleToSave = roleType === "custom" ? customRoleName.trim() : roleType;
      if (!roleToSave) return alert("Ingresa o selecciona un rol válido.");
@@ -261,6 +277,7 @@ export default function SettingsModule() {
   };
 
   const handleSaveEditUser = async () => {
+    if (!checkAdmin()) return;
     if (!editName || !editPin || editPin.length < 4) return alert("Ingresa un nombre y un PIN de 4 dígitos o más.");
     if (!editRole) return alert("El rol no puede estar vacío.");
 
@@ -285,6 +302,7 @@ export default function SettingsModule() {
   };
 
   const handleDeleteUser = async (id: string, name: string) => {
+     if (!checkAdmin()) return;
      if (!window.confirm(`¿Estás seguro de eliminar al usuario ${name}?`)) return;
      await supabase.from("users").delete().eq("id", id);
      fetchUsers();
