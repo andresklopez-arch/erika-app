@@ -47,7 +47,7 @@ export default function Sidebar() {
           e.preventDefault();
 
           // Guarda de seguridad: Advertencia de pérdida de datos
-          if (pathname !== option.path && typeof window !== "undefined" && (window as any).__ERIKA_HAS_ACTIVE_CART__) {
+          if (pathname !== option.path && typeof window !== "undefined" && (window as Window & { __ERIKA_HAS_ACTIVE_CART__?: boolean }).__ERIKA_HAS_ACTIVE_CART__) {
             const confirmLeave = window.confirm(
               "⚠️ Tienes productos en el carrito. Si sales de esta pantalla se cancelará la venta actual. ¿Deseas continuar?"
             );
@@ -86,7 +86,7 @@ export default function Sidebar() {
 
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, targetPath: string) => {
     if (pathname === targetPath) return;
-    if (typeof window !== "undefined" && (window as any).__ERIKA_HAS_ACTIVE_CART__) {
+    if (typeof window !== "undefined" && (window as Window & { __ERIKA_HAS_ACTIVE_CART__?: boolean }).__ERIKA_HAS_ACTIVE_CART__) {
       const confirmLeave = window.confirm(
         "⚠️ Tienes productos en el carrito. Si sales de esta pantalla se cancelará la venta actual. ¿Deseas continuar?"
       );
