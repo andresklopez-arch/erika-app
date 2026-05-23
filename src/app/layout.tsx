@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import AuthProvider from "../components/AuthProvider";
 import Sidebar from "../components/Sidebar";
@@ -9,12 +9,15 @@ export const metadata: Metadata = {
   title: "ERIKA - Inteligencia en Ferretería",
   description: "Sistema avanzado de administración y punto de venta con IA.",
   manifest: "/manifest.json",
-  themeColor: "#10b981",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "ERIKA",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#10b981",
 };
 
 export default function RootLayout({
