@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "./AuthProvider";
 
 interface CashSession {
   id: string;
@@ -19,6 +20,9 @@ interface CashSession {
 }
 
 export default function ReportsModule() {
+  const { businessSettings } = useAuth();
+  const monthlyGoal = businessSettings.monthly_goals;
+
   const [netProfit, setNetProfit] = useState({
      sales: 0,
      costs: 0,
@@ -27,34 +31,13 @@ export default function ReportsModule() {
      pureProfit: 0
   });
   const [cashSessions, setCashSessions] = useState<CashSession[]>([]);
-  const [monthlyGoal, setMonthlyGoal] = useState(0);
   const [searchCajero, setSearchCajero] = useState("");
   const [filterFecha, setFilterFecha] = useState("todos");
   const [exporting, setExporting] = useState(false);
   const [showToast, setShowToast] = useState(false);
 
   useEffect(() => {
-     const storedGoal = localStorage.getItem("ERIKA_MONTHLY_GOALS");
-     if (storedGoal) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setMonthlyGoal(parseFloat(storedGoal));
-     }
-
      const fetchData = async () => {
-        try {
-           const { data: dbSettings } = await supabase
-              .from("business_settings")
-              .select("monthly_goals")
-              .eq("id", "erika_global")
-              .single();
-           if (dbSettings && dbSettings.monthly_goals) {
-              setMonthlyGoal(Number(dbSettings.monthly_goals));
-              localStorage.setItem("ERIKA_MONTHLY_GOALS", String(dbSettings.monthly_goals));
-           }
-        } catch (e) {
-           console.warn("No se pudo obtener la meta mensual desde Supabase business_settings:", e);
-        }
-
         const today = new Date();
         const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
 
