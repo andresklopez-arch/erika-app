@@ -474,18 +474,68 @@ export default function POSModule() {
           if (fragment.includes("un") || fragment.includes("una")) qty = 1;
           if (fragment.includes("dos") || fragment.includes("par")) qty = 2;
           if (fragment.includes("tres")) qty = 3;
+          if (fragment.includes("cuatro")) qty = 4;
+          if (fragment.includes("cinco")) qty = 5;
         }
 
+        // Algoritmo de scoring inteligente para emparejar productos
         let matchedProduct = null;
-        for (const prod of globalCatalog)
-          if (fuzzyMatchKeywords(fragment, prod.name)) {
-            matchedProduct = prod;
-            break;
+        let highestScore = 0;
+        
+        // Limpiamos y dividimos la frase en palabras significativas
+        const fWords = fragment.toLowerCase()
+          .replace(new RegExp(securityKeyword, 'g'), "") // Quitamos la palabra clave
+          .replace(/[^a-z0-9áéíóúñ\s]/g, "") // Limpieza especial español
+          .split(/\s+/)
+          .filter(w => w.length > 1 && w !== "un" && w !== "una" && w !== "dos" && w !== "tres" && w !== "agrega" && w !== "agregar" && w !== "de" && w !== "con");
+
+        for (const prod of globalCatalog) {
+          const pNameClean = prod.name.toLowerCase().replace(/[^a-z0-9áéíóúñ\s]/g, "");
+          const pWords = pNameClean.split(/\s+/).filter(w => w.length > 1);
+          
+          let matches = 0;
+          let exactMatches = 0;
+          
+          for (const pw of pWords) {
+            // Coincidencia exacta de la palabra del producto en el comando de voz
+            if (fWords.includes(pw)) {
+              matches += 1;
+              exactMatches += 1;
+            } else {
+              // Coincidencia difusa de palabras de más de 3 letras
+              for (const fw of fWords) {
+                if (pw.length > 3 && fw.length > 3) {
+                  if (Math.abs(pw.length - fw.length) <= 1) {
+                    let diffs = 0;
+                    for (let i = 0; i < Math.min(pw.length, fw.length); i++) {
+                      if (pw[i] !== fw[i]) diffs++;
+                    }
+                    if (diffs <= 1) {
+                      matches += 0.8;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
           }
 
-        if (matchedProduct) {
+          if (matches > 0) {
+            // Puntuación: prioriza coincidencias múltiples y cobertura del nombre
+            const coverage = matches / pWords.length;
+            const score = matches * 10 + exactMatches * 5 + coverage * 15;
+            
+            if (score > highestScore) {
+              highestScore = score;
+              matchedProduct = prod;
+            }
+          }
+        }
+
+        // Umbral de seguridad para considerar un acierto (al menos 1 coincidencia sólida)
+        if (matchedProduct && highestScore > 6) {
           if (qty > matchedProduct.stock) {
-            voiceReply += `Solo hay ${matchedProduct.stock} de ${matchedProduct.name}. `;
+            voiceReply += `Solo quedan ${matchedProduct.stock} de ${matchedProduct.name}. `;
           } else {
             addToCart(
               matchedProduct.name,
