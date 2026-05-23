@@ -223,7 +223,7 @@ export default function SettingsModule() {
          method: "POST",
          headers: { "Content-Type": "application/json" },
          body: JSON.stringify({
-           adminPin: currentUser.pin,
+           adminPin: currentUser?.pin,
            user: {
              name: newUserName,
              pin: newUserPin,
@@ -286,8 +286,8 @@ export default function SettingsModule() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          adminPin: currentUser.pin,
-          userId: editingUser.id,
+          adminPin: currentUser?.pin,
+          userId: editingUser?.id,
           user: {
             name: editName,
             pin: editPin,
@@ -316,7 +316,7 @@ export default function SettingsModule() {
      if (!window.confirm(`¿Estás seguro de eliminar al usuario ${name}?`)) return;
 
      try {
-       const response = await fetch(`/api/admin/users?adminPin=${currentUser.pin}&userId=${id}`, {
+       const response = await fetch(`/api/admin/users?adminPin=${currentUser?.pin}&userId=${id}`, {
          method: "DELETE"
        });
 
