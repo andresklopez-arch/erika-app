@@ -48,15 +48,14 @@ export default function InventoryModule() {
   };
 
   useEffect(() => {
-    if (!tab) return;
-    if (tab === "clientes") setShowClientModal(true);
-    else if (tab === "recibir") setShowInboundModal(true);
-    else if (tab === "proveedores") setShowSuppliersModal(true);
-    else if (tab === "cuentas") setShowAccountsPayableModal(true);
-    else if (tab === "gastos") setShowLossesModal(true);
-    else if (tab === "apartados") setShowLayaways(true);
-    else if (tab === "carga") setShowImporter(true);
-    else if (tab === "criticos") setShowCritical(true);
+    setShowClientModal(tab === "clientes");
+    setShowInboundModal(tab === "recibir");
+    setShowSuppliersModal(tab === "proveedores");
+    setShowAccountsPayableModal(tab === "cuentas");
+    setShowLossesModal(tab === "gastos");
+    setShowLayaways(tab === "apartados");
+    setShowImporter(tab === "carga");
+    setShowCritical(tab === "criticos");
   }, [tab]);
 
   const fetchInventory = async () => {
@@ -285,7 +284,7 @@ export default function InventoryModule() {
         >
           <button
             className="btn-primary"
-            onClick={() => setShowCritical(!showCritical)}
+            onClick={() => router.push(showCritical ? "/inventario" : "/inventario?tab=criticos")}
             style={{
               background: showCritical ? "#ef4444" : "transparent",
               border: "1px solid #ef4444",
@@ -296,7 +295,7 @@ export default function InventoryModule() {
           </button>
           <button
             className="btn-primary"
-            onClick={() => setShowClientModal(true)}
+            onClick={() => router.push("/inventario?tab=clientes")}
             style={{
               background: "transparent",
               border: "1px solid var(--color-primary)",
@@ -305,7 +304,7 @@ export default function InventoryModule() {
             👤 Clientes
           </button>
             <button
-              onClick={() => setShowInboundModal(true)}
+              onClick={() => router.push("/inventario?tab=recibir")}
               className="btn-primary"
               style={{
                 background: "#10b981",
@@ -320,7 +319,7 @@ export default function InventoryModule() {
             </button>
           <button
             className="btn-primary"
-            onClick={() => setShowSuppliersModal(true)}
+            onClick={() => router.push("/inventario?tab=proveedores")}
             style={{
               background: "transparent",
               border: "1px solid var(--color-accent)",
@@ -330,7 +329,7 @@ export default function InventoryModule() {
           </button>
           <button
             className="btn-primary"
-            onClick={() => setShowAccountsPayableModal(true)}
+            onClick={() => router.push("/inventario?tab=cuentas")}
             style={{
               background: "var(--glass-bg)",
               border: "1px solid #f59e0b",
@@ -341,7 +340,7 @@ export default function InventoryModule() {
           </button>
           <button
             className="btn-primary"
-            onClick={() => setShowLossesModal(true)}
+            onClick={() => router.push("/inventario?tab=gastos")}
             style={{
               background: "var(--glass-bg)",
               border: "1px solid #ef4444",
@@ -352,7 +351,7 @@ export default function InventoryModule() {
           </button>
           <button
             className="btn-primary"
-            onClick={() => setShowLayaways(true)}
+            onClick={() => router.push("/inventario?tab=apartados")}
             style={{
               background: "transparent",
               border: "1px solid #3b82f6",
@@ -384,7 +383,7 @@ export default function InventoryModule() {
           </button>
           <button
             className="btn-primary"
-            onClick={() => setShowImporter(true)}
+            onClick={() => router.push("/inventario?tab=carga")}
             style={{
               background:
                 "linear-gradient(135deg, var(--color-secondary), #059669)",
