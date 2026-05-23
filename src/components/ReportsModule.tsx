@@ -41,6 +41,20 @@ export default function ReportsModule() {
      }
 
      const fetchData = async () => {
+        try {
+           const { data: dbSettings } = await supabase
+              .from("business_settings")
+              .select("monthly_goals")
+              .eq("id", "erika_global")
+              .single();
+           if (dbSettings && dbSettings.monthly_goals) {
+              setMonthlyGoal(Number(dbSettings.monthly_goals));
+              localStorage.setItem("ERIKA_MONTHLY_GOALS", String(dbSettings.monthly_goals));
+           }
+        } catch (e) {
+           console.warn("No se pudo obtener la meta mensual desde Supabase business_settings:", e);
+        }
+
         const today = new Date();
         const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
 
