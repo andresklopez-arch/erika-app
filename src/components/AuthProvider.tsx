@@ -225,10 +225,8 @@ export default function AuthProvider({
 
     const saved = localStorage.getItem("ERIKA_USER");
     if (saved) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCurrentUser(JSON.parse(saved));
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(false);
 
     // Initial config fetch
