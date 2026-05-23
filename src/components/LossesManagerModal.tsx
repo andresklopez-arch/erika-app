@@ -144,7 +144,7 @@ export default function LossesManagerModal({ onClose }: LossesManagerModalProps)
             <div style={{ display: "flex", gap: "15px" }}>
               <div style={{ flex: 1 }}>
                 <label style={{ display: "block", marginBottom: "5px", color: "var(--color-secondary)" }}>Categoría de Pérdida *</label>
-                <select required value={lossType} onChange={e => setLossType(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.8)", color: "white" }}>
+                <select autoFocus required value={lossType} onChange={e => setLossType(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.8)", color: "white" }}>
                   <option value="Gasto Operativo">💸 Gasto Operativo (Luz, Nómina, Rentas)</option>
                   <option value="Merma">🗑️ Merma (Producto Roto, Caducado, Robo)</option>
                   <option value="Cambio Físico">🔄 Cambio Físico (Pérdida por garantía)</option>
