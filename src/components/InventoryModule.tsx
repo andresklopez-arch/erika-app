@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import SmartImporter from "./SmartImporter";
 import { supabase } from "../lib/supabaseClient";
@@ -26,6 +27,10 @@ interface InventoryItem {
 }
 
 export default function InventoryModule() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const tab = searchParams ? searchParams.get("tab") : null;
+
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [importHistory, setImportHistory] = useState<InventoryItem[][]>([]);
   const [showImporter, setShowImporter] = useState(false);
@@ -37,6 +42,22 @@ export default function InventoryModule() {
   const [showLayaways, setShowLayaways] = useState(false);
   const [showInboundModal, setShowInboundModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  const clearTabParam = () => {
+    router.push("/inventario");
+  };
+
+  useEffect(() => {
+    if (!tab) return;
+    if (tab === "clientes") setShowClientModal(true);
+    else if (tab === "recibir") setShowInboundModal(true);
+    else if (tab === "proveedores") setShowSuppliersModal(true);
+    else if (tab === "cuentas") setShowAccountsPayableModal(true);
+    else if (tab === "gastos") setShowLossesModal(true);
+    else if (tab === "apartados") setShowLayaways(true);
+    else if (tab === "carga") setShowImporter(true);
+    else if (tab === "criticos") setShowCritical(true);
+  }, [tab]);
 
   const fetchInventory = async () => {
     setIsLoading(true);
@@ -655,7 +676,8 @@ export default function InventoryModule() {
       {showImporter && (
         <SmartImporter
           avgMargin={avgMargin}
-          onClose={() => setShowImporter(false)}
+          existingItems={items}
+          onClose={() => { setShowImporter(false); clearTabParam(); }}
           onImport={async (newProducts) => {
             setIsLoading(true);
             let updatedCount = 0;
@@ -702,29 +724,29 @@ export default function InventoryModule() {
       )}
       
       {showClientModal && (
-        <ClientCaptureModal onClose={() => setShowClientModal(false)} onSuccess={() => {}} />
+        <ClientCaptureModal onClose={() => { setShowClientModal(false); clearTabParam(); }} onSuccess={() => {}} />
       )}
       
       {showSuppliersModal && (
-        <SuppliersManagerModal onClose={() => setShowSuppliersModal(false)} />
+        <SuppliersManagerModal onClose={() => { setShowSuppliersModal(false); clearTabParam(); }} />
       )}
       
       {showAccountsPayableModal && (
-        <AccountsPayableModal onClose={() => setShowAccountsPayableModal(false)} />
+        <AccountsPayableModal onClose={() => { setShowAccountsPayableModal(false); clearTabParam(); }} />
       )}
       
       {showLossesModal && (
-        <LossesManagerModal onClose={() => setShowLossesModal(false)} />
+        <LossesManagerModal onClose={() => { setShowLossesModal(false); clearTabParam(); }} />
       )}
 
       {showLayaways && (
-        <LayawayModal show={showLayaways} onClose={() => setShowLayaways(false)} />
+        <LayawayModal show={showLayaways} onClose={() => { setShowLayaways(false); clearTabParam(); }} />
       )}
       
       {showInboundModal && (
         <InboundModal 
-          onClose={() => setShowInboundModal(false)} 
-          onSuccess={() => { setShowInboundModal(false); fetchInventory(); }} 
+          onClose={() => { setShowInboundModal(false); clearTabParam(); }} 
+          onSuccess={() => { setShowInboundModal(false); fetchInventory(); clearTabParam(); }} 
         />
       )}
     </div>
