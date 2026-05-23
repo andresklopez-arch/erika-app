@@ -62,6 +62,7 @@ export default function InventoryModule() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchInventory(false);
