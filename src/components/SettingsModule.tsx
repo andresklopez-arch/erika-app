@@ -117,6 +117,7 @@ export default function SettingsModule() {
     if (savedConnected !== null) setIsConnected(savedConnected !== "false");
     if (savedType) setConnectionType(savedType);
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchUsers();
   }, []);
 
@@ -260,6 +261,7 @@ export default function SettingsModule() {
      alert("✅ Cajero/Usuario creado exitosamente.");
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const startEditUser = (user: any) => {
     setEditingUser(user);
     setEditName(user.name);
@@ -566,6 +568,7 @@ export default function SettingsModule() {
                     <label key={mod.key} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.85rem", color: "white" }} onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         checked={(newPermissions as any)[mod.key] || false}
                         onChange={(e) => setNewPermissions({ ...newPermissions, [mod.key]: e.target.checked })}
                       />
@@ -873,7 +876,7 @@ export default function SettingsModule() {
                 style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }}
               />
               <span style={{ fontSize: "0.75rem", opacity: 0.6, marginTop: "4px", display: "block" }}>
-                Ingresa roles predefinidos ('admin', 'cajero') o cualquier rol personalizado que desees asignarle.
+                Ingresa roles predefinidos (&apos;admin&apos;, &apos;cajero&apos;) o cualquier rol personalizado que desees asignarle.
               </span>
             </div>
 
