@@ -94,8 +94,22 @@ export default function IntelligenceNotifications() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAlerts();
-    // Re-escanear alertas cada 2 minutos
+    // Re-escanear alertas cada 2 minutos como fallback
     const interval = setInterval(fetchAlerts, 120000);
+
+    // Suscripción Realtime a cambios en base de datos para alertas inmediatas
+    const channel = supabase
+      .channel("erika-alerts-channel")
+      .on("postgres_changes", { event: "*", schema: "public", table: "inventory" }, () => {
+         fetchAlerts();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "cash_sessions" }, () => {
+         fetchAlerts();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "business_losses" }, () => {
+         fetchAlerts();
+      })
+      .subscribe();
     
     // Cerrar al hacer clic afuera
     const handleClickOutside = (event: MouseEvent) => {
@@ -107,6 +121,7 @@ export default function IntelligenceNotifications() {
 
     return () => {
       clearInterval(interval);
+      supabase.removeChannel(channel);
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
