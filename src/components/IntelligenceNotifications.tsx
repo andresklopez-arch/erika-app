@@ -151,56 +151,91 @@ export default function IntelligenceNotifications() {
       }}
       className="no-print"
     >
-      {/* Botón flotante superior minimalista y elegante */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        style={{
-          background: hasUrgentAlerts 
-            ? "linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(220, 38, 38, 0.95))"
-            : "linear-gradient(135deg, rgba(16, 185, 129, 0.85), rgba(5, 150, 105, 0.85))",
-          backdropFilter: "blur(10px)",
-          border: "1px solid rgba(255,255,255,0.1)",
-          color: "white",
-          padding: "8px 16px",
-          borderRadius: "20px",
-          cursor: "pointer",
-          fontSize: "0.85rem",
-          fontWeight: "bold",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          boxShadow: hasUrgentAlerts 
-            ? "0 4px 15px rgba(239, 68, 68, 0.4), 0 0 0 1px rgba(239,68,68,0.2)"
-            : "0 4px 12px rgba(0,0,0,0.3)",
-          transition: "all 0.3s ease",
-          animation: hasUrgentAlerts ? "pulse-alert 2s infinite" : "none"
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = "scale(1.03)";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = "scale(1)";
-        }}
-      >
-        <span>{hasUrgentAlerts ? "🚨" : "🧠"}</span>
-        <span>Erika Inteligencia</span>
-        {alerts.length > 0 && alerts[0].id !== "erika-ok" && (
-          <span style={{
-            background: "white",
-            color: "#ef4444",
-            borderRadius: "50%",
-            width: "18px",
-            height: "18px",
-            fontSize: "0.75rem",
-            display: "inline-flex",
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        {/* ERIKA Logo/Avatar & Status Badge */}
+        <div
+          style={{
+            display: "flex",
             alignItems: "center",
-            justifyContent: "center",
-            fontWeight: "bold"
-          }}>
-            {alerts.length}
+            gap: "8px",
+            background: "rgba(22, 22, 34, 0.75)",
+            backdropFilter: "blur(10px)",
+            border: "1px solid var(--glass-border)",
+            padding: "6px 14px 6px 8px",
+            borderRadius: "20px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
+          }}
+        >
+          <img
+            src="/erika_avatar.png"
+            alt="ERIKA"
+            style={{
+              width: "24px",
+              height: "24px",
+              borderRadius: "50%",
+              border: "1.5px solid var(--color-primary)",
+              objectFit: "cover"
+            }}
+          />
+          <span style={{ fontSize: "0.85rem", fontWeight: "bold", color: "white" }}>
+            ERIKA
           </span>
-        )}
-      </button>
+          <span style={{ fontSize: "0.7rem", color: "var(--color-secondary)", fontWeight: "600" }}>
+            Online
+          </span>
+        </div>
+
+        {/* Botón flotante superior minimalista y elegante */}
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          style={{
+            background: hasUrgentAlerts 
+              ? "linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(220, 38, 38, 0.95))"
+              : "linear-gradient(135deg, rgba(16, 185, 129, 0.85), rgba(5, 150, 105, 0.85))",
+            backdropFilter: "blur(10px)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            color: "white",
+            padding: "8px 16px",
+            borderRadius: "20px",
+            cursor: "pointer",
+            fontSize: "0.85rem",
+            fontWeight: "bold",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            boxShadow: hasUrgentAlerts 
+              ? "0 4px 15px rgba(239, 68, 68, 0.4), 0 0 0 1px rgba(239,68,68,0.2)"
+              : "0 4px 12px rgba(0,0,0,0.3)",
+            transition: "all 0.3s ease",
+            animation: hasUrgentAlerts ? "pulse-alert 2s infinite" : "none"
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = "scale(1.03)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = "scale(1)";
+          }}
+        >
+          <span>{hasUrgentAlerts ? "🚨" : "🧠"}</span>
+          <span>Erika Inteligencia</span>
+          {alerts.length > 0 && alerts[0].id !== "erika-ok" && (
+            <span style={{
+              background: "white",
+              color: "#ef4444",
+              borderRadius: "50%",
+              width: "18px",
+              height: "18px",
+              fontSize: "0.75rem",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontWeight: "bold"
+            }}>
+              {alerts.length}
+            </span>
+          )}
+        </button>
+      </div>
 
       {/* Menú de Notificaciones Desplegable */}
       {isOpen && (
@@ -208,7 +243,7 @@ export default function IntelligenceNotifications() {
           className="glass-panel animate-fade-in"
           style={{
             position: "absolute",
-            top: "45px",
+            top: "50px",
             width: "350px",
             background: "rgba(22, 22, 34, 0.95)",
             border: "1px solid var(--glass-border)",
