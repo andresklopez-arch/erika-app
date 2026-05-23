@@ -1,18 +1,13 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { BusinessSettings, BusinessSettingsSchema } from "../lib/settingsSchema";
 
 interface User {
   id: string;
   name: string;
   role: "admin" | "cajero";
   permissions?: Record<string, boolean>;
-}
-
-export interface BusinessSettings {
-  target_utility: number;
-  monthly_goals: number;
-  config: Record<string, unknown>;
 }
 
 interface AuthContextType {
@@ -26,7 +21,27 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   currentUser: null,
   logout: () => {},
-  businessSettings: { target_utility: 30, monthly_goals: 0, config: {} },
+  businessSettings: {
+    target_utility: 30,
+    monthly_goals: 0,
+    config: {
+      voice_keyword: "erika",
+      earn_rate: 100,
+      earn_points: 1,
+      redeem_rate: 10,
+      wholesale_min_qty: 10,
+      wholesale_discount: 10,
+      theme: "dark",
+      business_name: "Ferretería ERIKA",
+      business_rfc: "",
+      business_phone: "",
+      business_email: "",
+      business_address: "",
+      business_logo: "",
+      printer_connected: true,
+      printer_type: "system",
+    },
+  },
   updateBusinessSettings: async () => false,
   refreshSettings: async () => {},
 });
@@ -47,16 +62,51 @@ export default function AuthProvider({
     if (typeof window !== "undefined") {
       const sTarget = localStorage.getItem("ERIKA_TARGET_UTILITY");
       const sGoal = localStorage.getItem("ERIKA_MONTHLY_GOALS");
+      
+      const config = {
+        voice_keyword: localStorage.getItem("ERIKA_VOICE_KEYWORD") || "erika",
+        earn_rate: Number(localStorage.getItem("ERIKA_EARN_RATE")) || 100,
+        earn_points: Number(localStorage.getItem("ERIKA_EARN_PTS")) || 1,
+        redeem_rate: Number(localStorage.getItem("ERIKA_REDEEM_RATE")) || 10,
+        wholesale_min_qty: Number(localStorage.getItem("ERIKA_WHOLESALE_QTY")) || 10,
+        wholesale_discount: Number(localStorage.getItem("ERIKA_WHOLESALE_PCT")) || 10,
+        theme: localStorage.getItem("ERIKA_THEME") || "dark",
+        business_name: localStorage.getItem("ERIKA_BIZ_NAME") || "Ferretería ERIKA",
+        business_rfc: localStorage.getItem("ERIKA_BIZ_RFC") || "",
+        business_phone: localStorage.getItem("ERIKA_BIZ_PHONE") || "",
+        business_email: localStorage.getItem("ERIKA_BIZ_EMAIL") || "",
+        business_address: localStorage.getItem("ERIKA_BIZ_ADDR") || "",
+        business_logo: localStorage.getItem("ERIKA_BIZ_LOGO") || "",
+        printer_connected: localStorage.getItem("ERIKA_PRINTER_CONNECTED") !== "false",
+        printer_type: localStorage.getItem("ERIKA_PRINTER_TYPE") || "system",
+      };
+
       return {
         target_utility: sTarget ? parseFloat(sTarget) : 30,
         monthly_goals: sGoal ? parseFloat(sGoal) : 0,
-        config: {},
+        config,
       };
     }
     return {
       target_utility: 30,
       monthly_goals: 0,
-      config: {},
+      config: {
+        voice_keyword: "erika",
+        earn_rate: 100,
+        earn_points: 1,
+        redeem_rate: 10,
+        wholesale_min_qty: 10,
+        wholesale_discount: 10,
+        theme: "dark",
+        business_name: "Ferretería ERIKA",
+        business_rfc: "",
+        business_phone: "",
+        business_email: "",
+        business_address: "",
+        business_logo: "",
+        printer_connected: true,
+        printer_type: "system",
+      },
     };
   });
 
@@ -68,14 +118,33 @@ export default function AuthProvider({
         .eq("id", "erika_global")
         .single();
       if (data && !dbError) {
-        // Enforce types and validation rules (Zod-like validation)
-        const target_utility = Math.max(0, Math.min(100, Number(data.target_utility) || 30));
-        const monthly_goals = Math.max(0, Number(data.monthly_goals) || 0);
-        const config = typeof data.config === "object" && data.config !== null ? data.config : {};
+        // Enforce types and validation rules using Zod Schema
+        const parsed = BusinessSettingsSchema.parse({
+          target_utility: Number(data.target_utility),
+          monthly_goals: Number(data.monthly_goals),
+          config: data.config,
+        });
         
-        setBusinessSettings({ target_utility, monthly_goals, config });
-        localStorage.setItem("ERIKA_TARGET_UTILITY", String(target_utility));
-        localStorage.setItem("ERIKA_MONTHLY_GOALS", String(monthly_goals));
+        setBusinessSettings(parsed);
+        
+        // Write the parsed values to localStorage for compatibility/fallback
+        localStorage.setItem("ERIKA_TARGET_UTILITY", String(parsed.target_utility));
+        localStorage.setItem("ERIKA_MONTHLY_GOALS", String(parsed.monthly_goals));
+        localStorage.setItem("ERIKA_VOICE_KEYWORD", parsed.config.voice_keyword);
+        localStorage.setItem("ERIKA_EARN_RATE", String(parsed.config.earn_rate));
+        localStorage.setItem("ERIKA_EARN_PTS", String(parsed.config.earn_points));
+        localStorage.setItem("ERIKA_REDEEM_RATE", String(parsed.config.redeem_rate));
+        localStorage.setItem("ERIKA_WHOLESALE_QTY", String(parsed.config.wholesale_min_qty));
+        localStorage.setItem("ERIKA_WHOLESALE_PCT", String(parsed.config.wholesale_discount));
+        localStorage.setItem("ERIKA_BIZ_NAME", parsed.config.business_name);
+        localStorage.setItem("ERIKA_BIZ_RFC", parsed.config.business_rfc);
+        localStorage.setItem("ERIKA_BIZ_PHONE", parsed.config.business_phone);
+        localStorage.setItem("ERIKA_BIZ_EMAIL", parsed.config.business_email);
+        localStorage.setItem("ERIKA_BIZ_ADDR", parsed.config.business_address);
+        localStorage.setItem("ERIKA_BIZ_LOGO", parsed.config.business_logo);
+        localStorage.setItem("ERIKA_PRINTER_CONNECTED", String(parsed.config.printer_connected));
+        localStorage.setItem("ERIKA_PRINTER_TYPE", parsed.config.printer_type);
+        localStorage.setItem("ERIKA_THEME", parsed.config.theme);
       }
     } catch (e) {
       console.warn("Fallo al sincronizar business_settings:", e);
@@ -92,29 +161,50 @@ export default function AuthProvider({
       const updated = {
         ...businessSettings,
         ...newSettings,
+        config: {
+          ...businessSettings.config,
+          ...(newSettings.config || {}),
+        }
       };
-      
-      // Validation check (Zod-like schema enforcement)
-      updated.target_utility = Math.max(0, Math.min(100, updated.target_utility));
-      updated.monthly_goals = Math.max(0, updated.monthly_goals);
 
-      const { error: dbError } = await supabase
-        .from("business_settings")
-        .upsert({
-          id: "erika_global",
-          target_utility: updated.target_utility,
-          monthly_goals: updated.monthly_goals,
-          config: updated.config,
-          updated_at: new Date().toISOString()
-        });
+      const response = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          adminPin: currentUser.pin,
+          settings: updated,
+        }),
+      });
 
-      if (!dbError) {
-        setBusinessSettings(updated);
-        localStorage.setItem("ERIKA_TARGET_UTILITY", String(updated.target_utility));
-        localStorage.setItem("ERIKA_MONTHLY_GOALS", String(updated.monthly_goals));
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setBusinessSettings(result.settings);
+        
+        // Write the parsed values to localStorage for compatibility/fallback
+        localStorage.setItem("ERIKA_TARGET_UTILITY", String(result.settings.target_utility));
+        localStorage.setItem("ERIKA_MONTHLY_GOALS", String(result.settings.monthly_goals));
+        localStorage.setItem("ERIKA_VOICE_KEYWORD", result.settings.config.voice_keyword);
+        localStorage.setItem("ERIKA_EARN_RATE", String(result.settings.config.earn_rate));
+        localStorage.setItem("ERIKA_EARN_PTS", String(result.settings.config.earn_points));
+        localStorage.setItem("ERIKA_REDEEM_RATE", String(result.settings.config.redeem_rate));
+        localStorage.setItem("ERIKA_WHOLESALE_QTY", String(result.settings.config.wholesale_min_qty));
+        localStorage.setItem("ERIKA_WHOLESALE_PCT", String(result.settings.config.wholesale_discount));
+        localStorage.setItem("ERIKA_BIZ_NAME", result.settings.config.business_name);
+        localStorage.setItem("ERIKA_BIZ_RFC", result.settings.config.business_rfc);
+        localStorage.setItem("ERIKA_BIZ_PHONE", result.settings.config.business_phone);
+        localStorage.setItem("ERIKA_BIZ_EMAIL", result.settings.config.business_email);
+        localStorage.setItem("ERIKA_BIZ_ADDR", result.settings.config.business_address);
+        localStorage.setItem("ERIKA_BIZ_LOGO", result.settings.config.business_logo);
+        localStorage.setItem("ERIKA_PRINTER_CONNECTED", String(result.settings.config.printer_connected));
+        localStorage.setItem("ERIKA_PRINTER_TYPE", result.settings.config.printer_type);
+        localStorage.setItem("ERIKA_THEME", result.settings.config.theme);
+        
         return true;
       } else {
-        console.error("Error actualizando configuracion en Supabase:", dbError.message);
+        alert(`❌ Error al guardar configuraciones: ${result.error || "Desconocido"}`);
         return false;
       }
     } catch (e) {
