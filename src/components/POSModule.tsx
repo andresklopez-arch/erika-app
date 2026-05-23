@@ -492,11 +492,11 @@ export default function POSModule() {
           .replace(new RegExp(securityKeyword, 'g'), "") // Quitamos la palabra clave
           .replace(/[^a-z0-9áéíóúñ\s]/g, "") // Limpieza especial español
           .split(/\s+/)
-          .filter(w => w.length > 1 && w !== "un" && w !== "una" && w !== "dos" && w !== "tres" && w !== "agrega" && w !== "agregar" && w !== "de" && w !== "con");
+          .filter((w: string) => w.length > 1 && w !== "un" && w !== "una" && w !== "dos" && w !== "tres" && w !== "agrega" && w !== "agregar" && w !== "de" && w !== "con");
 
         for (const prod of globalCatalog) {
           const pNameClean = prod.name.toLowerCase().replace(/[^a-z0-9áéíóúñ\s]/g, "");
-          const pWords = pNameClean.split(/\s+/).filter(w => w.length > 1);
+          const pWords = pNameClean.split(/\s+/).filter((w: string) => w.length > 1);
           
           let matches = 0;
           let exactMatches = 0;
