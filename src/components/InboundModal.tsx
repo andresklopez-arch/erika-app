@@ -108,7 +108,7 @@ export default function InboundModal({ onClose, onSuccess }: InboundModalProps) 
         <div style={{ display: "flex", gap: "10px", marginBottom: "15px", alignItems: "flex-end", flexWrap: "wrap" }}>
           <div style={{ flex: 2, position: "relative" }}>
              <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "5px" }}>Buscar Producto</label>
-             <input type="text" placeholder="Escribe para buscar..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setSelectedItem(null); }} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }} />
+             <input autoFocus type="text" placeholder="Escribe para buscar..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setSelectedItem(null); }} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }} />
              {searchTerm.length > 1 && !selectedItem && filteredItems.length > 0 && (
                 <ul style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#1e293b", border: "1px solid var(--glass-border)", borderRadius: "6px", listStyle: "none", padding: 0, margin: 0, zIndex: 10, maxHeight: "150px", overflowY: "auto" }}>
                   {filteredItems.map(i => (
