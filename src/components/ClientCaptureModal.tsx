@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import toast from "react-hot-toast";
+import { LoggerService } from "../services/loggerService";
 
 interface ClientCaptureModalProps {
   onClose: () => void;
@@ -45,9 +47,10 @@ export default function ClientCaptureModal({ onClose, onSuccess }: ClientCapture
 
     if (error) {
       console.error(error);
-      alert(`Error de Supabase: ${error.message || JSON.stringify(error)}`);
+      LoggerService.logError("ClientCaptureModal", error);
+      toast.error(`Error de Supabase: ${error.message || JSON.stringify(error)}`);
     } else {
-      alert(`✅ Cliente ${name} registrado con éxito.`);
+      toast.success(`Cliente ${name} registrado con éxito.`);
       onSuccess();
       onClose();
     }

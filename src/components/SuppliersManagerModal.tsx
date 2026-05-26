@@ -2,6 +2,8 @@
 import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabaseClient";
+import toast from "react-hot-toast";
+import { LoggerService } from "../services/loggerService";
 
 interface Supplier {
   id: string;
@@ -65,10 +67,11 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
       notes,
     });
     if (error) {
-      alert(`Error de Supabase: ${error.message || JSON.stringify(error)}`);
+      LoggerService.logError("SuppliersManagerModal", error);
+      toast.error(`Error de Supabase: ${error.message || JSON.stringify(error)}`);
       console.error(error);
     } else {
-      alert("✅ Proveedor registrado.");
+      toast.success("Proveedor registrado.");
       setIsAdding(false);
       setName(""); setContactName(""); setPhone(""); setEmail(""); setNotes("");
       fetchSuppliers();

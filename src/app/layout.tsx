@@ -4,6 +4,7 @@ import AuthProvider from "../components/AuthProvider";
 import Sidebar from "../components/Sidebar";
 import HomeButton from "../components/HomeButton";
 import IntelligenceNotifications from "../components/IntelligenceNotifications";
+import { Toaster } from "react-hot-toast";
 
 export const metadata: Metadata = {
   title: "ERIKA - Inteligencia en Ferretería",
@@ -41,6 +42,7 @@ export default function RootLayout({
             </main>
           </div>
         </AuthProvider>
+        <Toaster position="top-right" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
