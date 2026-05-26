@@ -83,53 +83,134 @@ export default function SmartImporter({
         const workbook = XLSX.read(data, { type: "array" });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        const rawData = XLSX.utils.sheet_to_json(worksheet, {
+        const rawDataRaw = XLSX.utils.sheet_to_json(worksheet, {
           header: 1,
         }) as any[][];
 
-        if (rawData.length < 2) throw new Error("Documento vacío");
+        // 1. Limpieza de filas vacías y basura
+        const rawData = rawDataRaw.filter(row => {
+          if (!row || !Array.isArray(row)) return false;
+          const filledCells = row.filter(cell => cell !== null && cell !== undefined && cell !== "").length;
+          return filledCells >= 2; // Al menos 2 columnas con datos
+        });
 
-        const headers = rawData[0].map((h) => String(h).toLowerCase().trim());
+        if (rawData.length < 2) throw new Error("Documento vacío o sin suficientes datos");
 
-        const codeIdx = headers.findIndex(
-          (h) => h.includes("codigo") || h.includes("código") || h.includes("sku") || h.includes("id") || h.includes("ref") || h.includes("barras") || h.includes("barcode")
-        );
-        const nameIdx = headers.findIndex(
-          (h) => h.includes("nombre") || h.includes("descrip") || h.includes("articulo") || h.includes("artículo") || h.includes("producto") || h.includes("prod") || h.includes("detalle") || h.includes("concepto")
-        );
-        const costIdx = headers.findIndex(
-          (h) =>
-            h.includes("costo") ||
-            h.includes("compra") ||
-            h.includes("adquisicion") ||
-            h.includes("adquisición") ||
-            h.includes("p. compra") ||
-            h.includes("neto") ||
-            h.includes("unitario") ||
-            h === "aa" ||
-            h.includes("iva")
-        );
-        const stockIdx = headers.findIndex(
-          (h) =>
-            h.includes("stock") ||
-            h.includes("cantidad") ||
-            h.includes("totales") ||
-            h.includes("almacen") ||
-            h.includes("almacén") ||
-            h.includes("existencia") ||
-            h.includes("existencias") ||
-            h.includes("cant")
-        );
+        // 2. Motor Heurístico: Analizar las primeras 20 filas válidas
+        const sampleSize = Math.min(20, rawData.length);
+        const columnStats: Record<number, { textLength: number, numCount: number, floatCount: number, strCount: number, total: number }> = {};
+        
+        let maxCols = 0;
+        for (let i = 0; i < sampleSize; i++) {
+           if (rawData[i].length > maxCols) maxCols = rawData[i].length;
+        }
 
-        const finalNameIdx = nameIdx >= 0 ? nameIdx : 1;
-        const finalCostIdx = costIdx >= 0 ? costIdx : 5;
-        const finalStockIdx = stockIdx >= 0 ? stockIdx : 4;
-        const finalCodeIdx = codeIdx >= 0 ? codeIdx : 0;
+        for (let c = 0; c < maxCols; c++) {
+           columnStats[c] = { textLength: 0, numCount: 0, floatCount: 0, strCount: 0, total: 0 };
+        }
+
+        for (let i = 0; i < sampleSize; i++) {
+           const row = rawData[i];
+           for (let c = 0; c < maxCols; c++) {
+              const cell = row[c];
+              if (cell === null || cell === undefined || cell === "") continue;
+              
+              columnStats[c].total++;
+              const strVal = String(cell).trim();
+              
+              let numVal = Number(cell);
+              if (isNaN(numVal) && typeof cell === "string") {
+                 numVal = Number(cell.replace(/[^0-9.-]+/g, ""));
+              }
+              
+              // Si tiene letras claras, no lo tratamos como número aunque Number() haya podido parcial
+              const hasLetters = /[a-zA-Z]/.test(strVal);
+              
+              if (!isNaN(numVal) && strVal !== "" && !hasLetters) {
+                 columnStats[c].numCount++;
+                 if (strVal.includes(".") || numVal % 1 !== 0) {
+                    columnStats[c].floatCount++;
+                 }
+              } else {
+                 columnStats[c].strCount++;
+                 columnStats[c].textLength += strVal.length;
+              }
+           }
+        }
+
+        // 3. Asignación Dinámica de Columnas
+        let finalNameIdx = -1;
+        let finalCostIdx = -1;
+        let finalStockIdx = -1;
+        let finalCodeIdx = -1;
+
+        // Nombre: Columna con más strings y textos largos
+        let maxTextAvg = -1;
+        for (let c = 0; c < maxCols; c++) {
+           const stat = columnStats[c];
+           if (stat.total === 0) continue;
+           const textAvg = stat.textLength / (stat.strCount || 1);
+           if (stat.strCount >= stat.numCount && textAvg > maxTextAvg) {
+              maxTextAvg = textAvg;
+              finalNameIdx = c;
+           }
+        }
+
+        // Costo: Columna con más números y preferiblemente decimales
+        let maxFloats = -1;
+        let maxNumsForCost = -1;
+        for (let c = 0; c < maxCols; c++) {
+           if (c === finalNameIdx) continue;
+           const stat = columnStats[c];
+           if (stat.total === 0) continue;
+           if (stat.floatCount > maxFloats) {
+              maxFloats = stat.floatCount;
+              finalCostIdx = c;
+           } else if (stat.floatCount === maxFloats && stat.numCount > maxNumsForCost) {
+              maxNumsForCost = stat.numCount;
+              finalCostIdx = c;
+           }
+        }
+
+        // Stock: Columna con números, preferiblemente enteros
+        let maxInts = -1;
+        for (let c = 0; c < maxCols; c++) {
+           if (c === finalNameIdx || c === finalCostIdx) continue;
+           const stat = columnStats[c];
+           if (stat.total === 0) continue;
+           const ints = stat.numCount - stat.floatCount;
+           if (ints > maxInts) {
+              maxInts = ints;
+              finalStockIdx = c;
+           }
+        }
+
+        // Código: La columna restante con más combinaciones cortas (letras/números)
+        for (let c = 0; c < maxCols; c++) {
+           if (c === finalNameIdx || c === finalCostIdx || c === finalStockIdx) continue;
+           const stat = columnStats[c];
+           if (stat.total > 0 && finalCodeIdx === -1) {
+              finalCodeIdx = c;
+           }
+        }
+
+        // Fallbacks
+        if (finalNameIdx === -1) finalNameIdx = 1;
+        if (finalCostIdx === -1) finalCostIdx = 5;
+        if (finalStockIdx === -1) finalStockIdx = 4;
+        if (finalCodeIdx === -1) finalCodeIdx = 0;
 
         const importedProducts: any[] = [];
-        for (let i = 1; i < rawData.length; i++) {
+        for (let i = 0; i < rawData.length; i++) {
           const row = rawData[i];
           if (!row || !row[finalNameIdx]) continue;
+          
+          if (i === 0) {
+            const potentialCost = String(row[finalCostIdx]).replace(/[^0-9.-]+/g, "");
+            if (isNaN(Number(potentialCost)) || potentialCost === "") {
+               continue; // It's likely a header
+            }
+          }
 
           let rawCost = Number(row[finalCostIdx]);
           if (isNaN(rawCost) && typeof row[finalCostIdx] === "string") {
