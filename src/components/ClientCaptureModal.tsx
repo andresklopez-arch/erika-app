@@ -45,7 +45,7 @@ export default function ClientCaptureModal({ onClose, onSuccess }: ClientCapture
 
     if (error) {
       console.error(error);
-      alert("Error al guardar cliente. Revisa tu conexión a Supabase.");
+      alert(`Error de Supabase: ${error.message || JSON.stringify(error)}`);
     } else {
       alert(`✅ Cliente ${name} registrado con éxito.`);
       onSuccess();

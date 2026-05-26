@@ -65,7 +65,7 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
       notes,
     });
     if (error) {
-      alert("Error al guardar. Asegúrate de haber ejecutado el script SQL en Supabase para crear la tabla 'suppliers'.");
+      alert(`Error de Supabase: ${error.message || JSON.stringify(error)}`);
       console.error(error);
     } else {
       alert("✅ Proveedor registrado.");
