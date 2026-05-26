@@ -35,6 +35,7 @@ export default function ReportsModule() {
   const [filterFecha, setFilterFecha] = useState("todos");
   const [exporting, setExporting] = useState(false);
   const [showToast, setShowToast] = useState(false);
+  const [lostSales, setLostSales] = useState<{term: string, count: number, type: string}[]>([]);
 
   useEffect(() => {
      const fetchData = async () => {
@@ -72,6 +73,19 @@ export default function ReportsModule() {
            losses: totalLosses,
            pureProfit: sales - costs - totalLosses
         });
+
+        // Lost Sales
+        const { data: lostData } = await supabase.from("lost_sales_requests").select("*").gte("created_at", firstDayOfMonth);
+        if (lostData) {
+           const grouped = lostData.reduce((acc: any, curr: any) => {
+              const term = curr.term.trim().toUpperCase();
+              if (!acc[term]) acc[term] = { term, count: 0, type: curr.type };
+              acc[term].count += 1;
+              return acc;
+           }, {});
+           const sorted = Object.values(grouped).sort((a: any, b: any) => b.count - a.count).slice(0, 10);
+           setLostSales(sorted as any);
+        }
 
         const { data: sessions } = await supabase.from("cash_sessions").select("*").order("closed_at", { ascending: false }).limit(50);
         if (sessions && sessions.length > 0) {
@@ -332,46 +346,50 @@ export default function ReportsModule() {
           }}
         >
           <h2 style={{ color: "var(--color-primary)", marginBottom: "15px" }}>
-            🧠 Inteligencia y Big Data ERIKA
+            🧠 Radar de Demanda (Ventas Perdidas)
           </h2>
           <p style={{ marginBottom: "15px" }}>
-            He analizado tus datos del último mes. Aquí tienes mis
-            descubrimientos principales para hacer crecer tu negocio:
+            Artículos solicitados por clientes este mes que no teníamos en inventario o estaban agotados:
           </p>
           <ul style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {lostSales.length > 0 ? lostSales.map((item, idx) => (
+              <li
+                key={idx}
+                style={{
+                  background: "rgba(0,0,0,0.3)",
+                  padding: "10px 15px",
+                  borderRadius: "8px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  borderLeft: item.type === "AGOTADO" ? "4px solid #ef4444" : "4px solid #3b82f6"
+                }}
+              >
+                <div>
+                  <span style={{ fontWeight: "bold" }}>{item.term}</span>
+                  <span style={{ marginLeft: "10px", fontSize: "0.8rem", color: "var(--color-secondary)", padding: "2px 6px", background: "rgba(255,255,255,0.1)", borderRadius: "4px" }}>
+                    {item.type === "AGOTADO" ? "Agotado" : "No en catálogo"}
+                  </span>
+                </div>
+                <div style={{ color: "#f59e0b", fontWeight: "bold", display: "flex", alignItems: "center", gap: "5px" }}>
+                  <span>🔥</span> {item.count} peticiones
+                </div>
+              </li>
+            )) : (
+              <li style={{ background: "rgba(0,0,0,0.3)", padding: "10px", borderRadius: "8px", textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
+                No hay ventas perdidas registradas este mes. ¡Buen trabajo!
+              </li>
+            )}
             <li
               style={{
-                background: "rgba(0,0,0,0.3)",
-                padding: "10px",
-                borderRadius: "8px",
+                marginTop: "10px",
+                fontSize: "0.85rem",
+                color: "var(--color-secondary)",
+                fontStyle: "italic",
+                textAlign: "center"
               }}
             >
-              🚀 <strong>Productos Estrella:</strong> El &ldquo;Cemento Tolteca&rdquo;
-              incrementó ventas un 25%. Sugiero pedir un 10% más en la próxima
-              orden para obtener mejor margen.
-            </li>
-            <li
-              style={{
-                borderLeft: "4px solid var(--color-primary)",
-                background: "rgba(0,0,0,0.3)",
-                padding: "10px",
-                borderRadius: "8px",
-              }}
-            >
-              ⚠️ <strong>Posible Fuga:</strong> El inventario de &ldquo;Brochas&rdquo; tiene
-              discrepancias (faltan 3 piezas vs ventas). Sugiero hacer un
-              inventario parcial hoy.
-            </li>
-            <li
-              style={{
-                background: "rgba(0,0,0,0.3)",
-                padding: "10px",
-                borderRadius: "8px",
-              }}
-            >
-              💡 <strong>Oferta Sugerida:</strong> Tienes 50 L de Pintura Blanca
-              estancada. Sugiero emitir un cupón del 15% a tus clientes
-              recurrentes.
+              * Los artículos con mayor número de peticiones son los más urgentes para resurtir o agregar al catálogo.
             </li>
           </ul>
         </div>

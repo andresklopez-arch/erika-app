@@ -1010,13 +1010,27 @@ export default function POSModule() {
                     e.preventDefault();
                     setFocusedIndex(prev => (prev > 0 ? prev - 1 : 0));
                   } else if (e.key === "Enter") {
+                    e.preventDefault();
                     if (focusedIndex >= 0 && focusedIndex < filteredCatalog.length) {
-                      e.preventDefault();
                       const c = filteredCatalog[focusedIndex];
-                      addToCart(c.name, c.price, "pz", c.cost, 1, c.image_url);
+                      if (c.stock <= 0) {
+                        if (window.confirm(`El producto "${c.name}" está AGOTADO. ¿Deseas registrarlo en el Radar de Demanda (Ventas Perdidas)?`)) {
+                          supabase.from("lost_sales_requests").insert({ term: c.name, type: "AGOTADO" }).then(() => {
+                            alert("✅ Registrado en el reporte de inteligencia.");
+                          });
+                        }
+                      } else {
+                        addToCart(c.name, c.price, "pz", c.cost, 1, c.image_url);
+                      }
                       setSearchInput("");
                       setShowAutocomplete(false);
                       setFocusedIndex(-1);
+                    } else if (filteredCatalog.length === 0 && searchInput.trim() !== "") {
+                      supabase.from("lost_sales_requests").insert({ term: searchInput, type: "NUEVO_PRODUCTO" }).then(() => {
+                        alert(`✅ "${searchInput}" registrado en el reporte de productos solicitados.`);
+                        setSearchInput("");
+                        setShowAutocomplete(false);
+                      });
                     }
                   } else if (e.key === "Escape") {
                     setShowAutocomplete(false);
@@ -1048,55 +1062,88 @@ export default function POSModule() {
                       }}
                     />
                     {showAutocomplete && (
-                      <div style={{
-                        position: "absolute",
-                        top: "100%",
-                        left: 0,
-                        right: 0,
-                        marginTop: "5px",
-                        background: "#1a1a1a",
-                        border: "1px solid var(--color-primary)",
-                        borderRadius: "8px",
-                        zIndex: 100,
-                        maxHeight: "300px",
-                        overflowY: "auto",
-                        boxShadow: "0 10px 25px rgba(0,0,0,0.5)"
-                      }}>
-                        {filteredCatalog.map((c, idx) => (
-                          <div 
-                            key={c.id} 
-                            onClick={() => {
-                              addToCart(c.name, c.price, "pz", c.cost, 1, c.image_url);
-                              setSearchInput("");
-                              setShowAutocomplete(false);
-                              setFocusedIndex(-1);
-                            }}
-                            onMouseEnter={() => setFocusedIndex(idx)}
-                            style={{
-                              padding: "10px 15px",
-                              borderBottom: "1px solid rgba(255,255,255,0.1)",
-                              cursor: "pointer",
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              background: focusedIndex === idx ? "rgba(16, 185, 129, 0.3)" : "transparent"
-                            }}
-                          >
-                            <div>
-                              <div style={{ fontWeight: "bold", color: "white" }}>{c.name}</div>
-                              <div style={{ fontSize: "0.8rem", color: "var(--color-secondary)" }}>Código: {c.code || "N/A"} | Stock: {c.stock}</div>
+                      <>
+                        <div style={{
+                          position: "fixed",
+                          top: 0, left: 0, right: 0, bottom: 0,
+                          backgroundColor: "rgba(0,0,0,0.7)",
+                          zIndex: 99,
+                          backdropFilter: "blur(2px)"
+                        }}></div>
+                        <div style={{
+                          position: "absolute",
+                          top: "100%",
+                          left: 0,
+                          right: 0,
+                          marginTop: "5px",
+                          background: "#1a1a1a",
+                          border: "1px solid var(--color-primary)",
+                          borderRadius: "8px",
+                          zIndex: 100,
+                          maxHeight: "350px",
+                          overflowY: "auto",
+                          boxShadow: "0 10px 25px rgba(0,0,0,0.8)"
+                        }}>
+                          {filteredCatalog.map((c, idx) => (
+                            <div 
+                              key={c.id} 
+                              onClick={async () => {
+                                if (c.stock <= 0) {
+                                  if (window.confirm(`El producto "${c.name}" está AGOTADO. ¿Deseas registrarlo en el Radar de Demanda (Ventas Perdidas)?`)) {
+                                    await supabase.from("lost_sales_requests").insert({ term: c.name, type: "AGOTADO" });
+                                    alert("✅ Registrado en el reporte de inteligencia.");
+                                  }
+                                } else {
+                                  addToCart(c.name, c.price, "pz", c.cost, 1, c.image_url);
+                                }
+                                setSearchInput("");
+                                setShowAutocomplete(false);
+                                setFocusedIndex(-1);
+                              }}
+                              onMouseEnter={() => setFocusedIndex(idx)}
+                              style={{
+                                padding: "10px 15px",
+                                borderBottom: "1px solid rgba(255,255,255,0.1)",
+                                cursor: "pointer",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                background: focusedIndex === idx ? "rgba(16, 185, 129, 0.3)" : (c.stock <= 0 ? "rgba(239, 68, 68, 0.15)" : "transparent"),
+                                opacity: c.stock <= 0 ? 0.7 : 1
+                              }}
+                            >
+                              <div>
+                                <div style={{ fontWeight: "bold", color: c.stock <= 0 ? "#ef4444" : "white" }}>
+                                  {c.name} {c.stock <= 0 ? "(AGOTADO)" : ""}
+                                </div>
+                                <div style={{ fontSize: "0.8rem", color: "var(--color-secondary)" }}>Código: {c.code || "N/A"} | Stock: {c.stock}</div>
+                              </div>
+                              <div style={{ fontWeight: "bold", color: "var(--color-primary)" }}>
+                                ${c.price.toFixed(2)}
+                              </div>
                             </div>
-                            <div style={{ fontWeight: "bold", color: "var(--color-primary)" }}>
-                              ${c.price.toFixed(2)}
+                          ))}
+                          {filteredCatalog.length === 0 && (
+                            <div style={{ padding: "15px", textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
+                              No se encontraron productos en el inventario.
+                              <button 
+                                onClick={async () => {
+                                  if (searchInput.trim() !== "") {
+                                    await supabase.from("lost_sales_requests").insert({ term: searchInput, type: "NUEVO_PRODUCTO" });
+                                    alert(`✅ "${searchInput}" registrado en el reporte de productos solicitados.`);
+                                    setSearchInput("");
+                                    setShowAutocomplete(false);
+                                  }
+                                }}
+                                className="btn-primary" 
+                                style={{ display: "block", width: "100%", marginTop: "10px", background: "transparent", border: "1px dashed var(--color-secondary)" }}
+                              >
+                                📝 Reportar como Solicitado
+                              </button>
                             </div>
-                          </div>
-                        ))}
-                        {filteredCatalog.length === 0 && (
-                          <div style={{ padding: "15px", textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
-                            No se encontraron productos
-                          </div>
-                        )}
-                      </div>
+                          )}
+                        </div>
+                      </>
                     )}
                   </>
                 );
