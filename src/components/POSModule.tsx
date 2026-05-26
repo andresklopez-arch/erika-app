@@ -129,6 +129,28 @@ export default function POSModule() {
   const [showPrinterModal, setShowPrinterModal] = useState<boolean>(false);
   const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+
+  const playSuccessBeep = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // A5
+      gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.15);
+    } catch (e) {
+      console.error("Audio no soportado");
+    }
+  };
+
+  const normalizeString = (str: string) => {
+    return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  };
 
   const activeTicket =
     tickets.find((t) => t.id === activeTicketId) || tickets[0];
@@ -545,6 +567,7 @@ export default function POSModule() {
 
         // Umbral de seguridad para considerar un acierto (al menos 1 coincidencia sólida)
         if (matchedProduct && highestScore > 6) {
+          playSuccessBeep();
           setSearchInput(matchedProduct.name);
           setShowAutocomplete(true);
           voiceReply += `Busqué ${matchedProduct.name}. Selecciónalo en la lista. `;
@@ -964,80 +987,120 @@ export default function POSModule() {
           </div>
 
           <form
-            onSubmit={handleSearchSubmit}
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSearchSubmit(e as any);
+            }}
             style={{ display: "flex", gap: "10px", marginBottom: "20px" }}
           >
             <div style={{ flex: 1, position: "relative" }}>
-              <input
-                type="text"
-                value={searchInput}
-                onChange={(e) => {
-                  setSearchInput(e.target.value);
-                  setShowAutocomplete(e.target.value.length > 1);
-                }}
-                onFocus={() => setShowAutocomplete(searchInput.length > 1)}
-                onBlur={() => setTimeout(() => setShowAutocomplete(false), 200)}
-                placeholder="Buscar por Nombre, Código o Pistola Láser..."
-                style={{
-                  width: "100%",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  background: "rgba(0,0,0,0.3)",
-                  color: "white",
-                  border: "1px solid var(--color-primary)",
-                }}
-              />
-              {showAutocomplete && (
-                <div style={{
-                  position: "absolute",
-                  top: "100%",
-                  left: 0,
-                  right: 0,
-                  marginTop: "5px",
-                  background: "#1a1a1a",
-                  border: "1px solid var(--color-primary)",
-                  borderRadius: "8px",
-                  zIndex: 100,
-                  maxHeight: "300px",
-                  overflowY: "auto",
-                  boxShadow: "0 10px 25px rgba(0,0,0,0.5)"
-                }}>
-                  {globalCatalog.filter(c => 
-                    c.name.toLowerCase().includes(searchInput.toLowerCase()) || 
-                    (c.code && c.code.toLowerCase().includes(searchInput.toLowerCase()))
-                  ).slice(0, 15).map(c => (
-                    <div 
-                      key={c.id} 
-                      onClick={() => {
-                        addToCart(c.name, c.price, "pz", c.cost, 1, c.image_url);
-                        setSearchInput("");
-                        setShowAutocomplete(false);
+              {(() => {
+                const searchNormalized = normalizeString(searchInput);
+                const filteredCatalog = searchInput.length > 1 ? globalCatalog.filter(c => 
+                  normalizeString(c.name).includes(searchNormalized) || 
+                  (c.code && normalizeString(c.code).includes(searchNormalized))
+                ).slice(0, 15) : [];
+
+                const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+                  if (!showAutocomplete || filteredCatalog.length === 0) return;
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setFocusedIndex(prev => (prev < filteredCatalog.length - 1 ? prev + 1 : prev));
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setFocusedIndex(prev => (prev > 0 ? prev - 1 : 0));
+                  } else if (e.key === "Enter") {
+                    if (focusedIndex >= 0 && focusedIndex < filteredCatalog.length) {
+                      e.preventDefault();
+                      const c = filteredCatalog[focusedIndex];
+                      addToCart(c.name, c.price, "pz", c.cost, 1, c.image_url);
+                      setSearchInput("");
+                      setShowAutocomplete(false);
+                      setFocusedIndex(-1);
+                    }
+                  } else if (e.key === "Escape") {
+                    setShowAutocomplete(false);
+                    setFocusedIndex(-1);
+                  }
+                };
+
+                return (
+                  <>
+                    <input
+                      type="text"
+                      value={searchInput}
+                      onChange={(e) => {
+                        setSearchInput(e.target.value);
+                        setShowAutocomplete(e.target.value.length > 1);
+                        setFocusedIndex(-1);
                       }}
+                      onFocus={() => setShowAutocomplete(searchInput.length > 1)}
+                      onBlur={() => setTimeout(() => { setShowAutocomplete(false); setFocusedIndex(-1); }, 200)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="Buscar por Nombre, Código o Pistola Láser..."
                       style={{
-                        padding: "10px 15px",
-                        borderBottom: "1px solid rgba(255,255,255,0.1)",
-                        cursor: "pointer",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center"
+                        width: "100%",
+                        padding: "12px",
+                        borderRadius: "8px",
+                        background: "rgba(0,0,0,0.3)",
+                        color: "white",
+                        border: "1px solid var(--color-primary)",
                       }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: "bold", color: "white" }}>{c.name}</div>
-                        <div style={{ fontSize: "0.8rem", color: "var(--color-secondary)" }}>Código: {c.code || "N/A"} | Stock: {c.stock}</div>
+                    />
+                    {showAutocomplete && (
+                      <div style={{
+                        position: "absolute",
+                        top: "100%",
+                        left: 0,
+                        right: 0,
+                        marginTop: "5px",
+                        background: "#1a1a1a",
+                        border: "1px solid var(--color-primary)",
+                        borderRadius: "8px",
+                        zIndex: 100,
+                        maxHeight: "300px",
+                        overflowY: "auto",
+                        boxShadow: "0 10px 25px rgba(0,0,0,0.5)"
+                      }}>
+                        {filteredCatalog.map((c, idx) => (
+                          <div 
+                            key={c.id} 
+                            onClick={() => {
+                              addToCart(c.name, c.price, "pz", c.cost, 1, c.image_url);
+                              setSearchInput("");
+                              setShowAutocomplete(false);
+                              setFocusedIndex(-1);
+                            }}
+                            onMouseEnter={() => setFocusedIndex(idx)}
+                            style={{
+                              padding: "10px 15px",
+                              borderBottom: "1px solid rgba(255,255,255,0.1)",
+                              cursor: "pointer",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              background: focusedIndex === idx ? "rgba(16, 185, 129, 0.3)" : "transparent"
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontWeight: "bold", color: "white" }}>{c.name}</div>
+                              <div style={{ fontSize: "0.8rem", color: "var(--color-secondary)" }}>Código: {c.code || "N/A"} | Stock: {c.stock}</div>
+                            </div>
+                            <div style={{ fontWeight: "bold", color: "var(--color-primary)" }}>
+                              ${c.price.toFixed(2)}
+                            </div>
+                          </div>
+                        ))}
+                        {filteredCatalog.length === 0 && (
+                          <div style={{ padding: "15px", textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
+                            No se encontraron productos
+                          </div>
+                        )}
                       </div>
-                      <div style={{ fontWeight: "bold", color: "var(--color-primary)" }}>
-                        ${c.price.toFixed(2)}
-                      </div>
-                    </div>
-                  ))}
-                  {globalCatalog.filter(c => c.name.toLowerCase().includes(searchInput.toLowerCase()) || (c.code && c.code.toLowerCase().includes(searchInput.toLowerCase()))).length === 0 && (
-                    <div style={{ padding: "15px", textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
-                      No se encontraron productos
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </>
+                );
+              })()}
             </div>
             <button
               type="submit"
