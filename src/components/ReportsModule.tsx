@@ -35,7 +35,7 @@ export default function ReportsModule() {
   const [filterFecha, setFilterFecha] = useState("todos");
   const [exporting, setExporting] = useState(false);
   const [showToast, setShowToast] = useState(false);
-  const [lostSales, setLostSales] = useState<{term: string, count: number, type: string}[]>([]);
+  const [lostSales, setLostSales] = useState<{term: string, count: number, type: string, estimatedPrice?: number}[]>([]);
   const [radarFilterFecha, setRadarFilterFecha] = useState("mes");
 
   useEffect(() => {
@@ -295,6 +295,26 @@ export default function ReportsModule() {
       setExporting(false);
     }
   };
+  const exportRadarToExcel = async () => {
+    try {
+      const xlsx = await import("xlsx");
+      const dataToExport = lostSales.map(item => ({
+        "Producto Solicitado": item.term,
+        "Estado": item.type,
+        "Veces Solicitado": item.count,
+        "Precio Promedio Estimado": item.estimatedPrice || 0,
+        "Impacto Financiero (Ventas Perdidas)": (item.count * (item.estimatedPrice || 0)).toFixed(2)
+      }));
+
+      const worksheet = xlsx.utils.json_to_sheet(dataToExport);
+      const workbook = xlsx.utils.book_new();
+      xlsx.utils.book_append_sheet(workbook, worksheet, "Radar de Demanda");
+      xlsx.writeFile(workbook, `Radar_Demanda_${new Date().toLocaleDateString("es-MX").replace(/\//g, "-")}.xlsx`);
+    } catch (error) {
+      console.error("Error al exportar:", error);
+      alert("No se pudo exportar el radar.");
+    }
+  };
 
   return (
     <div
@@ -372,25 +392,45 @@ export default function ReportsModule() {
             <h2 style={{ color: "var(--color-primary)", margin: 0 }}>
               🧠 Radar de Demanda (Ventas Perdidas)
             </h2>
-            <select
-              value={radarFilterFecha}
-              onChange={(e) => setRadarFilterFecha(e.target.value)}
-              style={{
-                padding: "5px 10px",
-                borderRadius: "8px",
-                background: "rgba(0,0,0,0.3)",
-                color: "white",
-                border: "1px solid var(--color-primary)",
-                outline: "none",
-                cursor: "pointer",
-                fontSize: "0.85rem"
-              }}
-            >
-              <option value="hoy" style={{ background: "#1f2937" }}>Hoy</option>
-              <option value="semana" style={{ background: "#1f2937" }}>Últimos 7 días</option>
-              <option value="mes" style={{ background: "#1f2937" }}>Este mes</option>
-              <option value="todos" style={{ background: "#1f2937" }}>Todos los registros</option>
-            </select>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+              <select
+                value={radarFilterFecha}
+                onChange={(e) => setRadarFilterFecha(e.target.value)}
+                style={{
+                  padding: "5px 10px",
+                  borderRadius: "8px",
+                  background: "rgba(0,0,0,0.3)",
+                  color: "white",
+                  border: "1px solid var(--color-primary)",
+                  outline: "none",
+                  cursor: "pointer",
+                  fontSize: "0.85rem"
+                }}
+              >
+                <option value="hoy" style={{ background: "#1f2937" }}>Hoy</option>
+                <option value="semana" style={{ background: "#1f2937" }}>Últimos 7 días</option>
+                <option value="mes" style={{ background: "#1f2937" }}>Este mes</option>
+                <option value="todos" style={{ background: "#1f2937" }}>Todos los registros</option>
+              </select>
+              <button 
+                onClick={exportRadarToExcel}
+                style={{
+                  padding: "5px 15px",
+                  background: "var(--color-primary)",
+                  color: "black",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontSize: "0.85rem",
+                  fontWeight: "bold",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px"
+                }}
+              >
+                📥 Exportar Excel
+              </button>
+            </div>
           </div>
           <p style={{ marginBottom: "15px" }}>
             Artículos solicitados por clientes que no teníamos en inventario o estaban agotados:
@@ -414,6 +454,11 @@ export default function ReportsModule() {
                   <span style={{ fontSize: "0.8rem", color: "var(--color-secondary)", padding: "2px 6px", background: "rgba(255,255,255,0.1)", borderRadius: "4px" }}>
                     {item.type === "AGOTADO" ? "Agotado" : "No en catálogo"}
                   </span>
+                  {item.estimatedPrice && item.estimatedPrice > 0 ? (
+                    <span style={{ fontSize: "0.8rem", color: "#ef4444", fontWeight: "bold" }}>
+                      -${(item.count * item.estimatedPrice).toFixed(2)} perdidos
+                    </span>
+                  ) : null}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
                   <div style={{ color: "#f59e0b", fontWeight: "bold", display: "flex", alignItems: "center", gap: "5px" }}>

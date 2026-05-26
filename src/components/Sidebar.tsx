@@ -19,7 +19,7 @@ export default function Sidebar() {
       { id: "1", path: "/", allowed: isAdmin || p.pos },
       { id: "2", path: "/dashboard", allowed: isAdmin || p.dashboard || p.reportes },
       { id: "3", path: "/caja", allowed: isAdmin || p.caja },
-      { id: "4", path: "/servicios", allowed: isAdmin || p.servicios },
+      { id: "4", path: "/clientes", allowed: isAdmin || p.servicios || p.pos || p.inventario },
       { id: "5", path: "/inventario", allowed: isAdmin || p.inventario },
       { id: "6", path: "/configuracion", allowed: isAdmin || p.configuracion },
       { id: "7", path: "/clientes", allowed: isAdmin || p.pos || p.inventario },
@@ -135,30 +135,19 @@ export default function Sidebar() {
             <span className="shortcut-badge">Alt + 3</span>
           </Link>
         )}
-        {(isAdmin || p.pos || p.inventario) && (
+        {(isAdmin || p.pos || p.inventario || p.servicios) && (
           <Link
             href="/clientes"
             className={isActive("/clientes") ? "active" : ""}
             onClick={(e) => handleLinkClick(e, "/clientes")}
-            title="Clientes y Crédito (Alt + 7)"
+            title="Clientes y Agenda (Alt + 7)"
           >
             <span className="icon">👥</span>
-            <span className="nav-text">Clientes y Crédito</span>
+            <span className="nav-text">Clientes y Agenda</span>
             <span className="shortcut-badge">Alt + 7</span>
           </Link>
         )}
-        {(isAdmin || p.servicios) && (
-          <Link
-            href="/servicios"
-            className={isActive("/servicios") ? "active" : ""}
-            onClick={(e) => handleLinkClick(e, "/servicios")}
-            title="Agenda de Servicios (Alt + 4)"
-          >
-            <span className="icon">📅</span>
-            <span className="nav-text">Agenda de Servicios</span>
-            <span className="shortcut-badge">Alt + 4</span>
-          </Link>
-        )}
+
         {(isAdmin || p.inventario) && (
           <>
             <Link

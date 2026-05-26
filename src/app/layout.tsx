@@ -4,6 +4,7 @@ import AuthProvider from "../components/AuthProvider";
 import Sidebar from "../components/Sidebar";
 import HomeButton from "../components/HomeButton";
 import IntelligenceNotifications from "../components/IntelligenceNotifications";
+import TasksWidget from "../components/TasksWidget";
 import { Toaster } from "react-hot-toast";
 
 export const metadata: Metadata = {
@@ -40,9 +41,10 @@ export default function RootLayout({
               <HomeButton />
               {children}
             </main>
+            <TasksWidget />
           </div>
         </AuthProvider>
-        <Toaster position="top-right" />
+        <Toaster position="top-right" containerStyle={{ zIndex: 999999 }} />
         <script
           dangerouslySetInnerHTML={{
             __html: `

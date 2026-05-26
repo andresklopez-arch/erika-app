@@ -150,7 +150,19 @@ export default function ServicesModule() {
         .update({ status: newStatus })
         .eq("id", id);
       if (error) throw error;
+      
       fetchServices();
+
+      if (newStatus === "completed") {
+        const service = services.find((s) => s.id === id);
+        if (service && service.customer_phone) {
+          if (confirm(`¿Deseas enviar una notificación por WhatsApp a ${service.customer_phone}?`)) {
+            const msg = `Hola ${service.customer_name}, te informamos que el servicio de ${service.service_type} ha sido completado exitosamente. ¡Gracias por tu preferencia!`;
+            const waLink = `https://wa.me/${service.customer_phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+            window.open(waLink, "_blank");
+          }
+        }
+      }
     } catch (err) {
       alert("Error al actualizar el estado.");
       console.error(err);
@@ -440,6 +452,10 @@ ON public.services FOR ALL TO authenticated USING (true) WITH CHECK (true);`}
               statusText = "Cancelado";
             }
 
+            const isWithin24Hours = (new Date(service.scheduled_at).getTime() - new Date().getTime()) > 0 && 
+                                    (new Date(service.scheduled_at).getTime() - new Date().getTime()) <= 24 * 60 * 60 * 1000;
+            const noPhone = !service.customer_phone || service.customer_phone.trim() === "";
+
             return (
               <div
                 key={service.id}
@@ -452,24 +468,34 @@ ON public.services FOR ALL TO authenticated USING (true) WITH CHECK (true);`}
                   boxShadow: `0 4px 20px rgba(0,0,0,0.2)`,
                   position: "relative",
                   gap: "15px",
+                  border: isWithin24Hours ? "1px solid #f59e0b" : "none",
+                  backgroundColor: isWithin24Hours ? "rgba(245, 158, 11, 0.05)" : "rgba(0,0,0,0.3)"
                 }}
               >
                 <div>
                   {/* Card Header */}
                   <div className="flex-between" style={{ marginBottom: "10px" }}>
-                    <span
-                      style={{
-                        background: statusBg,
-                        color: statusColor,
-                        padding: "4px 10px",
-                        borderRadius: "4px",
-                        fontSize: "0.75rem",
-                        fontWeight: "bold",
-                        border: `1px solid ${statusColor}40`,
-                      }}
-                    >
-                      {statusText}
-                    </span>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <span
+                        style={{
+                          background: statusBg,
+                          color: statusColor,
+                          padding: "4px 10px",
+                          borderRadius: "4px",
+                          fontSize: "0.75rem",
+                          fontWeight: "bold",
+                          border: `1px solid ${statusColor}40`,
+                        }}
+                      >
+                        {statusText}
+                      </span>
+                      {isWithin24Hours && service.status !== "completed" && service.status !== "cancelled" && (
+                        <span title="Próximas 24 horas" style={{ fontSize: "1.2rem" }}>⏰</span>
+                      )}
+                      {noPhone && (
+                        <span title="Sin teléfono de contacto" style={{ fontSize: "1.2rem" }}>🔴</span>
+                      )}
+                    </div>
                     <strong style={{ fontSize: "1.1rem", color: "white" }}>${service.cost.toFixed(2)}</strong>
                   </div>
 

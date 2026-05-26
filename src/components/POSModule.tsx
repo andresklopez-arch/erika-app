@@ -29,6 +29,97 @@ interface Ticket {
   discountPct: number;
 }
 
+const levenshtein = (a: string, b: string) => {
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const matrix = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+  for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      if (a[i - 1] === b[j - 1]) matrix[i][j] = matrix[i - 1][j - 1];
+      else matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j] + 1);
+    }
+  }
+  return matrix[a.length][b.length];
+};
+
+const fuzzyMatch = (itemName: string, query: string) => {
+  const itemWords = itemName.split(/\s+/);
+  const queryWords = query.split(/\s+/);
+  return queryWords.every(qw => {
+    if (qw.length === 0) return true;
+    return itemWords.some(iw => {
+      if (iw.includes(qw)) return true;
+      if (qw.length <= 3) return false;
+      return levenshtein(iw, qw) <= 2;
+    });
+  });
+};
+
+const SYNONYMS: Record<string, string[]> = {
+  "pegamento": ["adhesivo", "resistol", "kola loka", "silicon", "cinta"],
+  "pinza": ["alicate", "tenaza"],
+  "desarmador": ["destornillador", "phillips", "plano"],
+  "taquete": ["ramplug", "espiga", "anclaje"],
+  "cinta": ["tape", "aislante", "teflon", "masking"],
+  "foco": ["bombilla", "lampara", "led", "luminaria"],
+  "taladro": ["rotomartillo", "perforadora"],
+  "cable": ["alambre", "cordon", "thw"]
+};
+
+const renderHighlightedName = (name: string, query: string) => {
+  const qLower = query.toLowerCase();
+  if (name.toLowerCase().includes(qLower) && qLower.length > 0) {
+    const idx = name.toLowerCase().indexOf(qLower);
+    return (
+      <>
+        {name.substring(0, idx)}
+        <span style={{ color: "var(--color-primary)", fontWeight: "bold" }}>{name.substring(idx, idx + query.length)}</span>
+        {name.substring(idx + query.length)}
+      </>
+    );
+  }
+  
+  const queryWords = qLower.split(/\s+/).filter(w => w.length > 0);
+  if (queryWords.length === 0) return <>{name}</>;
+
+  return name.split(" ").map((word, wIdx) => {
+    const wLower = word.toLowerCase();
+    let isFuzzy = false;
+    let matchedQw = "";
+    for (const qw of queryWords) {
+      if (qw.length > 2 && levenshtein(wLower, qw) <= 2) {
+        isFuzzy = true;
+        matchedQw = qw;
+        break;
+      }
+    }
+    
+    if (isFuzzy) {
+      return (
+        <span key={wIdx}>
+          {word.split('').map((char, i) => {
+            const isMatch = matchedQw.includes(char.toLowerCase());
+            return (
+              <span key={i} style={{ 
+                color: isMatch ? "var(--color-primary)" : "#10b981", 
+                fontWeight: "bold",
+                background: isMatch ? "transparent" : "rgba(16, 185, 129, 0.2)",
+                borderRadius: "2px"
+              }}>
+                {char}
+              </span>
+            );
+          })}
+          {wIdx < name.split(" ").length - 1 ? " " : ""}
+        </span>
+      );
+    }
+    return <span key={wIdx}>{word}{wIdx < name.split(" ").length - 1 ? " " : ""}</span>;
+  });
+};
+
 export default function POSModule() {
   const { currentUser } = useAuth();
   const [globalCatalog, setGlobalCatalog] = useState<any[]>([]);
@@ -882,9 +973,21 @@ export default function POSModule() {
         show={showScanner}
         onClose={() => setShowScanner(false)}
         onScan={(decodedText) => {
-          const loc = decodedText.replace("ERIKA-LOC-", "");
+          let scanCode = decodedText;
+          try {
+            const parsed = JSON.parse(decodedText);
+            if (parsed.code || parsed.sku) scanCode = parsed.code || parsed.sku;
+          } catch(e) {
+            if (decodedText.includes("http")) {
+               try {
+                 const url = new URL(decodedText);
+                 scanCode = url.searchParams.get("code") || url.searchParams.get("sku") || url.pathname.split("/").pop() || decodedText;
+               } catch(err) {}
+            }
+          }
+          const loc = scanCode.replace("ERIKA-LOC-", "");
           const matched = globalCatalog.find(
-            (c) => c.location === loc || c.code === decodedText,
+            (c) => c.location === loc || c.code === scanCode,
           );
           if (matched) {
             addToCart(
@@ -996,10 +1099,34 @@ export default function POSModule() {
             <div style={{ flex: 1, position: "relative" }}>
               {(() => {
                 const searchNormalized = normalizeString(searchInput);
-                const filteredCatalog = searchInput.length > 1 ? globalCatalog.filter(c => 
-                  normalizeString(c.name).includes(searchNormalized) || 
-                  (c.code && normalizeString(c.code).includes(searchNormalized))
-                ).slice(0, 15) : [];
+                const queryWords = searchNormalized.split(/\s+/).filter(w => w.length > 0);
+                
+                let expandedQueryWords = [...queryWords];
+                queryWords.forEach(qw => {
+                  if (SYNONYMS[qw]) expandedQueryWords.push(...SYNONYMS[qw]);
+                });
+
+                const filteredCatalog = searchInput.length > 1 ? globalCatalog.map(c => {
+                  const nameNorm = normalizeString(c.name);
+                  const codeNorm = c.code ? normalizeString(c.code) : "";
+                  let score = 0;
+                  
+                  if (nameNorm.includes(searchNormalized) || codeNorm.includes(searchNormalized)) {
+                    score = 100;
+                  } else {
+                    expandedQueryWords.forEach(qw => {
+                      if (nameNorm.includes(qw)) {
+                        score += 50;
+                      } else if (qw.length > 3 && fuzzyMatch(nameNorm, qw)) {
+                        score += 30;
+                      }
+                    });
+                  }
+                  
+                  return { ...c, __score: score };
+                }).filter(c => c.__score > 0)
+                  .sort((a, b) => b.__score - a.__score)
+                  .slice(0, 15) : [];
 
                 const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
                   if (!showAutocomplete || filteredCatalog.length === 0) return;
@@ -1127,8 +1254,13 @@ export default function POSModule() {
                               }}
                             >
                               <div>
-                                <div style={{ fontWeight: "bold", color: c.stock <= 0 ? "#ef4444" : "white" }}>
-                                  {c.name} {c.stock <= 0 ? "(AGOTADO)" : ""}
+                                <div style={{ fontWeight: "bold", color: c.stock <= 0 ? "#ef4444" : "white", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                                  {renderHighlightedName(c.name, searchInput)} {c.stock <= 0 ? "(AGOTADO)" : ""}
+                                  {c.cost > 0 && ((c.price - c.cost) / c.cost) >= 0.4 && (
+                                    <span title="Producto de Alta Rentabilidad" style={{ fontSize: "0.7rem", background: "rgba(234, 179, 8, 0.15)", border: "1px solid rgba(234, 179, 8, 0.3)", color: "#eab308", padding: "2px 6px", borderRadius: "10px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                      ⭐ TOP Ganancia
+                                    </span>
+                                  )}
                                 </div>
                                 <div style={{ fontSize: "0.8rem", color: "var(--color-secondary)" }}>Código: {c.code || "N/A"} | Stock: {c.stock}</div>
                               </div>
@@ -2059,6 +2191,41 @@ export default function POSModule() {
                 ))}
               </div>
             </div>
+
+            {paymentMethod === "efectivo" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", background: "rgba(0,0,0,0.3)", padding: "15px", borderRadius: "8px", marginBottom: "20px" }}>
+                <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "var(--color-secondary)" }}>💵 Efectivo Recibido (Calculadora de Cambio):</label>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                  <button onClick={() => setCashPayAmount(finalTotal.toFixed(2))} className="btn-primary" style={{ background: "rgba(16, 185, 129, 0.1)", border: "1px solid #10b981", color: "#10b981", padding: "6px" }}>Exacto</button>
+                  <button onClick={() => setCashPayAmount("50")} className="btn-primary" style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", padding: "6px" }}>$50</button>
+                  <button onClick={() => setCashPayAmount("100")} className="btn-primary" style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", padding: "6px" }}>$100</button>
+                  <button onClick={() => setCashPayAmount("200")} className="btn-primary" style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", padding: "6px" }}>$200</button>
+                  <button onClick={() => setCashPayAmount("500")} className="btn-primary" style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", padding: "6px" }}>$500</button>
+                  <button onClick={() => setCashPayAmount("1000")} className="btn-primary" style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", padding: "6px" }}>$1000</button>
+                </div>
+                <input
+                  type="number"
+                  value={cashPayAmount}
+                  onChange={e => setCashPayAmount(e.target.value)}
+                  placeholder="Monto recibido..."
+                  style={{ width: "100%", padding: "12px", borderRadius: "6px", background: "rgba(0,0,0,0.5)", color: "white", border: "1px solid var(--color-primary)", fontSize: "1.2rem", textAlign: "center" }}
+                />
+                {parseFloat(cashPayAmount) > finalTotal && (
+                  <div style={{ marginTop: "5px", padding: "10px", background: "rgba(16, 185, 129, 0.15)", borderRadius: "6px", textAlign: "center" }}>
+                    <span style={{ color: "#10b981", fontWeight: "bold", fontSize: "1.1rem" }}>
+                      CAMBIO A ENTREGAR: ${(parseFloat(cashPayAmount) - finalTotal).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+                {parseFloat(cashPayAmount) < finalTotal && cashPayAmount !== "" && (
+                  <div style={{ marginTop: "5px", padding: "10px", background: "rgba(239, 68, 68, 0.15)", borderRadius: "6px", textAlign: "center" }}>
+                    <span style={{ color: "#ef4444", fontWeight: "bold", fontSize: "0.9rem" }}>
+                      Faltan: ${(finalTotal - parseFloat(cashPayAmount)).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {paymentMethod === "mixto" && (
               <div style={{ display: "flex", flexDirection: "column", gap: "12px", background: "rgba(0,0,0,0.3)", padding: "15px", borderRadius: "8px", marginBottom: "20px" }}>

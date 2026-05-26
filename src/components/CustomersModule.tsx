@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 export default function CustomersModule() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [customerServices, setCustomerServices] = useState<any[]>([]);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
@@ -33,14 +34,29 @@ export default function CustomersModule() {
     if (data) setTransactions(data);
   };
 
+  const fetchCustomerServices = async (customerName: string) => {
+    const { data } = await supabase
+      .from("services")
+      .select("*")
+      .eq("customer_name", customerName)
+      .order("scheduled_at", { ascending: false });
+    if (data) setCustomerServices(data);
+  };
+
   useEffect(() => {
     fetchCustomers();
   }, []);
 
   useEffect(() => {
-    if (selectedCustomerId) fetchTransactions(selectedCustomerId);
-    else setTransactions([]);
-  }, [selectedCustomerId]);
+    if (selectedCustomerId) {
+      fetchTransactions(selectedCustomerId);
+      const c = customers.find(x => x.id === selectedCustomerId);
+      if (c) fetchCustomerServices(c.name);
+    } else {
+      setTransactions([]);
+      setCustomerServices([]);
+    }
+  }, [selectedCustomerId, customers]);
 
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,6 +107,16 @@ export default function CustomersModule() {
       .eq("id", customer.id);
 
     alert(`✅ Abono de $${amount.toFixed(2)} registrado exitosamente.`);
+    
+    if (customer.phone) {
+      if (confirm(`¿Deseas enviar un recibo por WhatsApp a ${customer.phone}?`)) {
+        const newBalance = customer.balance - amount;
+        const msg = `Hola ${customer.name}, confirmamos de recibido tu abono de $${amount.toFixed(2)}. Tu nuevo saldo es de $${newBalance.toFixed(2)}. ¡Gracias por tu pago!`;
+        const waLink = `https://wa.me/${customer.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
+        window.open(waLink, "_blank");
+      }
+    }
+
     setShowPayModal(false);
     setPayAmount("");
     fetchCustomers();
@@ -368,6 +394,75 @@ export default function CustomersModule() {
                           }}
                         >
                           Sin movimientos.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Historial de Servicios */}
+              <h3 style={{ marginBottom: "10px", marginTop: "20px" }}>Servicios y Trabajos Anteriores</h3>
+              <div style={{ flex: 1, overflowY: "auto", maxHeight: "250px" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr
+                      style={{
+                        background: "rgba(255,255,255,0.05)",
+                        textAlign: "left",
+                      }}
+                    >
+                      <th style={{ padding: "10px" }}>Fecha</th>
+                      <th style={{ padding: "10px" }}>Servicio</th>
+                      <th style={{ padding: "10px" }}>Técnico</th>
+                      <th style={{ padding: "10px" }}>Estado</th>
+                      <th style={{ padding: "10px", textAlign: "right" }}>Costo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {customerServices.map((srv) => (
+                      <tr
+                        key={srv.id}
+                        style={{
+                          borderBottom: "1px solid rgba(255,255,255,0.05)",
+                        }}
+                      >
+                        <td style={{ padding: "10px" }}>
+                          {new Date(srv.scheduled_at).toLocaleDateString()}
+                        </td>
+                        <td style={{ padding: "10px" }}>{srv.service_type}</td>
+                        <td style={{ padding: "10px" }}>{srv.technician_name}</td>
+                        <td style={{ padding: "10px" }}>
+                          <span style={{ 
+                            background: srv.status === 'completed' ? "rgba(16, 185, 129, 0.1)" : "rgba(245, 158, 11, 0.1)",
+                            color: srv.status === 'completed' ? "#10b981" : "#f59e0b",
+                            padding: "4px 8px", borderRadius: "4px" 
+                          }}>
+                            {srv.status === 'completed' ? 'Completado' : srv.status === 'pending' ? 'Pendiente' : srv.status === 'in_progress' ? 'En Proceso' : 'Cancelado'}
+                          </span>
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px",
+                            textAlign: "right",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          ${srv.cost.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                    {customerServices.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          style={{
+                            padding: "20px",
+                            textAlign: "center",
+                            color: "rgba(255,255,255,0.5)",
+                          }}
+                        >
+                          No hay servicios registrados para este cliente.
                         </td>
                       </tr>
                     )}

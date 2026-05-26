@@ -1,6 +1,8 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import * as XLSX from "xlsx";
+import { supabase } from "../lib/supabaseClient";
+import SuppliersManagerModal from "./SuppliersManagerModal";
 
 interface SmartImporterProps {
   avgMargin: number;
@@ -20,7 +22,28 @@ export default function SmartImporter({
   const [previewData, setPreviewData] = useState<any[] | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+  const [columnMapping, setColumnMapping] = useState({ name: -1, cost: -1, stock: -1, code: -1 });
+  const [detectionSource, setDetectionSource] = useState({ name: "", cost: "", stock: "", code: "" });
+  const [rawHeaders, setRawHeaders] = useState<string[]>([]);
+  const [processedRawData, setProcessedRawData] = useState<any[][]>([]);
+  const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [supplierSearch, setSupplierSearch] = useState("");
+  const [dbSuppliers, setDbSuppliers] = useState<string[]>([]);
+  const [activeSuggestRow, setActiveSuggestRow] = useState<number | null>(null);
+  const [showNewSupplierModal, setShowNewSupplierModal] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchSuppliers = async () => {
+    const { data } = await supabase.from("suppliers").select("name").order("name");
+    if (data) setDbSuppliers(data.map((s: any) => s.name));
+  };
+
+  useEffect(() => {
+    fetchSuppliers();
+    const lastSup = localStorage.getItem("lastErikaSupplier");
+    if (lastSup) setSupplierSearch(lastSup);
+  }, []);
 
   // NLP Limpiador: Quitar dobles espacios y capitalizar "tHINNEr" -> "Thinner"
   const cleanAndCapitalize = (str: string) => {
@@ -31,10 +54,13 @@ export default function SmartImporter({
       .replace(/\b\w/g, (c) => c.toUpperCase());
   };
 
+  const [minBatchMargin, setMinBatchMargin] = useState<number>(() => {
+    return parseFloat(localStorage.getItem("ERIKA_TARGET_UTILITY") || "50");
+  });
+
   // Helper de cálculo inteligente de precios basado en metas e histórico
-  const getSmartPriceSuggestion = (name: string, cost: number, code: string) => {
-    const targetUtility = parseFloat(localStorage.getItem("ERIKA_TARGET_UTILITY") || "50");
-    const margin = targetUtility / 100;
+  const getSmartPriceSuggestion = (name: string, cost: number, code: string, currentMinMargin: number) => {
+    const margin = currentMinMargin / 100;
 
     // Buscar coincidencia en el catálogo existente
     const existing = existingItems.find(
@@ -72,6 +98,111 @@ export default function SmartImporter({
     return { price, alertText, isInflation, isNew, prevPrice, prevCost };
   };
 
+  const generatePreview = (mapping: { name: number, cost: number, stock: number, code: number }, data: any[][]) => {
+    const importedProducts: any[] = [];
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      if (!row || !row[mapping.name]) continue;
+      
+      if (i === 0) {
+        const potentialCost = String(row[mapping.cost]).replace(/[^0-9.-]+/g, "");
+        if (isNaN(Number(potentialCost)) || potentialCost === "") {
+           continue;
+        }
+      }
+
+      let rawCost = Number(row[mapping.cost]);
+      if (isNaN(rawCost) && typeof row[mapping.cost] === "string") {
+        rawCost = Number(String(row[mapping.cost]).replace(/[^0-9.-]+/g, ""));
+      }
+      if (isNaN(rawCost)) rawCost = 0;
+
+      let rawCode = row[mapping.code] ? String(row[mapping.code]).trim() : `SKU-${Date.now()}-${i}`;
+      const cleanName = cleanAndCapitalize(String(row[mapping.name]));
+
+      // 🔍 Detección Anti-Duplicados
+      const existing = existingItems.find(
+        (item) =>
+          (item.code && item.code.trim().toUpperCase() === rawCode.trim().toUpperCase() && rawCode !== "") ||
+          item.name.toLowerCase().trim() === cleanName.toLowerCase().trim()
+      );
+
+      // Si existe y tiene un código real, lo heredamos para que InventoryModule lo actualice correctamente
+      if (existing && existing.code) {
+        rawCode = existing.code;
+      }
+
+      const smartPrices = getSmartPriceSuggestion(cleanName, rawCost, rawCode, minBatchMargin);
+
+      importedProducts.push({
+        id: `imp-${Date.now()}-${i}`,
+        code: rawCode,
+        name: cleanName,
+        cost: rawCost,
+        price: smartPrices.price,
+        stock: Number(row[mapping.stock]) || 0,
+        supplier: "Pendiente",
+        minStock: 5,
+        salesIndex: 50,
+        autoPriced: true,
+        alertText: smartPrices.alertText,
+        isInflation: smartPrices.isInflation,
+        isNew: smartPrices.isNew,
+        prevPrice: smartPrices.prevPrice,
+        prevCost: smartPrices.prevCost
+      });
+    }
+    setPreviewData(importedProducts);
+  };
+
+  const handleMappingChange = (field: string, newIdx: number) => {
+    const newMapping = { ...columnMapping, [field]: newIdx };
+    setColumnMapping(newMapping);
+    setDetectionSource({ ...detectionSource, [field]: "👤 Manual" });
+    generatePreview(newMapping, processedRawData);
+  };
+
+  const handleEditField = (index: number, field: string, value: string | number) => {
+    if (!previewData) return;
+    const newData = [...previewData];
+    newData[index] = { ...newData[index], [field]: value };
+    setPreviewData(newData);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, rowIndex: number, field: string) => {
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      const fields = ['code', 'name', 'stock', 'cost', 'price'];
+      const fieldIndex = fields.indexOf(field);
+      
+      let nextRow = rowIndex;
+      let nextField = fields[fieldIndex + (e.shiftKey ? -1 : 1)];
+      
+      if (!nextField) {
+        nextField = e.shiftKey ? fields[fields.length - 1] : fields[0];
+        nextRow += e.shiftKey ? -1 : 1;
+      }
+      
+      const nextInput = document.getElementById(`input-${nextRow}-${nextField}`);
+      if (nextInput) {
+        nextInput.focus();
+        if (nextInput instanceof HTMLInputElement) nextInput.select();
+      }
+    }
+  };
+
+  const highlightMatch = (text: string, query: string) => {
+    if (!query) return text;
+    const parts = text.split(new RegExp(`(${query})`, 'gi'));
+    return <span>{parts.map((part, i) => part.toLowerCase() === query.toLowerCase() ? <span key={i} style={{ color: "var(--color-primary)", fontWeight: "bold" }}>{part}</span> : part)}</span>;
+  };
+
+  useEffect(() => {
+    if (previewData && processedRawData) {
+      generatePreview(columnMapping, processedRawData);
+    }
+  }, [minBatchMargin]);
+
   const processExcel = async (file: File) => {
     setIsProcessing(true);
     setProgress("🧠 Analizando archivo y calculando márgenes...");
@@ -80,6 +211,19 @@ export default function SmartImporter({
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        
+        // 🛡️ Validación de Integridad (Magic Numbers)
+        const ext = file.name.split(".").pop()?.toLowerCase();
+        if (data.length > 8) {
+          const hex = Array.from(data.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+          if (ext === 'xlsx' && !hex.startsWith("504B0304") && !hex.startsWith("504B0506") && !hex.startsWith("504B0708")) {
+             throw new Error("El archivo no parece ser un XLSX genuino (posible intento de inyección o archivo corrupto).");
+          }
+          if (ext === 'xls' && !hex.startsWith("D0CF11E0A1B11AE1")) {
+             throw new Error("El archivo no parece ser un XLS genuino (posible intento de inyección o archivo corrupto).");
+          }
+        }
+
         const workbook = XLSX.read(data, { type: "array" });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
@@ -96,41 +240,49 @@ export default function SmartImporter({
 
         if (rawData.length < 2) throw new Error("Documento vacío o sin suficientes datos");
 
-        // 2. Motor Heurístico: Analizar las primeras 20 filas válidas
-        const sampleSize = Math.min(20, rawData.length);
-        const columnStats: Record<number, { textLength: number, numCount: number, floatCount: number, strCount: number, total: number }> = {};
-        
+        // Extraer Headers Virtuales para selectores
         let maxCols = 0;
-        for (let i = 0; i < sampleSize; i++) {
+        for (let i = 0; i < Math.min(20, rawData.length); i++) {
            if (rawData[i].length > maxCols) maxCols = rawData[i].length;
         }
-
+        
+        const firstRow = rawData[0].map((h: any) => String(h).toLowerCase().trim());
+        const headersForSelect: string[] = [];
         for (let c = 0; c < maxCols; c++) {
-           columnStats[c] = { textLength: 0, numCount: 0, floatCount: 0, strCount: 0, total: 0 };
+           headersForSelect.push(rawData[0][c] ? String(rawData[0][c]) : `Columna ${c + 1}`);
         }
 
-        for (let i = 0; i < sampleSize; i++) {
+        // FASE 1: Detección por Títulos
+        let finalNameIdx = firstRow.findIndex((h: string) => h.includes("nombre") || h.includes("descrip") || h.includes("articulo") || h.includes("artículo") || h.includes("producto") || h.includes("concepto"));
+        let finalCostIdx = firstRow.findIndex((h: string) => h.includes("costo") || h.includes("compra") || h.includes("adquisicion") || h.includes("unitario") || h.includes("neto") || h.includes("precio"));
+        let finalStockIdx = firstRow.findIndex((h: string) => h.includes("stock") || h.includes("cantidad") || h.includes("existencia") || h.includes("cant"));
+        let finalCodeIdx = firstRow.findIndex((h: string) => h.includes("codigo") || h.includes("código") || h.includes("sku") || h.includes("barras") || h.includes("id"));
+
+        const source = {
+          name: finalNameIdx >= 0 ? "🏷️ Título" : "",
+          cost: finalCostIdx >= 0 ? "🏷️ Título" : "",
+          stock: finalStockIdx >= 0 ? "🏷️ Título" : "",
+          code: finalCodeIdx >= 0 ? "🏷️ Título" : "",
+        };
+
+        // FASE 2: Motor Heurístico para las faltantes
+        const sampleSize = Math.min(20, rawData.length);
+        const columnStats: Record<number, { textLength: number, numCount: number, floatCount: number, strCount: number, total: number }> = {};
+        for (let c = 0; c < maxCols; c++) columnStats[c] = { textLength: 0, numCount: 0, floatCount: 0, strCount: 0, total: 0 };
+
+        for (let i = 1; i < sampleSize; i++) {
            const row = rawData[i];
            for (let c = 0; c < maxCols; c++) {
               const cell = row[c];
               if (cell === null || cell === undefined || cell === "") continue;
-              
               columnStats[c].total++;
               const strVal = String(cell).trim();
-              
               let numVal = Number(cell);
-              if (isNaN(numVal) && typeof cell === "string") {
-                 numVal = Number(cell.replace(/[^0-9.-]+/g, ""));
-              }
-              
-              // Si tiene letras claras, no lo tratamos como número aunque Number() haya podido parcial
+              if (isNaN(numVal) && typeof cell === "string") numVal = Number(cell.replace(/[^0-9.-]+/g, ""));
               const hasLetters = /[a-zA-Z]/.test(strVal);
-              
               if (!isNaN(numVal) && strVal !== "" && !hasLetters) {
                  columnStats[c].numCount++;
-                 if (strVal.includes(".") || numVal % 1 !== 0) {
-                    columnStats[c].floatCount++;
-                 }
+                 if (strVal.includes(".") || numVal % 1 !== 0) columnStats[c].floatCount++;
               } else {
                  columnStats[c].strCount++;
                  columnStats[c].textLength += strVal.length;
@@ -138,116 +290,67 @@ export default function SmartImporter({
            }
         }
 
-        // 3. Asignación Dinámica de Columnas
-        let finalNameIdx = -1;
-        let finalCostIdx = -1;
-        let finalStockIdx = -1;
-        let finalCodeIdx = -1;
-
-        // Nombre: Columna con más strings y textos largos
-        let maxTextAvg = -1;
-        for (let c = 0; c < maxCols; c++) {
-           const stat = columnStats[c];
-           if (stat.total === 0) continue;
-           const textAvg = stat.textLength / (stat.strCount || 1);
-           if (stat.strCount >= stat.numCount && textAvg > maxTextAvg) {
-              maxTextAvg = textAvg;
-              finalNameIdx = c;
+        if (finalNameIdx === -1) {
+           let maxTextAvg = -1;
+           for (let c = 0; c < maxCols; c++) {
+              if (c === finalCostIdx || c === finalStockIdx || c === finalCodeIdx) continue;
+              const stat = columnStats[c];
+              if (stat.total === 0) continue;
+              const textAvg = stat.textLength / (stat.strCount || 1);
+              if (stat.strCount >= stat.numCount && textAvg > maxTextAvg) { maxTextAvg = textAvg; finalNameIdx = c; }
            }
+           if (finalNameIdx !== -1) source.name = "🧠 IA (Texto)";
         }
 
-        // Costo: Columna con más números y preferiblemente decimales
-        let maxFloats = -1;
-        let maxNumsForCost = -1;
-        for (let c = 0; c < maxCols; c++) {
-           if (c === finalNameIdx) continue;
-           const stat = columnStats[c];
-           if (stat.total === 0) continue;
-           if (stat.floatCount > maxFloats) {
-              maxFloats = stat.floatCount;
-              finalCostIdx = c;
-           } else if (stat.floatCount === maxFloats && stat.numCount > maxNumsForCost) {
-              maxNumsForCost = stat.numCount;
-              finalCostIdx = c;
+        if (finalCostIdx === -1) {
+           let maxFloats = -1;
+           let maxNums = -1;
+           for (let c = 0; c < maxCols; c++) {
+              if (c === finalNameIdx || c === finalStockIdx || c === finalCodeIdx) continue;
+              const stat = columnStats[c];
+              if (stat.total === 0) continue;
+              if (stat.floatCount > maxFloats) { maxFloats = stat.floatCount; finalCostIdx = c; }
+              else if (stat.floatCount === maxFloats && stat.numCount > maxNums) { maxNums = stat.numCount; finalCostIdx = c; }
            }
+           if (finalCostIdx !== -1) source.cost = "🧠 IA (Decimales)";
         }
 
-        // Stock: Columna con números, preferiblemente enteros
-        let maxInts = -1;
-        for (let c = 0; c < maxCols; c++) {
-           if (c === finalNameIdx || c === finalCostIdx) continue;
-           const stat = columnStats[c];
-           if (stat.total === 0) continue;
-           const ints = stat.numCount - stat.floatCount;
-           if (ints > maxInts) {
-              maxInts = ints;
-              finalStockIdx = c;
+        if (finalStockIdx === -1) {
+           let maxInts = -1;
+           for (let c = 0; c < maxCols; c++) {
+              if (c === finalNameIdx || c === finalCostIdx || c === finalCodeIdx) continue;
+              const stat = columnStats[c];
+              if (stat.total === 0) continue;
+              const ints = stat.numCount - stat.floatCount;
+              if (ints > maxInts) { maxInts = ints; finalStockIdx = c; }
            }
+           if (finalStockIdx !== -1) source.stock = "🧠 IA (Enteros)";
         }
 
-        // Código: La columna restante con más combinaciones cortas (letras/números)
-        for (let c = 0; c < maxCols; c++) {
-           if (c === finalNameIdx || c === finalCostIdx || c === finalStockIdx) continue;
-           const stat = columnStats[c];
-           if (stat.total > 0 && finalCodeIdx === -1) {
-              finalCodeIdx = c;
+        if (finalCodeIdx === -1) {
+           for (let c = 0; c < maxCols; c++) {
+              if (c === finalNameIdx || c === finalCostIdx || c === finalStockIdx) continue;
+              const stat = columnStats[c];
+              if (stat.total > 0 && finalCodeIdx === -1) { finalCodeIdx = c; }
            }
+           if (finalCodeIdx !== -1) source.code = "🧠 IA (Restante)";
         }
 
-        // Fallbacks
-        if (finalNameIdx === -1) finalNameIdx = 1;
-        if (finalCostIdx === -1) finalCostIdx = 5;
-        if (finalStockIdx === -1) finalStockIdx = 4;
-        if (finalCodeIdx === -1) finalCodeIdx = 0;
+        if (finalNameIdx === -1) { finalNameIdx = 1; source.name = "⚠️ Defecto"; }
+        if (finalCostIdx === -1) { finalCostIdx = 5; source.cost = "⚠️ Defecto"; }
+        if (finalStockIdx === -1) { finalStockIdx = 4; source.stock = "⚠️ Defecto"; }
+        if (finalCodeIdx === -1) { finalCodeIdx = 0; source.code = "⚠️ Defecto"; }
 
-        const importedProducts: any[] = [];
-        for (let i = 0; i < rawData.length; i++) {
-          const row = rawData[i];
-          if (!row || !row[finalNameIdx]) continue;
-          
-          if (i === 0) {
-            const potentialCost = String(row[finalCostIdx]).replace(/[^0-9.-]+/g, "");
-            if (isNaN(Number(potentialCost)) || potentialCost === "") {
-               continue; // It's likely a header
-            }
-          }
-
-          let rawCost = Number(row[finalCostIdx]);
-          if (isNaN(rawCost) && typeof row[finalCostIdx] === "string") {
-            rawCost = Number(row[finalCostIdx].replace(/[^0-9.-]+/g, ""));
-          }
-          if (isNaN(rawCost)) rawCost = 0;
-
-          const rawCode = row[finalCodeIdx]
-            ? String(row[finalCodeIdx]).trim()
-            : `SKU-${Date.now()}-${i}`;
-          const cleanName = cleanAndCapitalize(String(row[finalNameIdx]));
-
-          const smartPrices = getSmartPriceSuggestion(cleanName, rawCost, rawCode);
-
-          importedProducts.push({
-            id: `imp-${Date.now()}-${i}`,
-            code: rawCode,
-            name: cleanName,
-            cost: rawCost,
-            price: smartPrices.price,
-            stock: Number(row[finalStockIdx]) || 0,
-            supplier: "Pendiente",
-            minStock: 5,
-            salesIndex: 50,
-            autoPriced: true,
-            alertText: smartPrices.alertText,
-            isInflation: smartPrices.isInflation,
-            isNew: smartPrices.isNew,
-            prevPrice: smartPrices.prevPrice,
-            prevCost: smartPrices.prevCost
-          });
-        }
+        const mapping = { name: finalNameIdx, cost: finalCostIdx, stock: finalStockIdx, code: finalCodeIdx };
+        setColumnMapping(mapping);
+        setDetectionSource(source);
+        setRawHeaders(headersForSelect);
+        setProcessedRawData(rawData);
 
         setTimeout(() => {
-          setPreviewData(importedProducts);
+          generatePreview(mapping, rawData);
           setIsProcessing(false);
-        }, 1000);
+        }, 800);
       } catch (err) {
         console.error("Error procesando Excel:", err);
         alert("Error al leer el Excel. Asegúrate de que no esté dañado o encriptado y revisa las columnas.");
@@ -320,7 +423,7 @@ export default function SmartImporter({
     }
 
     const processed = mockProducts.map((p, i) => {
-      const smart = getSmartPriceSuggestion(p.name, p.cost, p.code);
+      const smart = getSmartPriceSuggestion(p.name, p.cost, p.code, minBatchMargin);
       return {
         id: `ai-${now}-${i}`,
         code: p.code,
@@ -357,28 +460,31 @@ export default function SmartImporter({
 
   const confirmImport = () => {
     if (previewData) {
-      const globalSupplier = window.prompt(
-        "🏢 Nombra al Proveedor General para asignar a todos estos productos:",
-      );
-      if (!globalSupplier) return;
-
-      let areaChar = "C";
-      let areaNum = 1;
-
-      const finalProducts = previewData.map((p) => {
-        const assignedLocation = `${areaChar}-${areaNum}`;
-        areaNum++;
-        if (areaNum > 20) {
-          areaNum = 1;
-          areaChar = String.fromCharCode(areaChar.charCodeAt(0) + 1);
-        }
-        return { ...p, supplier: globalSupplier, location: assignedLocation };
-      });
-
-      onImport(finalProducts);
-      onClose();
+      setShowSupplierModal(true);
     }
   };
+
+  const executeImport = (globalSupplier: string) => {
+    if (!previewData || !globalSupplier) return;
+
+    let areaChar = "C";
+    let areaNum = 1;
+
+    const finalProducts = previewData.map((p) => {
+      const assignedLocation = `${areaChar}-${areaNum}`;
+      areaNum++;
+      if (areaNum > 20) {
+        areaNum = 1;
+        areaChar = String.fromCharCode(areaChar.charCodeAt(0) + 1);
+      }
+      return { ...p, supplier: globalSupplier, location: assignedLocation };
+    });
+
+    onImport(finalProducts);
+    onClose();
+  };
+
+  const uniqueSuppliers = Array.from(new Set(existingItems.map(i => i.supplier).filter(s => s && s !== "Pendiente" && s !== "")));
 
   return (
     <div
@@ -433,21 +539,41 @@ export default function SmartImporter({
             </p>
 
             <div style={{ display: "flex", gap: "20px", width: "100%" }}>
-              {/* Si subió imagen, muestra la miniatura de la factura/foto al lado */}
-              {filePreviewUrl && (
-                <div style={{ width: "200px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                  <span style={{ fontSize: "0.8rem", color: "var(--color-secondary)" }}>Imagen Original:</span>
-                  <div style={{ border: "1px solid var(--glass-border)", borderRadius: "8px", overflow: "hidden", height: "250px", background: "rgba(0,0,0,0.5)" }}>
-                    <img src={filePreviewUrl} alt="Factura cargada" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+              <div style={{ width: "250px", display: "flex", flexDirection: "column", gap: "15px" }}>
+                {filePreviewUrl && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                    <span style={{ fontSize: "0.8rem", color: "var(--color-secondary)" }}>Imagen Original:</span>
+                    <div style={{ border: "1px solid var(--glass-border)", borderRadius: "8px", overflow: "hidden", height: "180px", background: "rgba(0,0,0,0.5)" }}>
+                      <img src={filePreviewUrl} alt="Factura cargada" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                    </div>
                   </div>
+                )}
+                {uploadedFile && !filePreviewUrl && (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", border: "1px dashed var(--glass-border)", borderRadius: "8px", padding: "10px", background: "rgba(0,0,0,0.2)" }}>
+                    <span style={{ fontSize: "3rem" }}>📄</span>
+                    <span style={{ fontSize: "0.75rem", overflow: "hidden", textOverflow: "ellipsis", width: "100%" }}>{uploadedFile.name}</span>
+                  </div>
+                )}
+                
+                {/* Control de Margen de Lote */}
+                <div style={{ background: "rgba(0,0,0,0.3)", padding: "15px", borderRadius: "8px", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
+                  <label style={{ fontSize: "0.8rem", color: "var(--color-secondary)", display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                    <span>Margen Mínimo Lote</span>
+                    <strong style={{ color: "var(--color-primary)" }}>{minBatchMargin}%</strong>
+                  </label>
+                  <input 
+                    type="range" 
+                    min="1" 
+                    max="100" 
+                    value={minBatchMargin}
+                    onChange={(e) => setMinBatchMargin(Number(e.target.value))}
+                    style={{ width: "100%", accentColor: "var(--color-primary)" }}
+                  />
+                  <p style={{ fontSize: "0.7rem", color: "var(--color-text)", opacity: 0.6, marginTop: "8px", lineHeight: 1.2 }}>
+                    Los precios sugeridos se recalcularán para garantizar esta ganancia sobre los costos importados.
+                  </p>
                 </div>
-              )}
-              {uploadedFile && !filePreviewUrl && (
-                <div style={{ width: "120px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "10px", border: "1px dashed var(--glass-border)", borderRadius: "8px", padding: "10px", background: "rgba(0,0,0,0.2)" }}>
-                  <span style={{ fontSize: "3rem" }}>📄</span>
-                  <span style={{ fontSize: "0.75rem", overflow: "hidden", textOverflow: "ellipsis", width: "100%" }}>{uploadedFile.name}</span>
-                </div>
-              )}
+              </div>
 
               <div
                 style={{
@@ -468,11 +594,31 @@ export default function SmartImporter({
                   }}
                 >
                   <thead style={{ background: "rgba(255,255,255,0.05)" }}>
-                    <tr style={{ color: "var(--color-secondary)" }}>
-                      <th style={{ padding: "8px" }}>CÓDIGO</th>
-                      <th style={{ padding: "8px" }}>Producto</th>
-                      <th style={{ padding: "8px" }}>Cant.</th>
-                      <th style={{ padding: "8px" }}>Costo</th>
+                    <tr style={{ color: "var(--color-secondary)", borderBottom: "1px solid rgba(255,255,255,0.2)" }}>
+                      <th style={{ padding: "8px" }}>
+                        <div style={{ fontSize: "0.7rem", marginBottom: "4px" }}>{detectionSource.code}</div>
+                        <select value={columnMapping.code} onChange={(e) => handleMappingChange("code", parseInt(e.target.value))} style={{ background: "rgba(0,0,0,0.5)", color: "white", border: "1px solid var(--glass-border)", borderRadius: "4px", padding: "2px", width: "100%", fontSize: "0.8rem" }}>
+                          {rawHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
+                        </select>
+                      </th>
+                      <th style={{ padding: "8px" }}>
+                        <div style={{ fontSize: "0.7rem", marginBottom: "4px" }}>{detectionSource.name}</div>
+                        <select value={columnMapping.name} onChange={(e) => handleMappingChange("name", parseInt(e.target.value))} style={{ background: "rgba(0,0,0,0.5)", color: "white", border: "1px solid var(--glass-border)", borderRadius: "4px", padding: "2px", width: "100%", fontSize: "0.8rem" }}>
+                          {rawHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
+                        </select>
+                      </th>
+                      <th style={{ padding: "8px" }}>
+                        <div style={{ fontSize: "0.7rem", marginBottom: "4px" }}>{detectionSource.stock}</div>
+                        <select value={columnMapping.stock} onChange={(e) => handleMappingChange("stock", parseInt(e.target.value))} style={{ background: "rgba(0,0,0,0.5)", color: "white", border: "1px solid var(--glass-border)", borderRadius: "4px", padding: "2px", width: "100%", fontSize: "0.8rem" }}>
+                          {rawHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
+                        </select>
+                      </th>
+                      <th style={{ padding: "8px" }}>
+                        <div style={{ fontSize: "0.7rem", marginBottom: "4px" }}>{detectionSource.cost}</div>
+                        <select value={columnMapping.cost} onChange={(e) => handleMappingChange("cost", parseInt(e.target.value))} style={{ background: "rgba(0,0,0,0.5)", color: "white", border: "1px solid var(--glass-border)", borderRadius: "4px", padding: "2px", width: "100%", fontSize: "0.8rem" }}>
+                          {rawHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
+                        </select>
+                      </th>
                       <th style={{ padding: "8px", color: "white", background: "rgba(16, 185, 129, 0.2)" }}>Precio Sugerido</th>
                       <th style={{ padding: "8px" }}>Detalle</th>
                     </tr>
@@ -486,17 +632,84 @@ export default function SmartImporter({
                           background: p.isInflation ? "rgba(239, 68, 68, 0.08)" : "transparent"
                         }}
                       >
-                        <td style={{ padding: "8px", fontFamily: "monospace" }}>{p.code}</td>
                         <td style={{ padding: "8px" }}>
-                          <strong>{p.name}</strong>
-                          {!p.isNew && (
-                            <div style={{ fontSize: "0.7rem", color: "var(--color-secondary)" }}>
-                              Anterior: Costo: ${p.prevCost.toFixed(2)} | Precio: ${p.prevPrice.toFixed(2)}
-                            </div>
-                          )}
+                          <input 
+                            id={`input-${i}-code`}
+                            type="text" 
+                            value={p.code || ""} 
+                            onChange={(e) => handleEditField(i, 'code', e.target.value)}
+                            onKeyDown={(e) => handleKeyDown(e, i, 'code')}
+                            style={{ width: "100%", background: "transparent", border: "1px dashed var(--glass-border)", color: "white", padding: "2px 4px", borderRadius: "4px", fontFamily: "monospace" }}
+                          />
                         </td>
-                        <td style={{ padding: "8px" }}>{p.stock}</td>
-                        <td style={{ padding: "8px" }}>${p.cost.toFixed(2)}</td>
+                        <td style={{ padding: "8px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "5px", position: "relative" }}>
+                              <input 
+                                id={`input-${i}-name`}
+                                type="text" 
+                                value={p.name} 
+                                onChange={(e) => handleEditField(i, 'name', e.target.value)}
+                                onFocus={() => setActiveSuggestRow(i)}
+                                onBlur={() => setTimeout(() => setActiveSuggestRow(null), 250)}
+                                onKeyDown={(e) => handleKeyDown(e, i, 'name')}
+                                style={{ width: "100%", background: "transparent", border: "1px dashed var(--glass-border)", color: "white", padding: "2px 4px", borderRadius: "4px", fontWeight: "bold" }}
+                              />
+                              {activeSuggestRow === i && p.name.length > 1 && existingItems.filter(item => item.name.toLowerCase().includes(p.name.toLowerCase()) && item.name.toLowerCase() !== p.name.toLowerCase()).length > 0 && (
+                                <div style={{ position: "absolute", top: "100%", left: 0, minWidth: "200px", background: "#1a1a1a", border: "1px solid var(--color-primary)", borderRadius: "4px", zIndex: 100, maxHeight: "150px", overflowY: "auto", boxShadow: "0 4px 10px rgba(0,0,0,0.5)" }}>
+                                  {existingItems.filter(item => item.name.toLowerCase().includes(p.name.toLowerCase()) && item.name.toLowerCase() !== p.name.toLowerCase()).slice(0, 10).map((item, idx) => (
+                                    <div 
+                                      key={idx} 
+                                      onClick={() => {
+                                        handleEditField(i, 'name', item.name);
+                                        if (item.code) handleEditField(i, 'code', item.code);
+                                        // Update status to existing
+                                        const newData = [...previewData];
+                                        newData[i] = { ...newData[i], name: item.name, code: item.code || newData[i].code, isNew: false, prevCost: item.cost, prevPrice: item.price };
+                                        setPreviewData(newData);
+                                      }}
+                                      style={{ padding: "8px", cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: "0.75rem", color: "white" }}
+                                    >
+                                      {highlightMatch(item.name, p.name)} <span style={{ color: "var(--color-secondary)", fontSize: "0.6rem" }}>[{item.code}]</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {!p.isNew && (
+                                <span style={{ fontSize: "0.6rem", background: "rgba(59, 130, 246, 0.2)", color: "#3b82f6", padding: "2px 4px", borderRadius: "4px", whiteSpace: "nowrap" }}>
+                                  🔄 Actualización
+                                </span>
+                              )}
+                            </div>
+                            {!p.isNew && (
+                              <div style={{ fontSize: "0.7rem", color: "var(--color-secondary)" }}>
+                                Anterior: Costo: ${p.prevCost.toFixed(2)} | Precio: ${p.prevPrice.toFixed(2)}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td style={{ padding: "8px" }}>
+                          <input 
+                            id={`input-${i}-stock`}
+                            type="number" 
+                            value={p.stock} 
+                            onChange={(e) => handleEditField(i, 'stock', Number(e.target.value))}
+                            onKeyDown={(e) => handleKeyDown(e, i, 'stock')}
+                            style={{ width: "60px", background: "transparent", border: "1px dashed var(--glass-border)", color: "white", padding: "2px 4px", borderRadius: "4px" }}
+                          />
+                        </td>
+                        <td style={{ padding: "8px" }}>
+                          <div style={{ display: "flex", alignItems: "center" }}>
+                            $<input 
+                              id={`input-${i}-cost`}
+                              type="number" 
+                              value={p.cost} 
+                              onChange={(e) => handleEditField(i, 'cost', Number(e.target.value))}
+                              onKeyDown={(e) => handleKeyDown(e, i, 'cost')}
+                              style={{ width: "70px", background: "transparent", border: "1px dashed var(--glass-border)", color: "white", padding: "2px 4px", borderRadius: "4px" }}
+                            />
+                          </div>
+                        </td>
                         <td
                           style={{
                             padding: "8px",
@@ -505,7 +718,16 @@ export default function SmartImporter({
                             color: "var(--color-secondary)"
                           }}
                         >
-                          ${p.price.toFixed(2)}
+                          <div style={{ display: "flex", alignItems: "center" }}>
+                            $<input 
+                              id={`input-${i}-price`}
+                              type="number" 
+                              value={p.price} 
+                              onChange={(e) => handleEditField(i, 'price', Number(e.target.value))}
+                              onKeyDown={(e) => handleKeyDown(e, i, 'price')}
+                              style={{ width: "70px", background: "transparent", border: "1px dashed var(--color-primary)", color: "var(--color-secondary)", padding: "2px 4px", borderRadius: "4px", fontWeight: "bold" }}
+                            />
+                          </div>
                         </td>
                         <td style={{ padding: "8px" }}>
                           <span style={{
@@ -619,6 +841,63 @@ export default function SmartImporter({
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {showSupplierModal && (
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, backdropFilter: "blur(4px)" }}>
+            <div className="glass-panel animate-fade-in" style={{ padding: "30px", width: "400px", textAlign: "left", display: "flex", flexDirection: "column", gap: "15px" }}>
+              <h3 style={{ color: "var(--color-primary)", margin: 0 }}>🏢 Asignar Proveedor General</h3>
+              <p style={{ fontSize: "0.85rem", opacity: 0.8, margin: 0 }}>Ingresa el nombre del proveedor para estos productos. Utiliza las sugerencias para evitar duplicados.</p>
+              
+              <div style={{ position: "relative" }}>
+                <input 
+                  type="text"
+                  placeholder="Ej. TRUPER"
+                  value={supplierSearch}
+                  onChange={(e) => { setSupplierSearch(e.target.value); setIsDropdownOpen(true); }}
+                  onFocus={() => setIsDropdownOpen(true)}
+                  onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--color-primary)", background: "rgba(0,0,0,0.8)", color: "white" }}
+                />
+                {isDropdownOpen && dbSuppliers.filter(s => s.toLowerCase().includes(supplierSearch.toLowerCase())).length > 0 && (
+                  <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "var(--glass-bg)", border: "1px solid var(--glass-border)", borderRadius: "8px", marginTop: "5px", maxHeight: "150px", overflowY: "auto", zIndex: 1200 }}>
+                    {dbSuppliers.filter(s => s.toLowerCase().includes(supplierSearch.toLowerCase())).map((sup, idx) => (
+                      <div key={idx} onClick={() => { setSupplierSearch(sup); setIsDropdownOpen(false); }} style={{ padding: "8px 10px", cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                        {sup}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {dbSuppliers.length === 0 && (
+                  <p style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "5px" }}>⚠️ No hay proveedores registrados. Registra uno nuevo.</p>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", justifyContent: "space-between", marginTop: "10px" }}>
+                <button onClick={() => setShowNewSupplierModal(true)} className="btn-primary" style={{ background: "rgba(59, 130, 246, 0.2)", border: "1px solid #3b82f6", color: "#3b82f6" }}>➕ Nuevo</button>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button onClick={() => setShowSupplierModal(false)} className="btn-primary" style={{ background: "transparent", border: "1px solid var(--color-primary)" }}>Cancelar</button>
+                  <button 
+                    onClick={() => {
+                      localStorage.setItem("lastErikaSupplier", supplierSearch);
+                      executeImport(supplierSearch);
+                    }} 
+                    className="btn-primary" 
+                    disabled={!dbSuppliers.includes(supplierSearch)} 
+                    style={{ background: "var(--color-primary)", opacity: dbSuppliers.includes(supplierSearch) ? 1 : 0.5 }}
+                  >
+                    Confirmar e Importar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showNewSupplierModal && (
+          <div style={{ zIndex: 1300, position: "relative" }}>
+            <SuppliersManagerModal onClose={() => { setShowNewSupplierModal(false); fetchSuppliers(); }} />
           </div>
         )}
       </div>
