@@ -709,6 +709,8 @@ export default function POSModule() {
           <span>$${(i.price * i.qty).toFixed(2)}</span>
         </div>
       `).join("");
+      const html = `
+        <html><head><style>body{font-family: monospace;}</style></head><body>
           <h3 style="text-align:center; margin:0 0 5px 0;">FERRETERÍA ERIKA</h3>
           <p style="text-align:center; margin:0 0 10px 0;">Ticket: #${realTicketId}</p>
           <div style="border-bottom: 1px dashed #000; margin-bottom: 5px;"></div>
