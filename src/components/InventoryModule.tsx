@@ -47,7 +47,7 @@ export default function InventoryModule() {
   const showCritical = tab === "criticos";
 
   const clearTabParam = () => {
-    router.push("/inventario");
+    window.location.href = "/inventario";
   };
 
   const fetchInventory = async (showLoading = false) => {

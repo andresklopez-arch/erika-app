@@ -125,9 +125,10 @@ export default function POSModule() {
     }
     return "system";
   });
-  const [pendingPrintJob, setPendingPrintJob] = useState<any | null>(null);
+  const [pendingPrintJob, setPendingPrintJob] = useState<any>(null);
   const [showPrinterModal, setShowPrinterModal] = useState<boolean>(false);
   const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
 
   const activeTicket =
     tickets.find((t) => t.id === activeTicketId) || tickets[0];
@@ -498,6 +499,10 @@ export default function POSModule() {
         for (const prod of globalCatalog) {
           const pNameClean = prod.name.toLowerCase().replace(/[^a-z0-9áéíóúñ\s]/g, "");
           const pWords = pNameClean.split(/\s+/).filter((w: string) => w.length > 1);
+          if (prod.code) {
+             const codeClean = prod.code.toLowerCase().replace(/[^a-z0-9áéíóúñ\s]/g, "");
+             pWords.push(...codeClean.split(/\s+/));
+          }
           
           let matches = 0;
           let exactMatches = 0;
@@ -540,19 +545,9 @@ export default function POSModule() {
 
         // Umbral de seguridad para considerar un acierto (al menos 1 coincidencia sólida)
         if (matchedProduct && highestScore > 6) {
-          if (qty > matchedProduct.stock) {
-            voiceReply += `Solo quedan ${matchedProduct.stock} de ${matchedProduct.name}. `;
-          } else {
-            addToCart(
-              matchedProduct.name,
-              matchedProduct.price,
-              "pz",
-              matchedProduct.cost,
-              qty,
-              matchedProduct.image_url,
-            );
-            voiceReply += `Agregué ${qty} ${matchedProduct.name}. `;
-          }
+          setSearchInput(matchedProduct.name);
+          setShowAutocomplete(true);
+          voiceReply += `Busqué ${matchedProduct.name}. Selecciónalo en la lista. `;
           nothingFound = false;
         }
       });
@@ -972,24 +967,82 @@ export default function POSModule() {
             onSubmit={handleSearchSubmit}
             style={{ display: "flex", gap: "10px", marginBottom: "20px" }}
           >
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Buscar por Nombre, Código de Barras o Disparar Pistola Láser..."
-              style={{
-                flex: 1,
-                padding: "12px",
-                borderRadius: "8px",
-                background: "rgba(0,0,0,0.3)",
-                color: "white",
-                border: "1px solid var(--color-primary)",
-              }}
-            />
+            <div style={{ flex: 1, position: "relative" }}>
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => {
+                  setSearchInput(e.target.value);
+                  setShowAutocomplete(e.target.value.length > 1);
+                }}
+                onFocus={() => setShowAutocomplete(searchInput.length > 1)}
+                onBlur={() => setTimeout(() => setShowAutocomplete(false), 200)}
+                placeholder="Buscar por Nombre, Código o Pistola Láser..."
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  background: "rgba(0,0,0,0.3)",
+                  color: "white",
+                  border: "1px solid var(--color-primary)",
+                }}
+              />
+              {showAutocomplete && (
+                <div style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  right: 0,
+                  marginTop: "5px",
+                  background: "#1a1a1a",
+                  border: "1px solid var(--color-primary)",
+                  borderRadius: "8px",
+                  zIndex: 100,
+                  maxHeight: "300px",
+                  overflowY: "auto",
+                  boxShadow: "0 10px 25px rgba(0,0,0,0.5)"
+                }}>
+                  {globalCatalog.filter(c => 
+                    c.name.toLowerCase().includes(searchInput.toLowerCase()) || 
+                    (c.code && c.code.toLowerCase().includes(searchInput.toLowerCase()))
+                  ).slice(0, 15).map(c => (
+                    <div 
+                      key={c.id} 
+                      onClick={() => {
+                        addToCart(c.name, c.price, "pz", c.cost, 1, c.image_url);
+                        setSearchInput("");
+                        setShowAutocomplete(false);
+                      }}
+                      style={{
+                        padding: "10px 15px",
+                        borderBottom: "1px solid rgba(255,255,255,0.1)",
+                        cursor: "pointer",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center"
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: "bold", color: "white" }}>{c.name}</div>
+                        <div style={{ fontSize: "0.8rem", color: "var(--color-secondary)" }}>Código: {c.code || "N/A"} | Stock: {c.stock}</div>
+                      </div>
+                      <div style={{ fontWeight: "bold", color: "var(--color-primary)" }}>
+                        ${c.price.toFixed(2)}
+                      </div>
+                    </div>
+                  ))}
+                  {globalCatalog.filter(c => c.name.toLowerCase().includes(searchInput.toLowerCase()) || (c.code && c.code.toLowerCase().includes(searchInput.toLowerCase()))).length === 0 && (
+                    <div style={{ padding: "15px", textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
+                      No se encontraron productos
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <button
               type="submit"
               className="btn-primary"
-              style={{ background: "var(--color-secondary)", color: "black" }}
+              style={{ background: "var(--color-secondary)", color: "black", height: "46px" }}
             >
               Agregar
             </button>
