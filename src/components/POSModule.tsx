@@ -1015,8 +1015,15 @@ export default function POSModule() {
                       const c = filteredCatalog[focusedIndex];
                       if (c.stock <= 0) {
                         if (window.confirm(`El producto "${c.name}" está AGOTADO. ¿Deseas registrarlo en el Radar de Demanda (Ventas Perdidas)?`)) {
-                          supabase.from("lost_sales_requests").insert({ term: c.name, type: "AGOTADO" }).then(() => {
-                            alert("✅ Registrado en el reporte de inteligencia.");
+                          supabase.from("lost_sales_requests").insert({ term: c.name, type: "AGOTADO" }).then(async () => {
+                            const today = new Date();
+                            today.setHours(0,0,0,0);
+                            const { data: panicData } = await supabase.from("lost_sales_requests").select("id").eq("term", c.name).eq("type", "AGOTADO").gte("created_at", today.toISOString());
+                            if (panicData && panicData.length >= 5) {
+                              alert(`🚨 ¡ALERTA DE PÁNICO! 🚨\nEl producto "${c.name}" se ha negado por falta de stock ${panicData.length} veces solo el día de HOY. ¡Sugiero hacer un pedido de emergencia al proveedor YA!`);
+                            } else {
+                              alert("✅ Registrado en el reporte de inteligencia.");
+                            }
                           });
                         }
                       } else {
@@ -1091,7 +1098,14 @@ export default function POSModule() {
                                 if (c.stock <= 0) {
                                   if (window.confirm(`El producto "${c.name}" está AGOTADO. ¿Deseas registrarlo en el Radar de Demanda (Ventas Perdidas)?`)) {
                                     await supabase.from("lost_sales_requests").insert({ term: c.name, type: "AGOTADO" });
-                                    alert("✅ Registrado en el reporte de inteligencia.");
+                                    const today = new Date();
+                                    today.setHours(0,0,0,0);
+                                    const { data: panicData } = await supabase.from("lost_sales_requests").select("id").eq("term", c.name).eq("type", "AGOTADO").gte("created_at", today.toISOString());
+                                    if (panicData && panicData.length >= 5) {
+                                      alert(`🚨 ¡ALERTA DE PÁNICO! 🚨\nEl producto "${c.name}" se ha negado por falta de stock ${panicData.length} veces solo el día de HOY. ¡Sugiero hacer un pedido de emergencia al proveedor YA!`);
+                                    } else {
+                                      alert("✅ Registrado en el reporte de inteligencia.");
+                                    }
                                   }
                                 } else {
                                   addToCart(c.name, c.price, "pz", c.cost, 1, c.image_url);
