@@ -1,6 +1,5 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { initializeApp } from "firebase/app";
 // getMessaging, getToken, onMessage removed as they are unused
 // Your web app's Firebase configuration
 // (Replace with your actual keys from Firebase Console later)
