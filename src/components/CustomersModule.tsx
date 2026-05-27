@@ -72,18 +72,20 @@ export default function CustomersModule() {
       }
     } else {
       const { error } = await supabase.from("customers").insert([newCustomer]);
-      if (error) alert("Error al insertar: " + error.message);
-    else {
-      setShowAddModal(false);
-      setNewCustomer({
-        name: "",
-        phone: "",
-        rfc: "",
-        email: "",
-        company_name: "",
-        credit_limit: 0,
-      });
-      fetchCustomers();
+      if (error) {
+        alert("Error al insertar: " + error.message);
+      } else {
+        setShowAddModal(false);
+        setNewCustomer({
+          name: "",
+          phone: "",
+          rfc: "",
+          email: "",
+          company_name: "",
+          credit_limit: 0,
+        });
+        fetchCustomers();
+      }
     }
   };
 
