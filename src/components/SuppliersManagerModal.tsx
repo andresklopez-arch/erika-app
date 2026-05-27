@@ -29,6 +29,7 @@ interface SuppliersManagerModalProps {
 export default function SuppliersManagerModal({ onClose }: SuppliersManagerModalProps) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isAdding, setIsAdding] = useState(false);
+  const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Historial states
@@ -59,22 +60,42 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { error } = await supabase.from("suppliers").insert({
-      name,
-      contact_name: contactName,
-      phone,
-      email,
-      notes,
-    });
-    if (error) {
-      LoggerService.logError("SuppliersManagerModal", error);
-      toast.error(`Error de Supabase: ${error.message || JSON.stringify(error)}`);
-      console.error(error);
+    if (editingSupplierId) {
+      const { error } = await supabase.from("suppliers").update({
+        name,
+        contact_name: contactName,
+        phone,
+        email,
+        notes,
+      }).eq("id", editingSupplierId);
+      if (error) {
+        LoggerService.logError("SuppliersManagerModal", error);
+        toast.error(`Error de Supabase: ${error.message || JSON.stringify(error)}`);
+      } else {
+        toast.success("Proveedor actualizado.");
+        setIsAdding(false);
+        setEditingSupplierId(null);
+        setName(""); setContactName(""); setPhone(""); setEmail(""); setNotes("");
+        fetchSuppliers();
+      }
     } else {
-      toast.success("Proveedor registrado.");
-      setIsAdding(false);
-      setName(""); setContactName(""); setPhone(""); setEmail(""); setNotes("");
-      fetchSuppliers();
+      const { error } = await supabase.from("suppliers").insert({
+        name,
+        contact_name: contactName,
+        phone,
+        email,
+        notes,
+      });
+      if (error) {
+        LoggerService.logError("SuppliersManagerModal", error);
+        toast.error(`Error de Supabase: ${error.message || JSON.stringify(error)}`);
+      } else {
+        toast.success("Proveedor registrado.");
+        setIsAdding(false);
+        setEditingSupplierId(null);
+        setName(""); setContactName(""); setPhone(""); setEmail(""); setNotes("");
+        fetchSuppliers();
+      }
     }
   };
 
@@ -200,11 +221,19 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
 
         {!isAdding ? (
           <>
-            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "15px" }}>
-              <button className="btn-primary" onClick={() => setIsAdding(true)}>
-                ➕ Agregar Nuevo Proveedor
-              </button>
-            </div>
+            <div className="flex-between" style={{ marginBottom: "20px" }}>
+                <p style={{ color: "rgba(255,255,255,0.7)" }}>Selecciona un proveedor para ver su historial, o agrega uno nuevo.</p>
+                <button 
+                  onClick={() => {
+                    setEditingSupplierId(null);
+                    setName(""); setContactName(""); setPhone(""); setEmail(""); setNotes("");
+                    setIsAdding(true);
+                  }}
+                  className="btn-primary"
+                >
+                  ➕ Agregar Nuevo Proveedor
+                </button>
+              </div>
             
             {isLoading ? (
               <div style={{ textAlign: "center", padding: "20px", color: "var(--color-secondary)" }}>Cargando proveedores...</div>
@@ -275,6 +304,21 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
                           >
                             ✉️ Email
                           </button>
+                          <button 
+                            onClick={() => {
+                              setEditingSupplierId(s.id);
+                              setName(s.name || "");
+                              setContactName(s.contact_name || "");
+                              setPhone(s.phone || "");
+                              setEmail(s.email || "");
+                              setNotes(s.notes || "");
+                              setIsAdding(true);
+                            }}
+                            title="Editar Proveedor"
+                            style={{ background: "#f59e0b", color: "white", border: "none", padding: "8px 12px", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}
+                          >
+                            ✏️ Editar
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -313,11 +357,11 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
             </div>
 
             <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
-              <button type="button" onClick={() => setIsAdding(false)} style={{ flex: 1, padding: "12px", borderRadius: "8px", background: "transparent", border: "1px solid var(--glass-border)", color: "white", cursor: "pointer" }}>
-                Cancelar
-              </button>
               <button type="submit" className="btn-primary" style={{ flex: 2, padding: "12px", fontSize: "1.1rem" }}>
-                💾 Guardar Proveedor
+                💾 {editingSupplierId ? "Guardar Cambios" : "Guardar Proveedor"}
+              </button>
+              <button type="button" onClick={() => { setIsAdding(false); setEditingSupplierId(null); }} style={{ flex: 1, padding: "12px", borderRadius: "8px", background: "transparent", border: "1px solid var(--glass-border)", color: "white", cursor: "pointer" }}>
+                Cancelar
               </button>
             </div>
           </form>

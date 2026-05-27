@@ -10,6 +10,7 @@ export default function CustomersModule() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
+  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [newCustomer, setNewCustomer] = useState({
     name: "",
@@ -60,8 +61,18 @@ export default function CustomersModule() {
 
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { error } = await supabase.from("customers").insert([newCustomer]);
-    if (error) alert("Error: " + error.message);
+    if (editingCustomerId) {
+      const { error } = await supabase.from("customers").update(newCustomer).eq("id", editingCustomerId);
+      if (error) alert("Error al actualizar: " + error.message);
+      else {
+        setShowAddModal(false);
+        setEditingCustomerId(null);
+        setNewCustomer({ name: "", phone: "", rfc: "", email: "", company_name: "", credit_limit: 0 });
+        fetchCustomers();
+      }
+    } else {
+      const { error } = await supabase.from("customers").insert([newCustomer]);
+      if (error) alert("Error al insertar: " + error.message);
     else {
       setShowAddModal(false);
       setNewCustomer({
@@ -137,7 +148,11 @@ export default function CustomersModule() {
         <h2 style={{ color: "var(--color-primary)", margin: 0 }}>
           👥 Cuentas por Cobrar (Créditos)
         </h2>
-        <button className="btn-primary" onClick={() => setShowAddModal(true)}>
+        <button className="btn-primary" onClick={() => {
+          setEditingCustomerId(null);
+          setNewCustomer({ name: "", phone: "", rfc: "", email: "", company_name: "", credit_limit: 0 });
+          setShowAddModal(true);
+        }}>
           + Nuevo Cliente
         </button>
       </div>
@@ -295,6 +310,27 @@ export default function CustomersModule() {
                         de ${c.credit_limit}
                       </div>
                       <div style={{ display: "flex", gap: "10px" }}>
+                        <button
+                          className="btn-primary"
+                          style={{
+                            background: "transparent",
+                            border: "1px solid var(--color-primary)",
+                          }}
+                          onClick={() => {
+                            setEditingCustomerId(c.id);
+                            setNewCustomer({
+                              name: c.name || "",
+                              phone: c.phone || "",
+                              rfc: c.rfc || "",
+                              email: c.email || "",
+                              company_name: c.company_name || "",
+                              credit_limit: c.credit_limit || 0,
+                            });
+                            setShowAddModal(true);
+                          }}
+                        >
+                          ✏️ Editar
+                        </button>
                         <button
                           className="btn-primary"
                           style={{
@@ -509,7 +545,7 @@ export default function CustomersModule() {
             className="glass-panel"
             style={{ width: "500px", maxHeight: "90vh", overflowY: "auto" }}
           >
-            <h3 style={{ marginBottom: "20px" }}>Nuevo Cliente de Crédito</h3>
+            <h3 style={{ marginBottom: "20px" }}>{editingCustomerId ? "Editar Cliente" : "Nuevo Cliente de Crédito"}</h3>
 
             <h4
               style={{
@@ -665,13 +701,16 @@ export default function CustomersModule() {
 
             <div style={{ display: "flex", gap: "10px" }}>
               <button type="submit" className="btn-primary" style={{ flex: 1 }}>
-                Guardar Cliente
+                {editingCustomerId ? "Guardar Cambios" : "Guardar Cliente"}
               </button>
               <button
                 type="button"
                 className="btn-primary"
                 style={{ flex: 1, background: "#ef4444" }}
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditingCustomerId(null);
+                }}
               >
                 Cancelar
               </button>
