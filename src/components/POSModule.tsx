@@ -1143,6 +1143,12 @@ export default function POSModule() {
                       if (c.stock <= 0) {
                         if (window.confirm(`El producto "${c.name}" está AGOTADO. ¿Deseas registrarlo en el Radar de Demanda (Ventas Perdidas)?`)) {
                           supabase.from("lost_sales_requests").insert({ term: c.name, type: "AGOTADO" }).then(async () => {
+                            await supabase.from("internal_tasks").insert({
+                              title: `Reabastecer urgencia: ${c.name}`,
+                              assigned_to: "Administrador",
+                              status: "pending",
+                              created_by: "Caja"
+                            });
                             const today = new Date();
                             today.setHours(0,0,0,0);
                             const { data: panicData } = await supabase.from("lost_sales_requests").select("id").eq("term", c.name).eq("type", "AGOTADO").gte("created_at", today.toISOString());
@@ -1225,6 +1231,12 @@ export default function POSModule() {
                                 if (c.stock <= 0) {
                                   if (window.confirm(`El producto "${c.name}" está AGOTADO. ¿Deseas registrarlo en el Radar de Demanda (Ventas Perdidas)?`)) {
                                     await supabase.from("lost_sales_requests").insert({ term: c.name, type: "AGOTADO" });
+                                    await supabase.from("internal_tasks").insert({
+                                      title: `Reabastecer urgencia: ${c.name}`,
+                                      assigned_to: "Administrador",
+                                      status: "pending",
+                                      created_by: "Caja"
+                                    });
                                     const today = new Date();
                                     today.setHours(0,0,0,0);
                                     const { data: panicData } = await supabase.from("lost_sales_requests").select("id").eq("term", c.name).eq("type", "AGOTADO").gte("created_at", today.toISOString());

@@ -6,6 +6,8 @@ import HomeButton from "../components/HomeButton";
 import IntelligenceNotifications from "../components/IntelligenceNotifications";
 import TasksWidget from "../components/TasksWidget";
 import { Toaster } from "react-hot-toast";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: "ERIKA - Inteligencia en Ferretería",
@@ -60,6 +62,8 @@ export default function RootLayout({
             `,
           }}
         />
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
