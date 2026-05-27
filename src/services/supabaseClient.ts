@@ -1,10 +1,8 @@
 // Archivo de Arquitectura: Cliente de Supabase
 // NOTA: Se dejan las llaves de entorno vacías preparadas para el pase a Producción.
 
-const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://tu-proyecto.supabase.co";
-const SUPABASE_ANON_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "tu-clave-anonima";
+const SUPABASE_URL_ENV = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const SUPABASE_ANON_KEY_ENV = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
 // Simulador de cliente para desarrollo local (Evita crasheos antes de conectar la BD)
 export const supabase = {

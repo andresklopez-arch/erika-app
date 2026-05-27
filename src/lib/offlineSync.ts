@@ -41,7 +41,7 @@ export const saveTransactionOffline = async (
       if ("serviceWorker" in navigator && "SyncManager" in window) {
         try {
           const swRegistration = await navigator.serviceWorker.ready;
-          // @ts-ignore
+          // @ts-expect-error sync is not standard yet
           await swRegistration.sync.register("sync-offline-sales");
           console.log("Background Sync registrado para 'sync-offline-sales'");
         } catch (err) {
@@ -86,6 +86,7 @@ export const syncOfflineTransactions = async (): Promise<number> => {
 
   let synced = 0;
   for (const t of pending) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id, offline_created_at, ...data } = t;
     const { error } = await supabase.from("cash_transactions").insert(data);
     if (!error) {

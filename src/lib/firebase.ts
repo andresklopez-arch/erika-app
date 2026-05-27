@@ -1,7 +1,7 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
-
+import { initializeApp } from "firebase/app";
+// getMessaging, getToken, onMessage removed as they are unused
 // Your web app's Firebase configuration
 // (Replace with your actual keys from Firebase Console later)
 const firebaseConfig = {
@@ -14,7 +14,7 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
+initializeApp(firebaseConfig);
 
 // Configuración Simulada para Next.js (Solo cliente)
 export const requestFirebaseNotificationPermission = async () => {

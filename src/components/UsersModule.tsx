@@ -42,7 +42,7 @@ const MOCK_USERS: UserProfile[] = [
 ];
 
 export default function UsersModule() {
-  const [users, setUsers] = useState<UserProfile[]>(MOCK_USERS);
+  const [users] = useState<UserProfile[]>(MOCK_USERS);
   const [filter, setFilter] = useState<"todos" | "cliente" | "proveedor">(
     "todos",
   );
