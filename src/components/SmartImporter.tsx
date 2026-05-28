@@ -446,12 +446,46 @@ export default function SmartImporter({
     onClose();
   };
 
+  const getLevenshteinDistance = (a: string, b: string) => {
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    const arr = [];
+    for (let i = 0; i <= b.length; i++) { arr[i] = [i]; }
+    for (let j = 0; j <= a.length; j++) { arr[0][j] = j; }
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b.charAt(i - 1) == a.charAt(j - 1)) {
+          arr[i][j] = arr[i - 1][j - 1];
+        } else {
+          arr[i][j] = Math.min(arr[i - 1][j - 1] + 1, Math.min(arr[i][j - 1] + 1, arr[i - 1][j] + 1));
+        }
+      }
+    }
+    return arr[b.length][a.length];
+  };
+
   const handleLocationFix = (oldLocation: string) => {
-    const newLocation = prompt(`Corrección de Bodega en Vivo:\n\nSe detectó la bodega desconocida "${oldLocation}".\nEscribe el nombre correcto para reemplazarla en todos los productos:`, oldLocation);
+    const knownLocations = Array.from(new Set(existingItems.map(i => i.location).filter(l => l && l !== "Pendiente" && l !== ""))).map(l => String(l));
+    let suggestion = "";
+    let minDistance = Infinity;
+    
+    knownLocations.forEach(loc => {
+      const dist = getLevenshteinDistance(oldLocation.toLowerCase(), loc.toLowerCase());
+      if (dist < minDistance && dist <= 3) {
+        minDistance = dist;
+        suggestion = loc;
+      }
+    });
+
+    const promptText = suggestion 
+      ? `Corrección de Bodega en Vivo:\n\nDetectamos "${oldLocation}".\n💡 ¿Acaso quisiste decir "${suggestion}"?\n\nEscribe el nombre correcto para reemplazarla:` 
+      : `Corrección de Bodega en Vivo:\n\nSe detectó la bodega desconocida "${oldLocation}".\nEscribe el nombre correcto para reemplazarla:`;
+
+    const newLocation = prompt(promptText, suggestion || oldLocation);
     if (!newLocation || newLocation.trim() === "" || newLocation === oldLocation) return;
     
-    const allKnownLocations = Array.from(new Set(existingItems.map(i => i.location).filter(l => l && l !== "Pendiente" && l !== ""))).map(l => String(l).trim().toLowerCase());
-    const isUnknownLocation = !allKnownLocations.includes(newLocation.toLowerCase());
+    const allKnownLower = knownLocations.map(l => l.toLowerCase());
+    const isUnknownLocation = !allKnownLower.includes(newLocation.toLowerCase());
     
     setPreviewData(prev => prev ? prev.map(p => p.location === oldLocation ? { ...p, location: newLocation, isUnknownLocation } : p) : null);
     alert(`✅ Bodega actualizada a "${newLocation}" en todos los productos afectados.`);

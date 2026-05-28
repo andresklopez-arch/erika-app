@@ -35,25 +35,42 @@ export default function InventoryModule() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
-  const [lastUndoLog, setLastUndoLog] = useState<any[] | null>(() => {
+  const [undoStack, setUndoStack] = useState<any[][]>(() => {
     if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("erika_last_undo");
+      const stored = localStorage.getItem("erika_undo_stack");
       if (stored) {
-        try { return JSON.parse(stored); } catch (e) { return null; }
+        try { return JSON.parse(stored); } catch (e) { return []; }
       }
     }
-    return null;
+    return [];
   });
 
   const handleUndo = async () => {
-    if (!lastUndoLog || lastUndoLog.length === 0) return;
-    const pin = prompt("🔒 ACCESO RESTRINGIDO\nIngresa el PIN de Administrador (4 dígitos) para Deshacer:");
-    if (pin !== "1234") {
-      alert("❌ PIN Incorrecto. Operación cancelada.");
-      return;
+    if (!undoStack || undoStack.length === 0) return;
+    
+    let isAdmin = false;
+    if (typeof window !== "undefined") {
+      const authTime = sessionStorage.getItem("erika_admin_auth");
+      if (authTime && Date.now() - Number(authTime) < 15 * 60 * 1000) {
+        isAdmin = true;
+      }
     }
-    if (!confirm("⚠️ ¿Estás seguro de que deseas deshacer la ÚLTIMA importación? Esto revertirá los inventarios a su estado anterior.")) return;
+
+    if (!isAdmin) {
+      const pin = prompt("🔒 ACCESO RESTRINGIDO\nIngresa el PIN de Administrador (4 dígitos) para Deshacer:");
+      if (pin !== "1234") {
+        alert("❌ PIN Incorrecto. Operación cancelada.");
+        return;
+      }
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("erika_admin_auth", String(Date.now()));
+        alert("✅ Sesión Administrativa iniciada por 15 minutos.");
+      }
+    }
+
+    if (!confirm(`⚠️ ¿Estás seguro de que deseas deshacer la importación? (Quedan ${undoStack.length} reversiones disponibles)`)) return;
     setIsLoading(true);
+    const lastUndoLog = undoStack[undoStack.length - 1];
     for (const log of lastUndoLog) {
       if (log.isNew) {
         await supabase.from("inventory").delete().eq("code", log.code);
@@ -68,10 +85,17 @@ export default function InventoryModule() {
         }).eq("id", log.id);
       }
     }
-    setLastUndoLog(null);
-    if (typeof window !== "undefined") localStorage.removeItem("erika_last_undo");
+    const newStack = undoStack.slice(0, -1);
+    setUndoStack(newStack);
+    if (typeof window !== "undefined") {
+      if (newStack.length > 0) {
+        localStorage.setItem("erika_undo_stack", JSON.stringify(newStack));
+      } else {
+        localStorage.removeItem("erika_undo_stack");
+      }
+    }
     await fetchInventory(true);
-    alert("✅ Importación revertida con éxito. Todo ha vuelto a la normalidad.");
+    alert("✅ Importación revertida con éxito.");
   };
 
   // Derived state from tab search param to prevent state out-of-sync and click-blocking modals
@@ -463,7 +487,7 @@ export default function InventoryModule() {
           >
             📥 Exportar
           </button>
-          {lastUndoLog && (
+          {undoStack && undoStack.length > 0 && (
             <button
               className="btn-primary"
               onClick={handleUndo}
@@ -473,8 +497,9 @@ export default function InventoryModule() {
                 color: "white",
                 boxShadow: "0 0 10px rgba(239, 68, 68, 0.5)",
               }}
+              title={`Tienes ${undoStack.length} importaciones que puedes deshacer`}
             >
-              ↩️ Deshacer Importación
+              ↩️ Deshacer Importación ({undoStack.length})
             </button>
           )}
           <button
@@ -822,8 +847,13 @@ export default function InventoryModule() {
                 newCount++;
               }
             }
-            setLastUndoLog(undoLog);
-            if (typeof window !== "undefined") localStorage.setItem("erika_last_undo", JSON.stringify(undoLog));
+            setUndoStack(prev => {
+              const newStack = [...(prev || []), undoLog].slice(-5); // Mantener máximo 5
+              if (typeof window !== "undefined") {
+                localStorage.setItem("erika_undo_stack", JSON.stringify(newStack));
+              }
+              return newStack;
+            });
             await fetchInventory(true);
             
             let rescueMsg = "";
