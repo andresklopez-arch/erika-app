@@ -252,94 +252,18 @@ export default function SmartImporter({
            headersForSelect.push(rawData[0][c] ? String(rawData[0][c]) : `Columna ${c + 1}`);
         }
 
-        // FASE 1: Detección por Títulos
-        let finalNameIdx = firstRow.findIndex((h: string) => h.includes("nombre") || h.includes("descrip") || h.includes("articulo") || h.includes("artículo") || h.includes("producto") || h.includes("concepto"));
-        let finalCostIdx = firstRow.findIndex((h: string) => h.includes("costo") || h.includes("compra") || h.includes("adquisicion") || h.includes("unitario") || h.includes("neto") || h.includes("precio"));
-        let finalStockIdx = firstRow.findIndex((h: string) => h.includes("stock") || h.includes("cantidad") || h.includes("existencia") || h.includes("cant"));
-        let finalCodeIdx = firstRow.findIndex((h: string) => h.includes("codigo") || h.includes("código") || h.includes("sku") || h.includes("barras") || h.includes("id"));
-
+        // Eliminar Fase Heurística, ahora es plantilla ESTRICTA
+        const finalCodeIdx = 0;
+        const finalNameIdx = 1;
+        const finalStockIdx = 2;
+        const finalCostIdx = 3;
+        
         const source = {
-          name: finalNameIdx >= 0 ? "🏷️ Título" : "",
-          cost: finalCostIdx >= 0 ? "🏷️ Título" : "",
-          stock: finalStockIdx >= 0 ? "🏷️ Título" : "",
-          code: finalCodeIdx >= 0 ? "🏷️ Título" : "",
+          code: "📋 Plantilla Oficial",
+          name: "📋 Plantilla Oficial",
+          stock: "📋 Plantilla Oficial",
+          cost: "📋 Plantilla Oficial",
         };
-
-        // FASE 2: Motor Heurístico para las faltantes
-        const sampleSize = Math.min(20, rawData.length);
-        const columnStats: Record<number, { textLength: number, numCount: number, floatCount: number, strCount: number, total: number }> = {};
-        for (let c = 0; c < maxCols; c++) columnStats[c] = { textLength: 0, numCount: 0, floatCount: 0, strCount: 0, total: 0 };
-
-        for (let i = 1; i < sampleSize; i++) {
-           const row = rawData[i];
-           for (let c = 0; c < maxCols; c++) {
-              const cell = row[c];
-              if (cell === null || cell === undefined || cell === "") continue;
-              columnStats[c].total++;
-              const strVal = String(cell).trim();
-              let numVal = Number(cell);
-              if (isNaN(numVal) && typeof cell === "string") numVal = Number(cell.replace(/[^0-9.-]+/g, ""));
-              const hasLetters = /[a-zA-Z]/.test(strVal);
-              if (!isNaN(numVal) && strVal !== "" && !hasLetters) {
-                 columnStats[c].numCount++;
-                 if (strVal.includes(".") || numVal % 1 !== 0) columnStats[c].floatCount++;
-              } else {
-                 columnStats[c].strCount++;
-                 columnStats[c].textLength += strVal.length;
-              }
-           }
-        }
-
-        if (finalNameIdx === -1) {
-           let maxTextAvg = -1;
-           for (let c = 0; c < maxCols; c++) {
-              if (c === finalCostIdx || c === finalStockIdx || c === finalCodeIdx) continue;
-              const stat = columnStats[c];
-              if (stat.total === 0) continue;
-              const textAvg = stat.textLength / (stat.strCount || 1);
-              if (stat.strCount >= stat.numCount && textAvg > maxTextAvg) { maxTextAvg = textAvg; finalNameIdx = c; }
-           }
-           if (finalNameIdx !== -1) source.name = "🧠 IA (Texto)";
-        }
-
-        if (finalCostIdx === -1) {
-           let maxFloats = -1;
-           let maxNums = -1;
-           for (let c = 0; c < maxCols; c++) {
-              if (c === finalNameIdx || c === finalStockIdx || c === finalCodeIdx) continue;
-              const stat = columnStats[c];
-              if (stat.total === 0) continue;
-              if (stat.floatCount > maxFloats) { maxFloats = stat.floatCount; finalCostIdx = c; }
-              else if (stat.floatCount === maxFloats && stat.numCount > maxNums) { maxNums = stat.numCount; finalCostIdx = c; }
-           }
-           if (finalCostIdx !== -1) source.cost = "🧠 IA (Decimales)";
-        }
-
-        if (finalStockIdx === -1) {
-           let maxInts = -1;
-           for (let c = 0; c < maxCols; c++) {
-              if (c === finalNameIdx || c === finalCostIdx || c === finalCodeIdx) continue;
-              const stat = columnStats[c];
-              if (stat.total === 0) continue;
-              const ints = stat.numCount - stat.floatCount;
-              if (ints > maxInts) { maxInts = ints; finalStockIdx = c; }
-           }
-           if (finalStockIdx !== -1) source.stock = "🧠 IA (Enteros)";
-        }
-
-        if (finalCodeIdx === -1) {
-           for (let c = 0; c < maxCols; c++) {
-              if (c === finalNameIdx || c === finalCostIdx || c === finalStockIdx) continue;
-              const stat = columnStats[c];
-              if (stat.total > 0 && finalCodeIdx === -1) { finalCodeIdx = c; }
-           }
-           if (finalCodeIdx !== -1) source.code = "🧠 IA (Restante)";
-        }
-
-        if (finalNameIdx === -1) { finalNameIdx = 1; source.name = "⚠️ Defecto"; }
-        if (finalCostIdx === -1) { finalCostIdx = 5; source.cost = "⚠️ Defecto"; }
-        if (finalStockIdx === -1) { finalStockIdx = 4; source.stock = "⚠️ Defecto"; }
-        if (finalCodeIdx === -1) { finalCodeIdx = 0; source.code = "⚠️ Defecto"; }
 
         const mapping = { name: finalNameIdx, cost: finalCostIdx, stock: finalStockIdx, code: finalCodeIdx };
         setColumnMapping(mapping);
@@ -773,19 +697,45 @@ export default function SmartImporter({
         ) : (
           <div>
             <h2 style={{ color: "var(--color-primary)", marginBottom: "10px" }}>
-              ⚡ ERIKA AI Vision - Carga Inteligente de Facturas
+              ⚡ ERIKA - Carga Inteligente (Plantilla Estricta)
             </h2>
-            <p
+            <div
               style={{
+                background: "rgba(16, 185, 129, 0.1)",
+                border: "1px dashed var(--color-primary)",
+                borderRadius: "8px",
+                padding: "15px",
+                marginBottom: "20px",
+                textAlign: "left",
                 color: "var(--color-text)",
-                opacity: 0.8,
-                marginBottom: "25px",
-                fontSize: "0.9rem",
+                fontSize: "0.85rem",
               }}
             >
-              Carga tu archivo **Excel (XLSX, CSV), PDF o Fotografía de ticket/factura**. 
-              Nuestra IA extraerá códigos, nombres, stock y costos, detectará inflación y te sugerirá precios finales de venta.
-            </p>
+              <h3 style={{ color: "var(--color-primary)", marginBottom: "10px" }}>📝 Instrucciones para una carga 100% exacta:</h3>
+              <p style={{ marginBottom: "10px" }}>Para evitar cruces de información y errores matemáticos, ahora el sistema exige que tu archivo (CSV, XLS, XLSX) respete estrictamente este orden de columnas (puedes copiar y pegar los datos de tu proveedor en nuestra plantilla):</p>
+              <ol style={{ marginLeft: "20px", marginBottom: "15px", opacity: 0.9, display: "flex", flexDirection: "column", gap: "5px" }}>
+                <li><strong>Columna A (1):</strong> Código de Barras / SKU</li>
+                <li><strong>Columna B (2):</strong> Nombre del Producto</li>
+                <li><strong>Columna C (3):</strong> Stock (Cantidad)</li>
+                <li><strong>Columna D (4):</strong> Costo Proveedor</li>
+                <li><strong>Columna E (5):</strong> Precio Venta <em>(Opcional, ERIKA lo calcula si está vacío)</em></li>
+              </ol>
+              <button 
+                onClick={() => {
+                  const content = "CODIGO,PRODUCTO,STOCK,COSTO,PRECIO\n001,Ejemplo Martillo Truper,15,85.50,130.00\n";
+                  const blob = new Blob([content], { type: 'text/csv' });
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'ERIKA_Plantilla_Inventario.csv';
+                  a.click();
+                }}
+                className="btn-primary hover-scale" 
+                style={{ width: "100%", background: "var(--color-primary)", color: "#000", padding: "12px", fontWeight: "bold", border: "none" }}
+              >
+                📥 Descargar Plantilla Oficial (CSV)
+              </button>
+            </div>
             
             {isProcessing ? (
               <div style={{ padding: "40px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: "15px" }}>
