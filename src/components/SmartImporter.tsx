@@ -156,6 +156,9 @@ export default function SmartImporter({
       const isDuplicateInFile = importedProducts.some(p => p.code && p.code.trim().toUpperCase() === rawCode.trim().toUpperCase());
       const rawSupplier = (mapping.supplier !== undefined && row[mapping.supplier]) ? String(row[mapping.supplier]).trim() : "Pendiente";
       const rawLocation = (mapping.location !== undefined && row[mapping.location]) ? String(row[mapping.location]).trim() : "";
+      
+      const allKnownLocations = Array.from(new Set(existingItems.map(i => i.location).filter(l => l && l !== "Pendiente" && l !== ""))).map(l => String(l).trim().toLowerCase());
+      const isUnknownLocation = rawLocation !== "" && !allKnownLocations.includes(rawLocation.toLowerCase());
 
       importedProducts.push({
         id: `imp-${Date.now()}-${i}`,
@@ -176,7 +179,8 @@ export default function SmartImporter({
         prevCost: smartPrices.prevCost,
         costHasError,
         stockHasError,
-        isDuplicateInFile
+        isDuplicateInFile,
+        isUnknownLocation
       });
     }
     setPreviewData(importedProducts);
@@ -658,6 +662,11 @@ export default function SmartImporter({
                               {!p.isNew && (
                                 <span style={{ fontSize: "0.6rem", background: "rgba(59, 130, 246, 0.2)", color: "#3b82f6", padding: "2px 4px", borderRadius: "4px", whiteSpace: "nowrap" }}>
                                   🔄 Actualización
+                                </span>
+                              )}
+                              {p.isUnknownLocation && (
+                                <span style={{ fontSize: "0.6rem", background: "rgba(234, 179, 8, 0.2)", color: "#eab308", padding: "2px 4px", borderRadius: "4px", whiteSpace: "nowrap" }} title="Esta bodega no existe actualmente en la base de datos. Se creará automáticamente.">
+                                  ⚠️ Bodega Nueva
                                 </span>
                               )}
                             </div>

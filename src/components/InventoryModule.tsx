@@ -35,6 +35,30 @@ export default function InventoryModule() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [lastUndoLog, setLastUndoLog] = useState<any[] | null>(null);
+
+  const handleUndo = async () => {
+    if (!lastUndoLog || lastUndoLog.length === 0) return;
+    if (!confirm("⚠️ ¿Estás seguro de que deseas deshacer la ÚLTIMA importación? Esto revertirá los inventarios a su estado anterior.")) return;
+    setIsLoading(true);
+    for (const log of lastUndoLog) {
+      if (log.isNew) {
+        await supabase.from("inventory").delete().eq("code", log.code);
+      } else {
+        await supabase.from("inventory").update({
+          cost: log.cost,
+          price: log.price,
+          stock: log.stock,
+          supplier: log.supplier,
+          location: log.location,
+          priceChanged: log.priceChanged
+        }).eq("id", log.id);
+      }
+    }
+    setLastUndoLog(null);
+    await fetchInventory(true);
+    alert("✅ Importación revertida con éxito. Todo ha vuelto a la normalidad.");
+  };
 
   // Derived state from tab search param to prevent state out-of-sync and click-blocking modals
   const showClientModal = tab === "clientes";
@@ -425,6 +449,20 @@ export default function InventoryModule() {
           >
             📥 Exportar
           </button>
+          {lastUndoLog && (
+            <button
+              className="btn-primary"
+              onClick={handleUndo}
+              style={{
+                background: "#ef4444",
+                border: "none",
+                color: "white",
+                boxShadow: "0 0 10px rgba(239, 68, 68, 0.5)",
+              }}
+            >
+              ↩️ Deshacer Importación
+            </button>
+          )}
           <button
             className="btn-primary"
             onClick={() => router.push("/inventario?tab=carga")}
@@ -725,14 +763,23 @@ export default function InventoryModule() {
             setIsLoading(true);
             let updatedCount = 0;
             let newCount = 0;
+            let rescuedCount = 0;
+            const undoLog: any[] = [];
 
             for (const p of newProducts) {
               const existing = items.find(
                 (i) => i.code === p.code && i.code !== "",
               );
               if (existing) {
+                undoLog.push({ id: existing.id, cost: existing.cost, price: existing.price, stock: existing.stock, supplier: existing.supplier, location: existing.location, priceChanged: existing.priceChanged });
+                
                 const inflationFlag = p.cost > existing.cost ? "up" : null;
                 const newStock = isRestockMode ? existing.stock + p.stock : p.stock;
+                
+                if (existing.stock <= existing.minStock && newStock > existing.minStock) {
+                  rescuedCount++;
+                }
+
                 await supabase
                   .from("inventory")
                   .update({
@@ -746,6 +793,7 @@ export default function InventoryModule() {
                   .eq("id", existing.id);
                 updatedCount++;
               } else {
+                undoLog.push({ isNew: true, code: p.code });
                 await supabase.from("inventory").insert({
                   code: p.code,
                   name: p.name,
@@ -760,9 +808,14 @@ export default function InventoryModule() {
                 newCount++;
               }
             }
+            setLastUndoLog(undoLog);
             await fetchInventory(true);
+            
+            let rescueMsg = "";
+            if (rescuedCount > 0) rescueMsg = `\n🎉 ¡Excelente! Se han rescatado ${rescuedCount} productos de su estado CRÍTICO.`;
+            
             alert(
-              `✅ ERIKA Procesó la Importación en la NUBE.\n\n📊 Actualizados: ${updatedCount} productos.\n🆕 Nuevos: ${newCount} productos.`,
+              `✅ ERIKA Procesó la Importación en la NUBE.\n\n📊 Actualizados: ${updatedCount} productos.\n🆕 Nuevos: ${newCount} productos.${rescueMsg}`,
             );
           }}
         />,
