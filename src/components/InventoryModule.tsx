@@ -12,6 +12,7 @@ import LossesManagerModal from "./LossesManagerModal";
 import LayawayModal from "./LayawayModal";
 import InboundModal from "./InboundModal";
 import AuditModule from "./AuditModule";
+import { useAuth } from "./AuthProvider";
 
 export interface InventoryItem {
   id: string;
@@ -29,6 +30,8 @@ export interface InventoryItem {
 }
 
 export default function InventoryModule() {
+  const { currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
   const searchParams = useSearchParams();
   const router = useRouter();
   const tab = searchParams ? searchParams.get("tab") : null;
@@ -514,16 +517,20 @@ export default function InventoryModule() {
           >
             ⚡ Carga Inteligente
           </button>
-          <button
-            className="btn-primary"
-            onClick={() => router.push("/inventario?tab=arqueo")}
-            style={{
-              background: "transparent",
-              border: "1px solid var(--color-primary)",
-            }}
-          >
-            📋 Auditoría y Arqueos
-          </button>
+          {isAdmin && (
+            <button
+              className="btn-primary"
+              onClick={() => router.push("/inventario?tab=arqueo")}
+              style={{
+                background: "linear-gradient(135deg, #a855f7, #f97316)",
+                border: "none",
+                color: "white",
+                boxShadow: "0 0 10px rgba(168, 85, 247, 0.4)",
+              }}
+            >
+              📋 Auditoría y Arqueos
+            </button>
+          )}
         </div>
       </div>
 
