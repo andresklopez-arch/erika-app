@@ -183,6 +183,9 @@ export default function Sidebar() {
                 <Link href="/inventario?tab=carga" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
                   <span>⚡</span><span>Carga Inteligente</span>
                 </Link>
+                <Link href="/inventario?tab=arqueo" style={{ color: "var(--color-primary)", display: "flex", gap: "6px", padding: "4px", fontWeight: "bold" }}>
+                  <span>📋</span><span>Auditoría y Arqueos</span>
+                </Link>
               </div>
             )}
           </>

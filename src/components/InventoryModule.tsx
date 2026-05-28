@@ -11,8 +11,9 @@ import AccountsPayableModal from "./AccountsPayableModal";
 import LossesManagerModal from "./LossesManagerModal";
 import LayawayModal from "./LayawayModal";
 import InboundModal from "./InboundModal";
+import AuditModule from "./AuditModule";
 
-interface InventoryItem {
+export interface InventoryItem {
   id: string;
   code?: string;
   name: string;
@@ -106,6 +107,7 @@ export default function InventoryModule() {
   const showLossesModal = tab === "gastos";
   const showLayaways = tab === "apartados";
   const showImporter = tab === "carga";
+  const showAudit = tab === "arqueo";
   const showCritical = tab === "criticos";
   const createParam = searchParams ? searchParams.get("create") : null;
 
@@ -863,6 +865,14 @@ export default function InventoryModule() {
               `✅ ERIKA Procesó la Importación en la NUBE.\n\n📊 Actualizados: ${updatedCount} productos.\n🆕 Nuevos: ${newCount} productos.${rescueMsg}`,
             );
           }}
+        />,
+        document.body
+      )}
+
+      {mounted && showAudit && createPortal(
+        <AuditModule 
+          onClose={() => router.push("/inventario")}
+          inventory={items}
         />,
         document.body
       )}
