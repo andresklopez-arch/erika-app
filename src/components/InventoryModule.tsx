@@ -35,10 +35,23 @@ export default function InventoryModule() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
-  const [lastUndoLog, setLastUndoLog] = useState<any[] | null>(null);
+  const [lastUndoLog, setLastUndoLog] = useState<any[] | null>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("erika_last_undo");
+      if (stored) {
+        try { return JSON.parse(stored); } catch (e) { return null; }
+      }
+    }
+    return null;
+  });
 
   const handleUndo = async () => {
     if (!lastUndoLog || lastUndoLog.length === 0) return;
+    const pin = prompt("🔒 ACCESO RESTRINGIDO\nIngresa el PIN de Administrador (4 dígitos) para Deshacer:");
+    if (pin !== "1234") {
+      alert("❌ PIN Incorrecto. Operación cancelada.");
+      return;
+    }
     if (!confirm("⚠️ ¿Estás seguro de que deseas deshacer la ÚLTIMA importación? Esto revertirá los inventarios a su estado anterior.")) return;
     setIsLoading(true);
     for (const log of lastUndoLog) {
@@ -56,6 +69,7 @@ export default function InventoryModule() {
       }
     }
     setLastUndoLog(null);
+    if (typeof window !== "undefined") localStorage.removeItem("erika_last_undo");
     await fetchInventory(true);
     alert("✅ Importación revertida con éxito. Todo ha vuelto a la normalidad.");
   };
@@ -809,6 +823,7 @@ export default function InventoryModule() {
               }
             }
             setLastUndoLog(undoLog);
+            if (typeof window !== "undefined") localStorage.setItem("erika_last_undo", JSON.stringify(undoLog));
             await fetchInventory(true);
             
             let rescueMsg = "";

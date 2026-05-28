@@ -446,6 +446,17 @@ export default function SmartImporter({
     onClose();
   };
 
+  const handleLocationFix = (oldLocation: string) => {
+    const newLocation = prompt(`Corrección de Bodega en Vivo:\n\nSe detectó la bodega desconocida "${oldLocation}".\nEscribe el nombre correcto para reemplazarla en todos los productos:`, oldLocation);
+    if (!newLocation || newLocation.trim() === "" || newLocation === oldLocation) return;
+    
+    const allKnownLocations = Array.from(new Set(existingItems.map(i => i.location).filter(l => l && l !== "Pendiente" && l !== ""))).map(l => String(l).trim().toLowerCase());
+    const isUnknownLocation = !allKnownLocations.includes(newLocation.toLowerCase());
+    
+    setPreviewData(prev => prev ? prev.map(p => p.location === oldLocation ? { ...p, location: newLocation, isUnknownLocation } : p) : null);
+    alert(`✅ Bodega actualizada a "${newLocation}" en todos los productos afectados.`);
+  };
+
   const uniqueSuppliers = Array.from(new Set(existingItems.map(i => i.supplier).filter(s => s && s !== "Pendiente" && s !== "")));
 
   return (
@@ -665,8 +676,12 @@ export default function SmartImporter({
                                 </span>
                               )}
                               {p.isUnknownLocation && (
-                                <span style={{ fontSize: "0.6rem", background: "rgba(234, 179, 8, 0.2)", color: "#eab308", padding: "2px 4px", borderRadius: "4px", whiteSpace: "nowrap" }} title="Esta bodega no existe actualmente en la base de datos. Se creará automáticamente.">
-                                  ⚠️ Bodega Nueva
+                                <span 
+                                  onClick={() => handleLocationFix(p.location)}
+                                  style={{ cursor: "pointer", fontSize: "0.6rem", background: "rgba(234, 179, 8, 0.2)", color: "#eab308", padding: "2px 4px", borderRadius: "4px", whiteSpace: "nowrap" }} 
+                                  title={`Esta bodega ("${p.location}") no existe actualmente. Haz clic para corregirla masivamente.`}
+                                >
+                                  ⚠️ Bodega Nueva (Clic para corregir)
                                 </span>
                               )}
                             </div>
