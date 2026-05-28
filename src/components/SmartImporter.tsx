@@ -98,7 +98,7 @@ export default function SmartImporter({
     return { price, alertText, isInflation, isNew, prevPrice, prevCost };
   };
 
-  const generatePreview = (mapping: { name: number, cost: number, stock: number, code: number }, data: any[][]) => {
+  const generatePreview = (mapping: { name: number, cost: number, stock: number, code: number, supplier?: number }, data: any[][]) => {
     const importedProducts: any[] = [];
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
@@ -152,6 +152,9 @@ export default function SmartImporter({
         if (isNaN(finalPrice)) finalPrice = smartPrices.price;
       }
 
+      const isDuplicateInFile = importedProducts.some(p => p.code && p.code.trim().toUpperCase() === rawCode.trim().toUpperCase());
+      const rawSupplier = (mapping.supplier !== undefined && row[mapping.supplier]) ? String(row[mapping.supplier]).trim() : "Pendiente";
+
       importedProducts.push({
         id: `imp-${Date.now()}-${i}`,
         code: rawCode,
@@ -159,17 +162,18 @@ export default function SmartImporter({
         cost: rawCost,
         price: finalPrice,
         stock: rawStock,
-        supplier: "Pendiente",
+        supplier: rawSupplier,
         minStock: 5,
         salesIndex: 50,
         autoPriced: true,
-        alertText: smartPrices.alertText,
+        alertText: isDuplicateInFile ? "⚠️ Código Repetido" : smartPrices.alertText,
         isInflation: smartPrices.isInflation,
         isNew: smartPrices.isNew,
         prevPrice: smartPrices.prevPrice,
         prevCost: smartPrices.prevCost,
         costHasError,
-        stockHasError
+        stockHasError,
+        isDuplicateInFile
       });
     }
     setPreviewData(importedProducts);
@@ -277,15 +281,17 @@ export default function SmartImporter({
         const finalNameIdx = 1;
         const finalStockIdx = 2;
         const finalCostIdx = 3;
+        const finalSupplierIdx = 5;
         
         const source = {
           code: "📋 Plantilla Oficial",
           name: "📋 Plantilla Oficial",
           stock: "📋 Plantilla Oficial",
           cost: "📋 Plantilla Oficial",
+          supplier: "📋 Plantilla Oficial",
         };
 
-        const mapping = { name: finalNameIdx, cost: finalCostIdx, stock: finalStockIdx, code: finalCodeIdx };
+        const mapping = { name: finalNameIdx, cost: finalCostIdx, stock: finalStockIdx, code: finalCodeIdx, supplier: finalSupplierIdx };
         setColumnMapping(mapping);
         setDetectionSource(source);
         setRawHeaders(headersForSelect);
@@ -583,7 +589,16 @@ export default function SmartImporter({
                             value={p.code || ""} 
                             onChange={(e) => handleEditField(i, 'code', e.target.value)}
                             onKeyDown={(e) => handleKeyDown(e, i, 'code')}
-                            style={{ width: "100%", background: "transparent", border: "1px dashed var(--glass-border)", color: "white", padding: "2px 4px", borderRadius: "4px", fontFamily: "monospace" }}
+                            style={{ 
+                              width: "100%", 
+                              background: p.isDuplicateInFile ? "rgba(234, 179, 8, 0.3)" : "transparent", 
+                              border: p.isDuplicateInFile ? "2px solid #eab308" : "1px dashed var(--glass-border)", 
+                              color: p.isDuplicateInFile ? "#fef08a" : "white", 
+                              padding: "2px 4px", 
+                              borderRadius: "4px", 
+                              fontFamily: "monospace" 
+                            }}
+                            title={p.isDuplicateInFile ? "¡Advertencia! Este código está repetido en el archivo" : ""}
                           />
                         </td>
                         <td style={{ padding: "8px" }}>
@@ -761,15 +776,22 @@ export default function SmartImporter({
                 <li><strong>Columna C (3):</strong> Stock (Cantidad)</li>
                 <li><strong>Columna D (4):</strong> Costo Proveedor</li>
                 <li><strong>Columna E (5):</strong> Precio Venta <em>(Opcional, ERIKA lo calcula si está vacío)</em></li>
+                <li><strong>Columna F (6):</strong> Proveedor <em>(Opcional, para asignar diferentes proveedores)</em></li>
               </ol>
               <button 
                 onClick={() => {
-                  const wsData = [
-                    ["CODIGO", "PRODUCTO", "STOCK", "COSTO", "PRECIO"],
-                    ["001", "Ejemplo Martillo Truper", 15, 85.50, 130.00]
+                  const wsData: any[][] = [
+                    ["CODIGO", "PRODUCTO", "STOCK", "COSTO", "PRECIO", "PROVEEDOR"]
                   ];
+                  if (existingItems && existingItems.length > 0) {
+                    existingItems.forEach(item => {
+                      wsData.push([item.code || "", item.name || "", item.stock || 0, item.cost || 0, item.price || 0, item.supplier || ""]);
+                    });
+                  } else {
+                    wsData.push(["001", "Ejemplo Martillo Truper", 15, 85.50, 130.00, "Truper"]);
+                  }
                   const ws = XLSX.utils.aoa_to_sheet(wsData);
-                  ws["!cols"] = [{wch: 15}, {wch: 30}, {wch: 10}, {wch: 12}, {wch: 12}];
+                  ws["!cols"] = [{wch: 15}, {wch: 30}, {wch: 10}, {wch: 12}, {wch: 12}, {wch: 20}];
                   const wb = XLSX.utils.book_new();
                   XLSX.utils.book_append_sheet(wb, ws, "Inventario");
                   XLSX.writeFile(wb, "ERIKA_Plantilla_Inventario.xlsx");
