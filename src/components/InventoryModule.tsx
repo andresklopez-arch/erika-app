@@ -721,7 +721,7 @@ export default function InventoryModule() {
           avgMargin={avgMargin}
           existingItems={items}
           onClose={clearTabParam}
-          onImport={async (newProducts) => {
+          onImport={async (newProducts, isRestockMode) => {
             setIsLoading(true);
             let updatedCount = 0;
             let newCount = 0;
@@ -732,13 +732,15 @@ export default function InventoryModule() {
               );
               if (existing) {
                 const inflationFlag = p.cost > existing.cost ? "up" : null;
+                const newStock = isRestockMode ? existing.stock + p.stock : p.stock;
                 await supabase
                   .from("inventory")
                   .update({
                     cost: p.cost,
                     price: p.price,
-                    stock: existing.stock + p.stock,
+                    stock: newStock,
                     supplier: p.supplier || existing.supplier,
+                    location: p.location || existing.location,
                     priceChanged: inflationFlag,
                   })
                   .eq("id", existing.id);

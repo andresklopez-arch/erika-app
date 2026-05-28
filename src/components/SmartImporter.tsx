@@ -8,7 +8,7 @@ interface SmartImporterProps {
   avgMargin: number;
   existingItems: any[];
   onClose: () => void;
-  onImport: (products: any[]) => void;
+  onImport: (products: any[], isRestockMode: boolean) => void;
 }
 
 export default function SmartImporter({
@@ -19,6 +19,7 @@ export default function SmartImporter({
 }: SmartImporterProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState("");
+  const [isRestockMode, setIsRestockMode] = useState(true);
   const [previewData, setPreviewData] = useState<any[] | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
@@ -98,7 +99,7 @@ export default function SmartImporter({
     return { price, alertText, isInflation, isNew, prevPrice, prevCost };
   };
 
-  const generatePreview = (mapping: { name: number, cost: number, stock: number, code: number, supplier?: number }, data: any[][]) => {
+  const generatePreview = (mapping: { name: number, cost: number, stock: number, code: number, supplier?: number, location?: number }, data: any[][]) => {
     const importedProducts: any[] = [];
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
@@ -154,6 +155,7 @@ export default function SmartImporter({
 
       const isDuplicateInFile = importedProducts.some(p => p.code && p.code.trim().toUpperCase() === rawCode.trim().toUpperCase());
       const rawSupplier = (mapping.supplier !== undefined && row[mapping.supplier]) ? String(row[mapping.supplier]).trim() : "Pendiente";
+      const rawLocation = (mapping.location !== undefined && row[mapping.location]) ? String(row[mapping.location]).trim() : "";
 
       importedProducts.push({
         id: `imp-${Date.now()}-${i}`,
@@ -163,6 +165,7 @@ export default function SmartImporter({
         price: finalPrice,
         stock: rawStock,
         supplier: rawSupplier,
+        location: rawLocation,
         minStock: 5,
         salesIndex: 50,
         autoPriced: true,
@@ -282,6 +285,7 @@ export default function SmartImporter({
         const finalStockIdx = 2;
         const finalCostIdx = 3;
         const finalSupplierIdx = 5;
+        const finalLocationIdx = 6;
         
         const source = {
           code: "📋 Plantilla Oficial",
@@ -289,9 +293,10 @@ export default function SmartImporter({
           stock: "📋 Plantilla Oficial",
           cost: "📋 Plantilla Oficial",
           supplier: "📋 Plantilla Oficial",
+          location: "📋 Plantilla Oficial",
         };
 
-        const mapping = { name: finalNameIdx, cost: finalCostIdx, stock: finalStockIdx, code: finalCodeIdx, supplier: finalSupplierIdx };
+        const mapping = { name: finalNameIdx, cost: finalCostIdx, stock: finalStockIdx, code: finalCodeIdx, supplier: finalSupplierIdx, location: finalLocationIdx };
         setColumnMapping(mapping);
         setDetectionSource(source);
         setRawHeaders(headersForSelect);
@@ -421,16 +426,19 @@ export default function SmartImporter({
     let areaNum = 1;
 
     const finalProducts = previewData.map((p) => {
-      const assignedLocation = `${areaChar}-${areaNum}`;
-      areaNum++;
-      if (areaNum > 20) {
-        areaNum = 1;
-        areaChar = String.fromCharCode(areaChar.charCodeAt(0) + 1);
+      let assignedLocation = p.location;
+      if (!assignedLocation || assignedLocation === "") {
+        assignedLocation = `${areaChar}-${areaNum}`;
+        areaNum++;
+        if (areaNum > 20) {
+          areaNum = 1;
+          areaChar = String.fromCharCode(areaChar.charCodeAt(0) + 1);
+        }
       }
       return { ...p, supplier: globalSupplier, location: assignedLocation };
     });
 
-    onImport(finalProducts);
+    onImport(finalProducts, isRestockMode);
     onClose();
   };
 
@@ -589,16 +597,18 @@ export default function SmartImporter({
                             value={p.code || ""} 
                             onChange={(e) => handleEditField(i, 'code', e.target.value)}
                             onKeyDown={(e) => handleKeyDown(e, i, 'code')}
+                            disabled={!p.isNew}
                             style={{ 
                               width: "100%", 
-                              background: p.isDuplicateInFile ? "rgba(234, 179, 8, 0.3)" : "transparent", 
-                              border: p.isDuplicateInFile ? "2px solid #eab308" : "1px dashed var(--glass-border)", 
-                              color: p.isDuplicateInFile ? "#fef08a" : "white", 
+                              background: p.isDuplicateInFile ? "rgba(234, 179, 8, 0.3)" : (!p.isNew ? "rgba(255,255,255,0.05)" : "transparent"), 
+                              border: p.isDuplicateInFile ? "2px solid #eab308" : (!p.isNew ? "1px dashed rgba(255,255,255,0.2)" : "1px dashed var(--glass-border)"), 
+                              color: p.isDuplicateInFile ? "#fef08a" : (!p.isNew ? "rgba(255,255,255,0.5)" : "white"), 
                               padding: "2px 4px", 
                               borderRadius: "4px", 
-                              fontFamily: "monospace" 
+                              fontFamily: "monospace",
+                              cursor: !p.isNew ? "not-allowed" : "text"
                             }}
-                            title={p.isDuplicateInFile ? "¡Advertencia! Este código está repetido en el archivo" : ""}
+                            title={!p.isNew ? "Bloqueado para proteger identidad del producto" : (p.isDuplicateInFile ? "¡Advertencia! Este código está repetido en el archivo" : "")}
                           />
                         </td>
                         <td style={{ padding: "8px" }}>
@@ -612,7 +622,18 @@ export default function SmartImporter({
                                 onFocus={() => setActiveSuggestRow(i)}
                                 onBlur={() => setTimeout(() => setActiveSuggestRow(null), 250)}
                                 onKeyDown={(e) => handleKeyDown(e, i, 'name')}
-                                style={{ width: "100%", background: "transparent", border: "1px dashed var(--glass-border)", color: "white", padding: "2px 4px", borderRadius: "4px", fontWeight: "bold" }}
+                                disabled={!p.isNew}
+                                style={{ 
+                                  width: "100%", 
+                                  background: !p.isNew ? "rgba(255,255,255,0.05)" : "transparent", 
+                                  border: !p.isNew ? "1px dashed rgba(255,255,255,0.2)" : "1px dashed var(--glass-border)", 
+                                  color: !p.isNew ? "rgba(255,255,255,0.5)" : "white", 
+                                  padding: "2px 4px", 
+                                  borderRadius: "4px", 
+                                  fontWeight: "bold",
+                                  cursor: !p.isNew ? "not-allowed" : "text"
+                                }}
+                                title={!p.isNew ? "Bloqueado para proteger identidad del producto" : ""}
                               />
                               {activeSuggestRow === i && p.name.length > 1 && existingItems.filter(item => item.name.toLowerCase().includes(p.name.toLowerCase()) && item.name.toLowerCase() !== p.name.toLowerCase()).length > 0 && (
                                 <div style={{ position: "absolute", top: "100%", left: 0, minWidth: "200px", background: "#1a1a1a", border: "1px solid var(--color-primary)", borderRadius: "4px", zIndex: 100, maxHeight: "150px", overflowY: "auto", boxShadow: "0 4px 10px rgba(0,0,0,0.5)" }}>
@@ -742,13 +763,21 @@ export default function SmartImporter({
               >
                 Cancelar
               </button>
-              <button
-                className="btn-primary"
-                onClick={confirmImport}
-                style={{ background: "var(--color-primary)" }}
-              >
-                ✅ Asignar Proveedor e Importar a Almacén
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", background: "rgba(255,255,255,0.1)", padding: "8px 12px", borderRadius: "8px", border: isRestockMode ? "1px solid #10b981" : "1px solid transparent" }}>
+                  <input type="checkbox" checked={isRestockMode} onChange={(e) => setIsRestockMode(e.target.checked)} style={{ transform: "scale(1.2)" }} />
+                  <span style={{ fontSize: "0.9rem", color: isRestockMode ? "#10b981" : "white", fontWeight: isRestockMode ? "bold" : "normal" }}>
+                    {isRestockMode ? "📦 Modo Re-abastecimiento (+ Sumar Stock)" : "🔄 Modo Reemplazo Absoluto"}
+                  </span>
+                </label>
+                <button
+                  className="btn-primary"
+                  onClick={confirmImport}
+                  style={{ background: "var(--color-primary)" }}
+                >
+                  ✅ Confirmar e Importar
+                </button>
+              </div>
             </div>
           </div>
         ) : (
@@ -777,21 +806,22 @@ export default function SmartImporter({
                 <li><strong>Columna D (4):</strong> Costo Proveedor</li>
                 <li><strong>Columna E (5):</strong> Precio Venta <em>(Opcional, ERIKA lo calcula si está vacío)</em></li>
                 <li><strong>Columna F (6):</strong> Proveedor <em>(Opcional, para asignar diferentes proveedores)</em></li>
+                <li><strong>Columna G (7):</strong> Bodega/Ubicación <em>(Opcional, ERIKA asume la ubicación si está vacía)</em></li>
               </ol>
               <button 
                 onClick={() => {
                   const wsData: any[][] = [
-                    ["CODIGO", "PRODUCTO", "STOCK", "COSTO", "PRECIO", "PROVEEDOR"]
+                    ["CODIGO", "PRODUCTO", "STOCK", "COSTO", "PRECIO", "PROVEEDOR", "BODEGA"]
                   ];
                   if (existingItems && existingItems.length > 0) {
                     existingItems.forEach(item => {
-                      wsData.push([item.code || "", item.name || "", item.stock || 0, item.cost || 0, item.price || 0, item.supplier || ""]);
+                      wsData.push([item.code || "", item.name || "", item.stock || 0, item.cost || 0, item.price || 0, item.supplier || "", item.location || ""]);
                     });
                   } else {
-                    wsData.push(["001", "Ejemplo Martillo Truper", 15, 85.50, 130.00, "Truper"]);
+                    wsData.push(["001", "Ejemplo Martillo Truper", 15, 85.50, 130.00, "Truper", "BODEGA-1"]);
                   }
                   const ws = XLSX.utils.aoa_to_sheet(wsData);
-                  ws["!cols"] = [{wch: 15}, {wch: 30}, {wch: 10}, {wch: 12}, {wch: 12}, {wch: 20}];
+                  ws["!cols"] = [{wch: 15}, {wch: 30}, {wch: 10}, {wch: 12}, {wch: 12}, {wch: 20}, {wch: 15}];
                   const wb = XLSX.utils.book_new();
                   XLSX.utils.book_append_sheet(wb, ws, "Inventario");
                   XLSX.writeFile(wb, "ERIKA_Plantilla_Inventario.xlsx");
