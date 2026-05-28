@@ -874,9 +874,27 @@ export default function SmartImporter({
                   ];
                   const ws = XLSX.utils.aoa_to_sheet(wsData);
                   ws["!cols"] = [{wch: 15}, {wch: 30}, {wch: 10}, {wch: 12}, {wch: 12}, {wch: 20}, {wch: 15}];
+                  
+                  // Agregamos Validación de Datos (Lista Desplegable) para Proveedores
+                  const validSuppliers = uniqueSuppliers.length > 0 ? uniqueSuppliers.slice(0, 15).join(",") : "Pendiente";
+                  ws["!dataValidation"] = [
+                    {
+                      sqref: "F2:F1000",
+                      type: "list",
+                      allowBlank: true,
+                      showErrorMessage: true,
+                      errorTitle: "Proveedor Inválido",
+                      error: "Debes elegir un proveedor de la lista, o dejarlo en blanco.",
+                      formula1: `"${validSuppliers.substring(0, 255)}"`
+                    }
+                  ];
+
                   const wb = XLSX.utils.book_new();
                   XLSX.utils.book_append_sheet(wb, ws, "Inventario");
-                  XLSX.writeFile(wb, "ERIKA_Plantilla_Inventario.xlsx");
+                  
+                  const today = new Date();
+                  const dateStr = `${today.getDate()}-${today.toLocaleString('es-ES', { month: 'short' })}-${today.getFullYear()}`;
+                  XLSX.writeFile(wb, `ERIKA_Plantilla_Blanco_${dateStr}.xlsx`);
                 }}
                 className="btn-primary hover-scale" 
                 style={{ width: "100%", background: "var(--color-primary)", color: "#000", padding: "12px", fontWeight: "bold", border: "none" }}
