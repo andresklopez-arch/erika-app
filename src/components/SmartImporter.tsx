@@ -112,10 +112,14 @@ export default function SmartImporter({
       }
 
       let rawCost = Number(row[mapping.cost]);
+      let costHasError = false;
       if (isNaN(rawCost) && typeof row[mapping.cost] === "string") {
         rawCost = Number(String(row[mapping.cost]).replace(/[^0-9.-]+/g, ""));
       }
-      if (isNaN(rawCost)) rawCost = 0;
+      if (isNaN(rawCost)) {
+        rawCost = 0;
+        costHasError = true;
+      }
 
       let rawCode = row[mapping.code] ? String(row[mapping.code]).trim() : `SKU-${Date.now()}-${i}`;
       const cleanName = cleanAndCapitalize(String(row[mapping.name]));
@@ -127,20 +131,34 @@ export default function SmartImporter({
           item.name.toLowerCase().trim() === cleanName.toLowerCase().trim()
       );
 
-      // Si existe y tiene un código real, lo heredamos para que InventoryModule lo actualice correctamente
       if (existing && existing.code) {
         rawCode = existing.code;
       }
 
       const smartPrices = getSmartPriceSuggestion(cleanName, rawCost, rawCode, minBatchMargin);
+      
+      let rawStock = Number(row[mapping.stock]);
+      let stockHasError = false;
+      if (isNaN(rawStock)) {
+         rawStock = 0;
+         stockHasError = true;
+      }
+      
+      let finalPrice = row[4];
+      if (finalPrice === undefined || finalPrice === null || String(finalPrice).trim() === "") {
+        finalPrice = smartPrices.price;
+      } else {
+        finalPrice = Number(String(finalPrice).replace(/[^0-9.-]+/g, ""));
+        if (isNaN(finalPrice)) finalPrice = smartPrices.price;
+      }
 
       importedProducts.push({
         id: `imp-${Date.now()}-${i}`,
         code: rawCode,
         name: cleanName,
         cost: rawCost,
-        price: smartPrices.price,
-        stock: Number(row[mapping.stock]) || 0,
+        price: finalPrice,
+        stock: rawStock,
         supplier: "Pendiente",
         minStock: 5,
         salesIndex: 50,
@@ -149,7 +167,9 @@ export default function SmartImporter({
         isInflation: smartPrices.isInflation,
         isNew: smartPrices.isNew,
         prevPrice: smartPrices.prevPrice,
-        prevCost: smartPrices.prevCost
+        prevCost: smartPrices.prevCost,
+        costHasError,
+        stockHasError
       });
     }
     setPreviewData(importedProducts);
@@ -162,7 +182,7 @@ export default function SmartImporter({
     generatePreview(newMapping, processedRawData);
   };
 
-  const handleEditField = (index: number, field: string, value: string | number) => {
+  const handleEditField = (index: number, field: string, value: string | number | boolean) => {
     if (!previewData) return;
     const newData = [...previewData];
     newData[index] = { ...newData[index], [field]: value };
@@ -617,9 +637,20 @@ export default function SmartImporter({
                             id={`input-${i}-stock`}
                             type="number" 
                             value={p.stock} 
-                            onChange={(e) => handleEditField(i, 'stock', Number(e.target.value))}
+                            onChange={(e) => {
+                              handleEditField(i, 'stock', Number(e.target.value));
+                              handleEditField(i, 'stockHasError', false);
+                            }}
                             onKeyDown={(e) => handleKeyDown(e, i, 'stock')}
-                            style={{ width: "60px", background: "transparent", border: "1px dashed var(--glass-border)", color: "white", padding: "2px 4px", borderRadius: "4px" }}
+                            style={{ 
+                              width: "60px", 
+                              background: p.stockHasError ? "rgba(239, 68, 68, 0.2)" : "transparent", 
+                              border: p.stockHasError ? "2px solid #ef4444" : "1px dashed var(--glass-border)", 
+                              color: p.stockHasError ? "#ef4444" : "white", 
+                              padding: "2px 4px", 
+                              borderRadius: "4px" 
+                            }}
+                            title={p.stockHasError ? "Error: Valor no numérico detectado" : ""}
                           />
                         </td>
                         <td style={{ padding: "8px" }}>
@@ -628,9 +659,20 @@ export default function SmartImporter({
                               id={`input-${i}-cost`}
                               type="number" 
                               value={p.cost} 
-                              onChange={(e) => handleEditField(i, 'cost', Number(e.target.value))}
+                              onChange={(e) => {
+                                handleEditField(i, 'cost', Number(e.target.value));
+                                handleEditField(i, 'costHasError', false);
+                              }}
                               onKeyDown={(e) => handleKeyDown(e, i, 'cost')}
-                              style={{ width: "70px", background: "transparent", border: "1px dashed var(--glass-border)", color: "white", padding: "2px 4px", borderRadius: "4px" }}
+                              style={{ 
+                                width: "70px", 
+                                background: p.costHasError ? "rgba(239, 68, 68, 0.2)" : "transparent", 
+                                border: p.costHasError ? "2px solid #ef4444" : "1px dashed var(--glass-border)", 
+                                color: p.costHasError ? "#ef4444" : "white", 
+                                padding: "2px 4px", 
+                                borderRadius: "4px" 
+                              }}
+                              title={p.costHasError ? "Error: Valor no numérico detectado" : ""}
                             />
                           </div>
                         </td>
@@ -722,18 +764,20 @@ export default function SmartImporter({
               </ol>
               <button 
                 onClick={() => {
-                  const content = "CODIGO,PRODUCTO,STOCK,COSTO,PRECIO\n001,Ejemplo Martillo Truper,15,85.50,130.00\n";
-                  const blob = new Blob([content], { type: 'text/csv' });
-                  const url = window.URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = 'ERIKA_Plantilla_Inventario.csv';
-                  a.click();
+                  const wsData = [
+                    ["CODIGO", "PRODUCTO", "STOCK", "COSTO", "PRECIO"],
+                    ["001", "Ejemplo Martillo Truper", 15, 85.50, 130.00]
+                  ];
+                  const ws = XLSX.utils.aoa_to_sheet(wsData);
+                  ws["!cols"] = [{wch: 15}, {wch: 30}, {wch: 10}, {wch: 12}, {wch: 12}];
+                  const wb = XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(wb, ws, "Inventario");
+                  XLSX.writeFile(wb, "ERIKA_Plantilla_Inventario.xlsx");
                 }}
                 className="btn-primary hover-scale" 
                 style={{ width: "100%", background: "var(--color-primary)", color: "#000", padding: "12px", fontWeight: "bold", border: "none" }}
               >
-                📥 Descargar Plantilla Oficial (CSV)
+                📥 Descargar Plantilla Oficial (Excel)
               </button>
             </div>
             
