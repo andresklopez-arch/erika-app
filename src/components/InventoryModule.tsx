@@ -514,6 +514,16 @@ export default function InventoryModule() {
           >
             ⚡ Carga Inteligente
           </button>
+          <button
+            className="btn-primary"
+            onClick={() => router.push("/inventario?tab=arqueo")}
+            style={{
+              background: "transparent",
+              border: "1px solid var(--color-primary)",
+            }}
+          >
+            📋 Auditoría y Arqueos
+          </button>
         </div>
       </div>
 
