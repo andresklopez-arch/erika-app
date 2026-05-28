@@ -869,15 +869,9 @@ export default function SmartImporter({
               <button 
                 onClick={() => {
                   const wsData: any[][] = [
-                    ["CODIGO", "PRODUCTO", "STOCK", "COSTO", "PRECIO", "PROVEEDOR", "BODEGA"]
+                    ["CODIGO", "PRODUCTO", "STOCK", "COSTO", "PRECIO", "PROVEEDOR", "BODEGA"],
+                    ["", "", "", "", "", "", ""]
                   ];
-                  if (existingItems && existingItems.length > 0) {
-                    existingItems.forEach(item => {
-                      wsData.push([item.code || "", item.name || "", item.stock || 0, item.cost || 0, item.price || 0, item.supplier || "", item.location || ""]);
-                    });
-                  } else {
-                    wsData.push(["001", "Ejemplo Martillo Truper", 15, 85.50, 130.00, "Truper", "BODEGA-1"]);
-                  }
                   const ws = XLSX.utils.aoa_to_sheet(wsData);
                   ws["!cols"] = [{wch: 15}, {wch: 30}, {wch: 10}, {wch: 12}, {wch: 12}, {wch: 20}, {wch: 15}];
                   const wb = XLSX.utils.book_new();
