@@ -243,6 +243,36 @@ export default function POSModule() {
     return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   };
 
+  const searchNormalized = normalizeString(searchInput);
+  const queryWords = searchNormalized.split(/\s+/).filter(w => w.length > 0);
+  
+  let expandedQueryWords = [...queryWords];
+  queryWords.forEach(qw => {
+    if (SYNONYMS[qw]) expandedQueryWords.push(...SYNONYMS[qw]);
+  });
+
+  const filteredCatalog = searchInput.length > 1 ? globalCatalog.map(c => {
+    const nameNorm = normalizeString(c.name);
+    const codeNorm = c.code ? normalizeString(c.code) : "";
+    let score = 0;
+    
+    if (nameNorm.includes(searchNormalized) || codeNorm.includes(searchNormalized)) {
+      score = 100;
+    } else {
+      expandedQueryWords.forEach(qw => {
+        if (nameNorm.includes(qw)) {
+          score += 50;
+        } else if (qw.length > 3 && fuzzyMatch(nameNorm, qw)) {
+          score += 30;
+        }
+      });
+    }
+    
+    return { ...c, __score: score };
+  }).filter(c => c.__score > 0)
+    .sort((a, b) => b.__score - a.__score)
+    .slice(0, 15) : [];
+
   const activeTicket =
     tickets.find((t) => t.id === activeTicketId) || tickets[0];
 
@@ -353,26 +383,57 @@ export default function POSModule() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [tickets, activeTicketId, globalCatalog]);
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const q = searchInput.trim().toUpperCase();
-    if (!q) return;
-
-    const matched = globalCatalog.find(
-      (c) => c.code === q || c.name.toUpperCase().includes(q),
-    );
-    if (matched) {
-      addToCart(
-        matched.name,
-        matched.price,
-        "pz",
-        matched.cost,
-        1,
-        matched.image_url,
-      );
+  const handleSearchSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (filteredCatalog.length > 0) {
+      const c = filteredCatalog[focusedIndex >= 0 ? focusedIndex : 0];
+      if (c.stock <= 0) {
+        if (window.confirm(`El producto "${c.name}" está AGOTADO. ¿Deseas registrarlo en el Radar de Demanda (Ventas Perdidas)?`)) {
+          supabase.from("lost_sales_requests").insert({ term: c.name, type: "AGOTADO" }).then(async () => {
+            await supabase.from("internal_tasks").insert({
+              title: `Reabastecer urgencia: ${c.name}`,
+              assigned_to: "Administrador",
+              status: "pending",
+              created_by: "Caja"
+            });
+            alert("✅ Registrado en el radar de demanda.");
+          });
+        }
+      } else {
+        addToCart(c.name, c.price, "pz", c.cost, 1, c.image_url);
+      }
       setSearchInput("");
-    } else {
-      alert("No se encontró el producto.");
+      setShowAutocomplete(false);
+      setFocusedIndex(-1);
+    } else if (searchInput.trim() !== "") {
+      supabase.from("lost_sales_requests").insert({ term: searchInput, type: "NUEVO_PRODUCTO" }).then(() => {
+        alert(`✅ "${searchInput}" registrado en el reporte de productos solicitados.`);
+        setSearchInput("");
+        setShowAutocomplete(false);
+      });
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!showAutocomplete || filteredCatalog.length === 0) {
+      if (e.key === "Enter" && searchInput.trim() !== "") {
+        e.preventDefault();
+        handleSearchSubmit(e as any);
+      }
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setFocusedIndex(prev => (prev < filteredCatalog.length - 1 ? prev + 1 : prev));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setFocusedIndex(prev => (prev > 0 ? prev - 1 : 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      handleSearchSubmit(e as any);
+    } else if (e.key === "Escape") {
+      setShowAutocomplete(false);
+      setFocusedIndex(-1);
     }
   };
 
@@ -954,14 +1015,28 @@ export default function POSModule() {
     if (!phone) {
        phone = window.prompt("Ingresa el número de WhatsApp a 10 dígitos (sin espacios):") || "";
     }
-    if (!phone || phone.length < 10) return;
+    if (!phone) return;
+    
+    // Sanitizar telefono (dejar solo digitos)
+    let cleanPhone = phone.replace(/\D/g, "");
+    if (cleanPhone.length === 10) {
+      cleanPhone = "52" + cleanPhone;
+    } else if (cleanPhone.length === 12 && cleanPhone.startsWith("52")) {
+      // ya tiene prefijo 52 y los 10 digitos
+    } else {
+      return alert("❌ Número inválido. Por favor ingresa un número de 10 dígitos (ej: 5512345678).");
+    }
     
     const title = type === "quote" ? "*COTIZACIÓN - FERRETERÍA ERIKA*" : "*RECIBO DE COMPRA - FERRETERÍA ERIKA*";
-    const itemsText = activeTicket.items.map(i => `▪️ ${i.qty}x ${i.name} - $${(i.price * i.qty).toFixed(2)}`).join("%0A");
-    const totalText = applyIva ? `*SUBTOTAL: $${subtotalNeto.toFixed(2)}*%0A*IVA (16%): $${iva.toFixed(2)}*%0A*TOTAL: $${finalTotal.toFixed(2)}*` : `*TOTAL: $${finalTotal.toFixed(2)}*`;
+    const itemsText = activeTicket.items.map(i => `▪️ ${i.qty}x ${i.name} - $${(i.price * i.qty).toFixed(2)}`).join("\n");
+    const totalText = applyIva 
+      ? `*SUBTOTAL: $${subtotalNeto.toFixed(2)}*\n*IVA (16%): $${iva.toFixed(2)}*\n*TOTAL: $${finalTotal.toFixed(2)}*` 
+      : `*TOTAL: $${finalTotal.toFixed(2)}*`;
     
-    const msg = `${title}%0A%0A${itemsText}%0A%0A${totalText}%0A%0A¡Gracias por su preferencia!`;
-    window.open(`https://wa.me/52${phone}?text=${msg}`, "_blank");
+    const rawMsg = `${title}\n\n${itemsText}\n\n${totalText}\n\n¡Gracias por su preferencia!`;
+    const msg = encodeURIComponent(rawMsg);
+    
+    window.open(`https://wa.me/${cleanPhone}?text=${msg}`, "_blank");
   };
 
   return (
@@ -1097,89 +1172,6 @@ export default function POSModule() {
             style={{ display: "flex", gap: "10px", marginBottom: "20px" }}
           >
             <div style={{ flex: 1, position: "relative" }}>
-              {(() => {
-                const searchNormalized = normalizeString(searchInput);
-                const queryWords = searchNormalized.split(/\s+/).filter(w => w.length > 0);
-                
-                let expandedQueryWords = [...queryWords];
-                queryWords.forEach(qw => {
-                  if (SYNONYMS[qw]) expandedQueryWords.push(...SYNONYMS[qw]);
-                });
-
-                const filteredCatalog = searchInput.length > 1 ? globalCatalog.map(c => {
-                  const nameNorm = normalizeString(c.name);
-                  const codeNorm = c.code ? normalizeString(c.code) : "";
-                  let score = 0;
-                  
-                  if (nameNorm.includes(searchNormalized) || codeNorm.includes(searchNormalized)) {
-                    score = 100;
-                  } else {
-                    expandedQueryWords.forEach(qw => {
-                      if (nameNorm.includes(qw)) {
-                        score += 50;
-                      } else if (qw.length > 3 && fuzzyMatch(nameNorm, qw)) {
-                        score += 30;
-                      }
-                    });
-                  }
-                  
-                  return { ...c, __score: score };
-                }).filter(c => c.__score > 0)
-                  .sort((a, b) => b.__score - a.__score)
-                  .slice(0, 15) : [];
-
-                const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-                  if (!showAutocomplete || filteredCatalog.length === 0) return;
-                  if (e.key === "ArrowDown") {
-                    e.preventDefault();
-                    setFocusedIndex(prev => (prev < filteredCatalog.length - 1 ? prev + 1 : prev));
-                  } else if (e.key === "ArrowUp") {
-                    e.preventDefault();
-                    setFocusedIndex(prev => (prev > 0 ? prev - 1 : 0));
-                  } else if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (focusedIndex >= 0 && focusedIndex < filteredCatalog.length) {
-                      const c = filteredCatalog[focusedIndex];
-                      if (c.stock <= 0) {
-                        if (window.confirm(`El producto "${c.name}" está AGOTADO. ¿Deseas registrarlo en el Radar de Demanda (Ventas Perdidas)?`)) {
-                          supabase.from("lost_sales_requests").insert({ term: c.name, type: "AGOTADO" }).then(async () => {
-                            await supabase.from("internal_tasks").insert({
-                              title: `Reabastecer urgencia: ${c.name}`,
-                              assigned_to: "Administrador",
-                              status: "pending",
-                              created_by: "Caja"
-                            });
-                            const today = new Date();
-                            today.setHours(0,0,0,0);
-                            const { data: panicData } = await supabase.from("lost_sales_requests").select("id").eq("term", c.name).eq("type", "AGOTADO").gte("created_at", today.toISOString());
-                            if (panicData && panicData.length >= 5) {
-                              alert(`🚨 ¡ALERTA DE PÁNICO! 🚨\nEl producto "${c.name}" se ha negado por falta de stock ${panicData.length} veces solo el día de HOY. ¡Sugiero hacer un pedido de emergencia al proveedor YA!`);
-                            } else {
-                              alert("✅ Registrado en el reporte de inteligencia.");
-                            }
-                          });
-                        }
-                      } else {
-                        addToCart(c.name, c.price, "pz", c.cost, 1, c.image_url);
-                      }
-                      setSearchInput("");
-                      setShowAutocomplete(false);
-                      setFocusedIndex(-1);
-                    } else if (filteredCatalog.length === 0 && searchInput.trim() !== "") {
-                      supabase.from("lost_sales_requests").insert({ term: searchInput, type: "NUEVO_PRODUCTO" }).then(() => {
-                        alert(`✅ "${searchInput}" registrado en el reporte de productos solicitados.`);
-                        setSearchInput("");
-                        setShowAutocomplete(false);
-                      });
-                    }
-                  } else if (e.key === "Escape") {
-                    setShowAutocomplete(false);
-                    setFocusedIndex(-1);
-                  }
-                };
-
-                return (
-                  <>
                     <input
                       type="text"
                       value={searchInput}
@@ -1227,7 +1219,8 @@ export default function POSModule() {
                           {filteredCatalog.map((c, idx) => (
                             <div 
                               key={c.id} 
-                              onClick={async () => {
+                              onMouseDown={async (e) => {
+                                e.preventDefault(); // Prevents input onBlur
                                 if (c.stock <= 0) {
                                   if (window.confirm(`El producto "${c.name}" está AGOTADO. ¿Deseas registrarlo en el Radar de Demanda (Ventas Perdidas)?`)) {
                                     await supabase.from("lost_sales_requests").insert({ term: c.name, type: "AGOTADO" });
@@ -1285,7 +1278,8 @@ export default function POSModule() {
                             <div style={{ padding: "15px", textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
                               No se encontraron productos en el inventario.
                               <button 
-                                onClick={async () => {
+                                onMouseDown={async (e) => {
+                                  e.preventDefault(); // Prevents input onBlur
                                   if (searchInput.trim() !== "") {
                                     await supabase.from("lost_sales_requests").insert({ term: searchInput, type: "NUEVO_PRODUCTO" });
                                     alert(`✅ "${searchInput}" registrado en el reporte de productos solicitados.`);
@@ -1303,9 +1297,6 @@ export default function POSModule() {
                         </div>
                       </>
                     )}
-                  </>
-                );
-              })()}
             </div>
             <button
               type="submit"
@@ -1871,11 +1862,11 @@ export default function POSModule() {
                  
                  const { error } = await supabase.from("cash_transactions").insert({
                     session_id: session.id,
-                    type: "refund",
+                    type: "withdrawal",
                     amount: -amount,
                     description: `Devolución: ${reason}`
                  });
-                 if (error) return alert("Error al registrar devolución.");
+                 if (error) return alert("Error al registrar devolución: " + error.message);
                  alert(`✅ Devolución exitosa. Se retiraron $${amount.toFixed(2)} de la caja.`);
               } else {
                  alert("❌ Las devoluciones solo se pueden hacer en modo en línea.");

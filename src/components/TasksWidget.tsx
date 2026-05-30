@@ -70,35 +70,53 @@ export default function TasksWidget() {
         }
       ]);
       
-      if (!error) {
+      if (error) {
+        console.error("Error adding task:", error);
+        alert(`❌ Error al guardar la tarea: ${error.message || "Problema de políticas RLS en Supabase"}`);
+      } else {
         setNewTaskTitle("");
         fetchTasks();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(`❌ Error de conexión/sistema al agregar: ${err.message || "Desconocido"}`);
     }
   };
 
   const handleToggleTask = async (task: InternalTask) => {
     const newStatus = task.status === "pending" ? "completed" : "pending";
     try {
-      await supabase
+      const { error } = await supabase
         .from("internal_tasks")
         .update({ status: newStatus })
         .eq("id", task.id);
-      fetchTasks();
-    } catch (err) {
+      
+      if (error) {
+        console.error("Error updating task:", error);
+        alert(`❌ Error al actualizar la tarea: ${error.message || "Problema de RLS"}`);
+      } else {
+        fetchTasks();
+      }
+    } catch (err: any) {
       console.error(err);
+      alert(`❌ Error técnico al actualizar: ${err.message || "Desconocido"}`);
     }
   };
 
   const handleDeleteTask = async (id: string) => {
     if (confirm("¿Eliminar esta tarea permanentemente?")) {
       try {
-        await supabase.from("internal_tasks").delete().eq("id", id);
-        fetchTasks();
-      } catch (err) {
+        const { error } = await supabase.from("internal_tasks").delete().eq("id", id);
+        
+        if (error) {
+          console.error("Error deleting task:", error);
+          alert(`❌ Error al eliminar la tarea: ${error.message || "Problema de RLS"}`);
+        } else {
+          fetchTasks();
+        }
+      } catch (err: any) {
         console.error(err);
+        alert(`❌ Error técnico al eliminar: ${err.message || "Desconocido"}`);
       }
     }
   };
