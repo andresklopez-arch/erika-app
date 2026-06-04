@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 
 interface InventoryItem {
   id: string;
+  code?: string;
   name: string;
   stock: number;
   cost: number;
@@ -32,7 +33,7 @@ export default function InboundModal({ onClose, onSuccess }: InboundModalProps) 
   const [applyIva, setApplyIva] = useState(false);
 
   const fetchItems = async () => {
-    const { data } = await supabase.from("inventory").select("id, name, stock, cost, price");
+    const { data } = await supabase.from("inventory").select("id, code, name, stock, cost, price");
     if (data) setItems(data);
   };
 
@@ -42,7 +43,10 @@ export default function InboundModal({ onClose, onSuccess }: InboundModalProps) 
   }, []);
 
   const filteredItems = searchTerm.length > 1 
-    ? items.filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    ? items.filter(i => 
+        i.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (i.code && i.code.toLowerCase().includes(searchTerm.toLowerCase()))
+      )
     : [];
 
   const handleSelect = (item: InventoryItem) => {
@@ -116,7 +120,7 @@ export default function InboundModal({ onClose, onSuccess }: InboundModalProps) 
                 <ul style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#1e293b", border: "1px solid var(--glass-border)", borderRadius: "6px", listStyle: "none", padding: 0, margin: 0, zIndex: 10, maxHeight: "300px", overflowY: "auto" }}>
                   {filteredItems.map(i => (
                     <li key={i.id} onClick={() => handleSelect(i)} style={{ padding: "10px", borderBottom: "1px solid rgba(255,255,255,0.1)", cursor: "pointer" }}>
-                      {i.name} (Stock: {i.stock})
+                      {i.name} {i.code ? `[${i.code}]` : ""} (Stock: {i.stock})
                     </li>
                   ))}
                 </ul>
