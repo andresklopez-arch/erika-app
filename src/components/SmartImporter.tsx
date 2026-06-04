@@ -283,19 +283,45 @@ export default function SmartImporter({
            headersForSelect.push(rawData[0][c] ? String(rawData[0][c]) : `Columna ${c + 1}`);
         }
 
-        // Eliminar Fase Heurística, ahora es plantilla ESTRICTA
-        const finalCodeIdx = 0;
-        const finalNameIdx = 1;
-        const finalStockIdx = 2;
-        const finalCostIdx = 3;
-        const finalSupplierIdx = 5;
-        const finalLocationIdx = 6;
+        // Heurística inteligente de detección de columnas (con fallback a plantilla estricta)
+        let finalCodeIdx = 0;
+        let finalNameIdx = 1;
+        let finalStockIdx = 2;
+        let finalCostIdx = 3;
+        let finalSupplierIdx = 5;
+        let finalLocationIdx = 6;
+        
+        let detectedCode = false, detectedName = false, detectedStock = false, detectedCost = false;
+
+        // Intentar detectar por cabeceras en la primera fila
+        if (rawData.length > 0) {
+          const firstRow = rawData[0].map((h: any) => String(h).toLowerCase().trim());
+          firstRow.forEach((val, idx) => {
+            if (val.includes("cod") || val.includes("sku") || val.includes("barr") || val === "código") {
+              finalCodeIdx = idx;
+              detectedCode = true;
+            } else if (val.includes("nom") || val.includes("prod") || val.includes("desc") || val.includes("art")) {
+              finalNameIdx = idx;
+              detectedName = true;
+            } else if (val.includes("cant") || val.includes("stock") || val.includes("exis") || val.includes("cantidad")) {
+              finalStockIdx = idx;
+              detectedStock = true;
+            } else if (val.includes("cost") || val.includes("comp") || val.includes("prov") || val.includes("costo")) {
+              finalCostIdx = idx;
+              detectedCost = true;
+            } else if (val.includes("prove") || val.includes("brand") || val.includes("proveedor")) {
+              finalSupplierIdx = idx;
+            } else if (val.includes("ubica") || val.includes("pasi") || val.includes("loc") || val.includes("bod") || val.includes("bodega")) {
+              finalLocationIdx = idx;
+            }
+          });
+        }
         
         const source = {
-          code: "📋 Plantilla Oficial",
-          name: "📋 Plantilla Oficial",
-          stock: "📋 Plantilla Oficial",
-          cost: "📋 Plantilla Oficial",
+          code: detectedCode ? "🤖 Auto-detectado" : "📋 Plantilla Oficial",
+          name: detectedName ? "🤖 Auto-detectado" : "📋 Plantilla Oficial",
+          stock: detectedStock ? "🤖 Auto-detectado" : "📋 Plantilla Oficial",
+          cost: detectedCost ? "🤖 Auto-detectado" : "📋 Plantilla Oficial",
           supplier: "📋 Plantilla Oficial",
           location: "📋 Plantilla Oficial",
         };
@@ -928,14 +954,35 @@ export default function SmartImporter({
                   ref={fileInputRef}
                   style={{ display: "none" }}
                   accept=".xlsx,.xls,.csv,.pdf,image/*"
-                  onChange={(e) =>
-                    e.target.files && handleFileSelection(e.target.files[0])
-                  }
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleFileSelection(e.target.files[0]);
+                    }
+                    e.target.value = ""; // Restablecer input para permitir volver a cargar el mismo archivo
+                  }}
                 />
                 
                 {/* Zona de Arrastre visualmente premium */}
                 <div 
                   onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.style.background = "rgba(16, 185, 129, 0.1)";
+                    e.currentTarget.style.border = "2px dashed #10b981";
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.style.background = "rgba(0,0,0,0.2)";
+                    e.currentTarget.style.border = "2px dashed var(--color-primary)";
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.style.background = "rgba(0,0,0,0.2)";
+                    e.currentTarget.style.border = "2px dashed var(--color-primary)";
+                    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                      handleFileSelection(e.dataTransfer.files[0]);
+                    }
+                  }}
                   style={{
                     border: "2px dashed var(--color-primary)",
                     borderRadius: "12px",
@@ -952,7 +999,7 @@ export default function SmartImporter({
                   onMouseLeave={(e) => e.currentTarget.style.background = "rgba(0,0,0,0.2)"}
                 >
                   <span style={{ fontSize: "3rem" }}>📁</span>
-                  <strong style={{ color: "var(--color-primary)" }}>Seleccionar archivo desde tu equipo</strong>
+                  <strong style={{ color: "var(--color-primary)" }}>Seleccionar o arrastrar archivo aquí</strong>
                   <span style={{ fontSize: "0.8rem", opacity: 0.6 }}>Formatos: Excel, CSV, PDF o Imágenes (JPG, PNG)</span>
                 </div>
               </div>
