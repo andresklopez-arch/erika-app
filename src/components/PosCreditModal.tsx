@@ -32,7 +32,16 @@ export default function PosCreditModal({
       const pin = window.prompt(
         `🚩 ALERTA ROJA: Límite de crédito excedido. Disponible: $${(customer.credit_limit - customer.balance).toFixed(2)}\n\nIngrese PIN Maestro para autorizar la venta (Sobregiro):`
       );
-      if (pin !== "admin123") {
+      if (!pin) return alert("❌ Operación cancelada.");
+
+      const { data: admin, error: adminError } = await supabase
+        .from("users")
+        .select("*")
+        .eq("pin", pin)
+        .eq("role", "admin")
+        .single();
+
+      if (adminError || !admin) {
          return alert("❌ Acceso Denegado. Venta a crédito cancelada.");
       }
       alert("⚠️ Sobregiro autorizado por Administrador.");
