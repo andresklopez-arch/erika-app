@@ -136,16 +136,34 @@ export default function Sidebar() {
           </Link>
         )}
         {(isAdmin || p.pos || p.inventario || p.servicios) && (
-          <Link
-            href="/clientes"
-            className={isActive("/clientes") ? "active" : ""}
-            onClick={(e) => handleLinkClick(e, "/clientes")}
-            title="Clientes y Agenda (Alt + 7)"
-          >
-            <span className="icon">👥</span>
-            <span className="nav-text">Clientes y Agenda</span>
-            <span className="shortcut-badge">Alt + 7</span>
-          </Link>
+          <>
+            <Link
+              href="/clientes"
+              className={isActive("/clientes") ? "active" : ""}
+              onClick={(e) => handleLinkClick(e, "/clientes")}
+              title="Clientes y Agenda (Alt + 7)"
+            >
+              <span className="icon">👥</span>
+              <span className="nav-text">Clientes y Agenda</span>
+              <span className="shortcut-badge">Alt + 7</span>
+            </Link>
+            {isActive("/clientes") && (
+              <div className="submenu-container" style={{ paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.8rem", borderLeft: "1px dashed rgba(255,255,255,0.1)", marginLeft: "12px", marginBottom: "6px" }}>
+                <Link href="/clientes" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                  <span>👥</span><span>Clientes y Crédito</span>
+                </Link>
+                <Link href="/clientes?tab=apartados" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                  <span>📦</span><span>Apartados</span>
+                </Link>
+                <Link href="/clientes?tab=presupuestos" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                  <span>📄</span><span>Presupuestos</span>
+                </Link>
+                <Link href="/clientes?tab=agenda" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                  <span>📅</span><span>Agenda de Servicios</span>
+                </Link>
+              </div>
+            )}
+          </>
         )}
 
         {(isAdmin || p.inventario) && (
