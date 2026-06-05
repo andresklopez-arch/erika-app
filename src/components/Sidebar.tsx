@@ -1,13 +1,51 @@
 "use client";
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "./AuthProvider";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
+import { supabase } from "../lib/supabaseClient";
 
 export default function Sidebar() {
   const { currentUser } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+
+  const [pendingLayawaysCount, setPendingLayawaysCount] = useState(0);
+  const [pendingQuotesCount, setPendingQuotesCount] = useState(0);
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const fetchCounts = async () => {
+      try {
+        const todayStr = new Date().toISOString().split("T")[0];
+
+        // Fetch layaways count: pending and due_date <= today
+        const { count: layawayCount } = await supabase
+          .from("layaways")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "pending")
+          .lte("due_date", todayStr);
+
+        if (layawayCount !== null) setPendingLayawaysCount(layawayCount);
+
+        // Fetch quotes count: pending status
+        const { count: quoteCount } = await supabase
+          .from("quotes")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "pending");
+
+        if (quoteCount !== null) setPendingQuotesCount(quoteCount);
+      } catch (error) {
+        console.error("Error fetching sidebar counts:", error);
+      }
+    };
+
+    fetchCounts();
+
+    const interval = setInterval(fetchCounts, 60000);
+    return () => clearInterval(interval);
+  }, [currentUser]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -152,11 +190,43 @@ export default function Sidebar() {
                 <Link href="/clientes" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
                   <span>👥</span><span>Clientes y Crédito</span>
                 </Link>
-                <Link href="/clientes?tab=apartados" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
-                  <span>📦</span><span>Apartados</span>
+                <Link href="/clientes?tab=apartados" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <span>📦</span><span>Apartados</span>
+                  </div>
+                  {pendingLayawaysCount > 0 && (
+                    <span style={{
+                      background: "#ef4444",
+                      color: "white",
+                      fontSize: "0.7rem",
+                      fontWeight: "bold",
+                      padding: "2px 6px",
+                      borderRadius: "10px",
+                      lineHeight: "1",
+                      marginRight: "6px"
+                    }}>
+                      {pendingLayawaysCount}
+                    </span>
+                  )}
                 </Link>
-                <Link href="/clientes?tab=presupuestos" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
-                  <span>📄</span><span>Presupuestos</span>
+                <Link href="/clientes?tab=presupuestos" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <span>📄</span><span>Presupuestos</span>
+                  </div>
+                  {pendingQuotesCount > 0 && (
+                    <span style={{
+                      background: "#eab308",
+                      color: "black",
+                      fontSize: "0.7rem",
+                      fontWeight: "bold",
+                      padding: "2px 6px",
+                      borderRadius: "10px",
+                      lineHeight: "1",
+                      marginRight: "6px"
+                    }}>
+                      {pendingQuotesCount}
+                    </span>
+                  )}
                 </Link>
                 <Link href="/clientes?tab=agenda" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
                   <span>📅</span><span>Agenda de Servicios</span>
