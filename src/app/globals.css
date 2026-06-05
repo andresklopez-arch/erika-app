@@ -599,8 +599,13 @@ body {
   transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease, margin 0.3s ease;
 }
 
-.sidebar-container:hover .submenu-container,
-.sidebar-container.pinned .submenu-container {
+/* Expanded state: Only active or hovered menu sections will open their submenus, keeping the height compact */
+.sidebar-container:hover a.active + .submenu-container,
+.sidebar-container.pinned a.active + .submenu-container,
+.sidebar-container:hover a:hover + .submenu-container,
+.sidebar-container.pinned a:hover + .submenu-container,
+.sidebar-container:hover .submenu-container:hover,
+.sidebar-container.pinned .submenu-container:hover {
   max-height: 400px;
   opacity: 1;
   margin-bottom: 6px;
