@@ -427,6 +427,7 @@ export default function InventoryModule() {
             style={{
               background: "transparent",
               border: "1px solid var(--color-primary)",
+              color: "var(--color-primary)",
             }}
           >
             👤 Clientes
@@ -451,6 +452,7 @@ export default function InventoryModule() {
             style={{
               background: "transparent",
               border: "1px solid var(--color-accent)",
+              color: "var(--color-accent)",
             }}
           >
             🏭 Proveedores
@@ -494,6 +496,7 @@ export default function InventoryModule() {
             style={{
               background: "transparent",
               border: "1px solid var(--color-primary)",
+              color: "var(--color-primary)",
             }}
           >
             🖨️ Etiquetas (Masivo)
@@ -780,7 +783,7 @@ export default function InventoryModule() {
                             }
                             title="Imprimir Código de Barras Individual"
                             className="btn-primary"
-                            style={{ padding: "4px 8px", fontSize: "0.9rem", background: "transparent", border: "1px solid var(--color-secondary)", color: "white" }}
+                            style={{ padding: "4px 8px", fontSize: "0.9rem", background: "transparent", border: "1px solid var(--color-secondary)", color: "var(--color-secondary)" }}
                           >
                             🏷️
                         </button>
