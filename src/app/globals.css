@@ -648,4 +648,15 @@ body {
   background: rgba(0, 0, 0, 0.05) !important;
 }
 
+/* Responsive Submenu Collapse for short screens (vertical height < 760px) */
+@media (max-height: 760px) {
+  .sidebar-container:not(:hover) a.active + .submenu-container,
+  .sidebar-container:not(:hover) .submenu-container {
+    max-height: 0 !important;
+    opacity: 0 !important;
+    margin-bottom: 0 !important;
+    margin-top: 0 !important;
+  }
+}
+
 
