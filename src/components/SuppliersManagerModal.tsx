@@ -48,9 +48,38 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
 
   const fetchSuppliers = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase.from("suppliers").select("*").order("name");
+    const { data, error } = await supabase.from("suppliers").select("*").not("deleted", "eq", true).order("name");
     if (!error && data) setSuppliers(data);
     setIsLoading(false);
+  };
+
+  const handleDeleteSupplier = async (supplier: Supplier) => {
+    if (!window.confirm(`⚠️ ¿Seguro que deseas eliminar al proveedor "${supplier.name}"?\nSe moverá a la Papelera.`)) return;
+
+    // Check for pending debts
+    const { data: debts } = await supabase
+      .from("supplier_debts")
+      .select("id")
+      .eq("supplier_id", supplier.id)
+      .eq("status", "pending")
+      .limit(1);
+
+    if (debts && debts.length > 0) {
+      alert("❌ No se puede eliminar un proveedor con cuentas por pagar pendientes.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("suppliers")
+      .update({ deleted: true, deleted_at: new Date().toISOString() })
+      .eq("id", supplier.id);
+
+    if (error) {
+      toast.error("Error al eliminar proveedor: " + error.message);
+    } else {
+      toast.success("🗑️ Proveedor enviado a la papelera.");
+      fetchSuppliers();
+    }
   };
 
   useEffect(() => {
@@ -318,6 +347,13 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
                             style={{ background: "#f59e0b", color: "white", border: "none", padding: "8px 12px", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}
                           >
                             ✏️ Editar
+                          </button>
+                          <button 
+                            onClick={() => handleDeleteSupplier(s)}
+                            title="Eliminar Proveedor"
+                            style={{ background: "transparent", border: "1px solid #ef4444", color: "#ef4444", padding: "8px 12px", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}
+                          >
+                            🗑️ Eliminar
                           </button>
                         </td>
                       </tr>

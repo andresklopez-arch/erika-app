@@ -362,7 +362,7 @@ export default function CustomersModule() {
   };
 
   const handleDeleteCustomer = async (custId: string, name: string) => {
-    if (!window.confirm(`⚠️ ¿Seguro que deseas eliminar al cliente "${name}"?\nEsta acción es irreversible y eliminará su registro en el directorio.`)) return;
+    if (!window.confirm(`⚠️ ¿Seguro que deseas eliminar al cliente "${name}"?\nSe moverá a la Papelera.`)) return;
 
     const customer = customers.find(c => c.id === custId);
     if (customer && customer.balance > 0) {
@@ -373,7 +373,7 @@ export default function CustomersModule() {
 
     const { error } = await supabase
       .from("customers")
-      .update({ deleted: true })
+      .update({ deleted: true, deleted_at: new Date().toISOString() })
       .eq("id", custId);
 
     if (error) {
@@ -391,7 +391,7 @@ export default function CustomersModule() {
     if (!undoCustomerId) return;
     const { error } = await supabase
       .from("customers")
-      .update({ deleted: false })
+      .update({ deleted: false, deleted_at: null })
       .eq("id", undoCustomerId);
 
     if (error) {
@@ -529,6 +529,19 @@ export default function CustomersModule() {
               {(() => {
                 const c = customers.find((x) => x.id === selectedCustomerId);
                 if (!c) return null;
+
+                // Calcular inactividad de más de 45 días
+                const lastTxDate = transactions.length > 0 ? new Date(transactions[0].created_at) : null;
+                const lastQuoteDate = customerQuotes.length > 0 ? new Date(customerQuotes[0].created_at) : null;
+                const lastActivity = [
+                  c.created_at ? new Date(c.created_at) : null,
+                  lastTxDate,
+                  lastQuoteDate
+                ].filter(Boolean) as Date[];
+                const newestActivity = lastActivity.length > 0 ? new Date(Math.max(...lastActivity.map(d => d.getTime()))) : null;
+                const daysSinceActivity = newestActivity ? (Date.now() - newestActivity.getTime()) / (1000 * 60 * 60 * 24) : 0;
+                const suggestDelete = daysSinceActivity > 45;
+
                 return (
                   <div
                     style={{
@@ -537,6 +550,39 @@ export default function CustomersModule() {
                       marginBottom: "20px",
                     }}
                   >
+                    {suggestDelete && (
+                      <div
+                        style={{
+                          background: "rgba(245, 158, 11, 0.15)",
+                          border: "1px solid #f59e0b",
+                          borderRadius: "12px",
+                          padding: "12px 16px",
+                          marginBottom: "15px",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: "10px",
+                          boxShadow: "0 0 10px rgba(245, 158, 11, 0.1)",
+                        }}
+                      >
+                        <div style={{ fontSize: "0.85rem", color: "#fcd34d", lineHeight: 1.4 }}>
+                          💡 <strong>Sugerencia de Erika:</strong> Este cliente no registra movimientos ni cotizaciones en los últimos <strong>{Math.floor(daysSinceActivity)} días</strong>. Se sugiere darlo de baja.
+                        </div>
+                        <button
+                          className="btn-primary"
+                          style={{
+                            padding: "6px 12px",
+                            fontSize: "0.8rem",
+                            background: "#ef4444",
+                            border: "none",
+                            color: "white",
+                          }}
+                          onClick={() => handleDeleteCustomer(c.id, c.name)}
+                        >
+                          Dar de Baja
+                        </button>
+                      </div>
+                    )}
                     <div className="flex-between">
                       <div>
                         <h2>{c.name}</h2>

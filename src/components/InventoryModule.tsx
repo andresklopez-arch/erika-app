@@ -161,10 +161,27 @@ export default function InventoryModule() {
     const { data, error } = await supabase
       .from("inventory")
       .select("*")
+      .not("deleted", "eq", true)
       .order("name", { ascending: true });
     if (data) setItems(data);
     if (error) console.error(error);
     setIsLoading(false);
+  };
+
+  const handleDeleteProduct = async (id: string, name: string) => {
+    if (!window.confirm(`⚠️ ¿Seguro que deseas eliminar el producto "${name}"?\nSe enviará a la Papelera.`)) return;
+
+    const { error } = await supabase
+      .from("inventory")
+      .update({ deleted: true, deleted_at: new Date().toISOString() })
+      .eq("id", id);
+
+    if (error) {
+      alert("Error al eliminar producto: " + error.message);
+    } else {
+      alert("🗑️ Producto enviado a la papelera.");
+      fetchInventory();
+    }
   };
 
   useEffect(() => {
@@ -670,6 +687,7 @@ export default function InventoryModule() {
                 <th style={{ padding: "15px" }}>Costo Prov.</th>
                 <th style={{ padding: "15px" }}>Precio Venta</th>
                 <th style={{ padding: "15px", color: "var(--color-secondary)" }}>Margen (%)</th>
+                <th style={{ padding: "15px", textAlign: "center" }}>Acción</th>
               </tr>
             </thead>
             <tbody>
@@ -803,6 +821,24 @@ export default function InventoryModule() {
                     </td>
                     <td style={{ padding: "15px", color: "var(--color-secondary)", fontWeight: "bold" }}>
                       {item.cost > 0 ? ((item.price - item.cost) / item.cost * 100).toFixed(1) + "%" : "N/A"}
+                    </td>
+                    <td style={{ padding: "15px", textAlign: "center" }}>
+                      <button
+                        onClick={() => handleDeleteProduct(item.id, item.name)}
+                        title="Eliminar Producto"
+                        style={{
+                          background: "transparent",
+                          border: "1px solid #ef4444",
+                          color: "#ef4444",
+                          padding: "6px 12px",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontWeight: "bold",
+                          fontSize: "0.85rem",
+                        }}
+                      >
+                        🗑️
+                      </button>
                     </td>
                   </tr>
                 );

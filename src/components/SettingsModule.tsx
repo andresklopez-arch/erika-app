@@ -74,6 +74,141 @@ export default function SettingsModule() {
   const [errorLogs, setErrorLogs] = useState<ErrorLogItem[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
+  // Recycle Bin (Papelera) States
+  interface TrashItem {
+    id: string;
+    name: string;
+    type: "producto" | "cliente" | "proveedor";
+    deleted_at: string;
+  }
+  const [trashItems, setTrashItems] = useState<TrashItem[]>([]);
+  const [isLoadingTrash, setIsLoadingTrash] = useState(false);
+
+  const fetchTrash = async () => {
+    setIsLoadingTrash(true);
+    try {
+      const { data: invData } = await supabase.from("inventory").select("id, name, code, deleted_at").eq("deleted", true);
+      const { data: custData } = await supabase.from("customers").select("id, name, deleted_at").eq("deleted", true);
+      const { data: suppData } = await supabase.from("suppliers").select("id, name, deleted_at").eq("deleted", true);
+
+      const items: TrashItem[] = [];
+
+      if (invData) {
+        invData.forEach((i: any) => {
+          items.push({
+            id: i.id,
+            name: i.code ? `[${i.code}] ${i.name}` : i.name,
+            type: "producto",
+            deleted_at: i.deleted_at || new Date().toISOString()
+          });
+        });
+      }
+
+      if (custData) {
+        custData.forEach((c: any) => {
+          items.push({
+            id: c.id,
+            name: c.name,
+            type: "cliente",
+            deleted_at: c.deleted_at || new Date().toISOString()
+          });
+        });
+      }
+
+      if (suppData) {
+        suppData.forEach((s: any) => {
+          items.push({
+            id: s.id,
+            name: s.name,
+            type: "proveedor",
+            deleted_at: s.deleted_at || new Date().toISOString()
+          });
+        });
+      }
+
+      // Auto-purging logic (older than 33 days)
+      const now = Date.now();
+      const activeTrash: TrashItem[] = [];
+
+      for (const item of items) {
+        const deletedTime = new Date(item.deleted_at).getTime();
+        const daysInTrash = (now - deletedTime) / (1000 * 60 * 60 * 24);
+
+        if (daysInTrash > 33) {
+          if (item.type === "producto") {
+            await supabase.from("inventory").delete().eq("id", item.id);
+          } else if (item.type === "cliente") {
+            await supabase.from("customers").delete().eq("id", item.id);
+          } else if (item.type === "proveedor") {
+            await supabase.from("suppliers").delete().eq("id", item.id);
+          }
+        } else {
+          activeTrash.push(item);
+        }
+      }
+
+      setTrashItems(activeTrash);
+    } catch (e) {
+      console.error("Error fetching trash:", e);
+    } finally {
+      setIsLoadingTrash(false);
+    }
+  };
+
+  const handleRestoreTrash = async (item: TrashItem) => {
+    if (!checkAdmin()) return;
+    try {
+      let error;
+      if (item.type === "producto") {
+        const { error: err } = await supabase.from("inventory").update({ deleted: false, deleted_at: null }).eq("id", item.id);
+        error = err;
+      } else if (item.type === "cliente") {
+        const { error: err } = await supabase.from("customers").update({ deleted: false, deleted_at: null }).eq("id", item.id);
+        error = err;
+      } else if (item.type === "proveedor") {
+        const { error: err } = await supabase.from("suppliers").update({ deleted: false, deleted_at: null }).eq("id", item.id);
+        error = err;
+      }
+
+      if (error) {
+        alert("Error al restaurar: " + error.message);
+      } else {
+        alert(`✅ Restaurado exitosamente.`);
+        fetchTrash();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleHardDeleteTrash = async (item: TrashItem) => {
+    if (!checkAdmin()) return;
+    if (!confirm(`⚠️ ¿Seguro que deseas eliminar definitivamente a "${item.name}"?\nEsta acción es irreversible.`)) return;
+
+    try {
+      let error;
+      if (item.type === "producto") {
+        const { error: err } = await supabase.from("inventory").delete().eq("id", item.id);
+        error = err;
+      } else if (item.type === "cliente") {
+        const { error: err } = await supabase.from("customers").delete().eq("id", item.id);
+        error = err;
+      } else if (item.type === "proveedor") {
+        const { error: err } = await supabase.from("suppliers").delete().eq("id", item.id);
+        error = err;
+      }
+
+      if (error) {
+        alert("Error al eliminar permanentemente: " + error.message);
+      } else {
+        alert("🚨 Eliminado definitivamente.");
+        fetchTrash();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const fetchErrorLogs = async () => {
     setIsLoadingLogs(true);
     try {
@@ -117,6 +252,7 @@ export default function SettingsModule() {
     }
     fetchUsers();
     fetchErrorLogs();
+    fetchTrash();
   }, [businessSettings]);
 
   async function fetchUsers() {
@@ -919,6 +1055,104 @@ export default function SettingsModule() {
               💾 Guardar Utilidad y Metas
             </button>
           </div>
+      </div>
+
+      {/* Sección: Papelera de Reciclaje */}
+      <div className="glass-panel" style={{ marginTop: "30px", border: "1px solid #ef4444" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+          <h3 style={{ margin: 0, color: "#ef4444", display: "flex", alignItems: "center", gap: "10px" }}>
+            ♻️ Papelera de Reciclaje (Retención: 33 días)
+          </h3>
+          <button 
+            onClick={fetchTrash} 
+            disabled={isLoadingTrash}
+            style={{ background: "rgba(239,68,68,0.2)", color: "#ef4444", border: "1px solid #ef4444", padding: "5px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "0.8rem" }}
+          >
+            {isLoadingTrash ? "Cargando..." : "🔄 Actualizar"}
+          </button>
+        </div>
+
+        <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", marginBottom: "15px" }}>
+          Los elementos en esta papelera se eliminarán **definitivamente** del sistema después de 33 días en la papelera de manera automática.
+        </p>
+
+        <div style={{ maxHeight: "300px", overflowY: "auto", background: "rgba(0,0,0,0.2)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.05)" }}>
+          {trashItems.length === 0 ? (
+            <p style={{ textAlign: "center", padding: "20px", color: "rgba(255,255,255,0.5)", fontSize: "0.9rem", margin: 0 }}>
+              La papelera está vacía.
+            </p>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", textAlign: "left" }}>
+              <thead style={{ background: "rgba(255,255,255,0.05)", position: "sticky", top: 0 }}>
+                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                  <th style={{ padding: "10px", color: "rgba(255,255,255,0.7)" }}>Tipo</th>
+                  <th style={{ padding: "10px", color: "rgba(255,255,255,0.7)" }}>Nombre / Código</th>
+                  <th style={{ padding: "10px", color: "rgba(255,255,255,0.7)" }}>Fecha Eliminado</th>
+                  <th style={{ padding: "10px", color: "rgba(255,255,255,0.7)", textAlign: "center" }}>Días Restantes</th>
+                  <th style={{ padding: "10px", color: "rgba(255,255,255,0.7)", textAlign: "center" }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trashItems.map((item) => {
+                  const daysInTrash = (Date.now() - new Date(item.deleted_at).getTime()) / (1000 * 60 * 60 * 24);
+                  const daysRemaining = Math.max(0, Math.ceil(33 - daysInTrash));
+                  return (
+                    <tr key={`${item.type}-${item.id}`} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                      <td style={{ padding: "10px" }}>
+                        <span style={{
+                          padding: "4px 8px",
+                          background: item.type === "producto" ? "rgba(59,130,246,0.15)" : item.type === "cliente" ? "rgba(16,185,129,0.15)" : "rgba(234,179,8,0.15)",
+                          color: item.type === "producto" ? "#3b82f6" : item.type === "cliente" ? "#10b981" : "#eab308",
+                          borderRadius: "4px",
+                          fontSize: "0.75rem",
+                          fontWeight: "bold",
+                          textTransform: "uppercase"
+                        }}>
+                          {item.type}
+                        </span>
+                      </td>
+                      <td style={{ padding: "10px", fontWeight: "bold" }}>{item.name}</td>
+                      <td style={{ padding: "10px" }}>{new Date(item.deleted_at).toLocaleDateString()}</td>
+                      <td style={{ padding: "10px", textAlign: "center", fontWeight: "bold", color: daysRemaining <= 5 ? "#ef4444" : "#10b981" }}>
+                        {daysRemaining} días
+                      </td>
+                      <td style={{ padding: "10px", textAlign: "center" }}>
+                        <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
+                          <button
+                            onClick={() => handleRestoreTrash(item)}
+                            className="btn-primary"
+                            style={{
+                              background: "rgba(16,185,129,0.15)",
+                              border: "1px solid rgba(16,185,129,0.3)",
+                              color: "#10b981",
+                              fontSize: "0.8rem",
+                              padding: "4px 8px",
+                            }}
+                          >
+                            🔄 Restaurar
+                          </button>
+                          <button
+                            onClick={() => handleHardDeleteTrash(item)}
+                            className="btn-primary"
+                            style={{
+                              background: "rgba(239,68,68,0.15)",
+                              border: "1px solid rgba(239,68,68,0.3)",
+                              color: "#ef4444",
+                              fontSize: "0.8rem",
+                              padding: "4px 8px",
+                            }}
+                          >
+                            🚨 Eliminar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
       {editingUser && (
