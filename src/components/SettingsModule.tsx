@@ -173,8 +173,15 @@ export default function SettingsModule() {
       if (error) {
         alert("Error al restaurar: " + error.message);
       } else {
+        // Log audit event
+        await supabase.from("error_logs").insert({
+          module: "RecycleBin",
+          error_details: `Restaurado: ${item.type} "${item.name}" (ID: ${item.id})`,
+          usuario: currentUser?.name || "Administrador"
+        });
         alert(`✅ Restaurado exitosamente.`);
         fetchTrash();
+        fetchErrorLogs();
       }
     } catch (e) {
       console.error(e);
@@ -201,8 +208,15 @@ export default function SettingsModule() {
       if (error) {
         alert("Error al eliminar permanentemente: " + error.message);
       } else {
+        // Log audit event
+        await supabase.from("error_logs").insert({
+          module: "RecycleBin",
+          error_details: `Eliminado Definitivamente: ${item.type} "${item.name}" (ID: ${item.id})`,
+          usuario: currentUser?.name || "Administrador"
+        });
         alert("🚨 Eliminado definitivamente.");
         fetchTrash();
+        fetchErrorLogs();
       }
     } catch (e) {
       console.error(e);
