@@ -160,13 +160,38 @@ body {
   z-index: 1000;
   flex-shrink: 0;
   padding: 20px 12px;
-  -ms-overflow-style: none;  /* IE and Edge */
-  scrollbar-width: none;  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
   will-change: width, padding;
 }
 
+[data-theme="light"] .sidebar-container {
+  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+}
+
 .sidebar-container::-webkit-scrollbar {
-  display: none; /* Chrome, Safari and Opera */
+  width: 4px;
+}
+
+.sidebar-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.sidebar-container:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+[data-theme="light"] .sidebar-container::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="light"] .sidebar-container:hover::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.35);
 }
 
 
