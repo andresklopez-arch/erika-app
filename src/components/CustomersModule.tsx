@@ -6,6 +6,9 @@ export default function CustomersModule() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [customerServices, setCustomerServices] = useState<any[]>([]);
+  const [customerLayaways, setCustomerLayaways] = useState<any[]>([]);
+  const [customerQuotes, setCustomerQuotes] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<"credit" | "layaways" | "quotes" | "services">("credit");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
@@ -44,6 +47,24 @@ export default function CustomersModule() {
     if (data) setCustomerServices(data);
   };
 
+  const fetchCustomerLayaways = async (custId: string) => {
+    const { data } = await supabase
+      .from("layaways")
+      .select("*")
+      .eq("customer_id", custId)
+      .order("created_at", { ascending: false });
+    if (data) setCustomerLayaways(data);
+  };
+
+  const fetchCustomerQuotes = async (customerName: string) => {
+    const { data } = await supabase
+      .from("quotes")
+      .select("*")
+      .eq("customer_name", customerName)
+      .order("created_at", { ascending: false });
+    if (data) setCustomerQuotes(data);
+  };
+
   useEffect(() => {
     fetchCustomers();
   }, []);
@@ -52,10 +73,16 @@ export default function CustomersModule() {
     if (selectedCustomerId) {
       fetchTransactions(selectedCustomerId);
       const c = customers.find(x => x.id === selectedCustomerId);
-      if (c) fetchCustomerServices(c.name);
+      if (c) {
+        fetchCustomerServices(c.name);
+        fetchCustomerLayaways(c.id);
+        fetchCustomerQuotes(c.name);
+      }
     } else {
       setTransactions([]);
       setCustomerServices([]);
+      setCustomerLayaways([]);
+      setCustomerQuotes([]);
     }
   }, [selectedCustomerId, customers]);
 
@@ -355,157 +382,340 @@ export default function CustomersModule() {
                 );
               })()}
 
-              <h3 style={{ marginBottom: "10px" }}>Historial de Movimientos</h3>
-              <div style={{ flex: 1, overflowY: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr
-                      style={{
-                        background: "rgba(255,255,255,0.05)",
-                        textAlign: "left",
-                      }}
-                    >
-                      <th style={{ padding: "10px" }}>Fecha</th>
-                      <th style={{ padding: "10px" }}>Tipo</th>
-                      <th style={{ padding: "10px" }}>Detalle</th>
-                      <th style={{ padding: "10px", textAlign: "right" }}>
-                        Monto
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {transactions.map((tx) => (
-                      <tr
-                        key={tx.id}
-                        style={{
-                          borderBottom: "1px solid rgba(255,255,255,0.05)",
-                        }}
-                      >
-                        <td style={{ padding: "10px" }}>
-                          {new Date(tx.created_at).toLocaleString()}
-                        </td>
-                        <td style={{ padding: "10px" }}>
-                          {tx.type === "charge" ? (
-                            <span
-                              style={{
-                                color: "#ef4444",
-                                background: "rgba(239, 68, 68, 0.1)",
-                                padding: "4px 8px",
-                                borderRadius: "4px",
-                              }}
-                            >
-                              Cargo
-                            </span>
-                          ) : (
-                            <span
-                              style={{
-                                color: "var(--color-secondary)",
-                                background: "rgba(16, 185, 129, 0.1)",
-                                padding: "4px 8px",
-                                borderRadius: "4px",
-                              }}
-                            >
-                              Abono
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ padding: "10px" }}>{tx.notes}</td>
-                        <td
-                          style={{
-                            padding: "10px",
-                            textAlign: "right",
-                            fontWeight: "bold",
-                          }}
-                        >
-                          ${tx.amount.toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                    {transactions.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          style={{
-                            padding: "20px",
-                            textAlign: "center",
-                            color: "rgba(255,255,255,0.5)",
-                          }}
-                        >
-                          Sin movimientos.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              {/* Selector de Pestañas con Diseño Moderno */}
+              <div style={{ display: "flex", gap: "10px", marginBottom: "20px", borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: "10px", flexWrap: "wrap" }}>
+                <button
+                  onClick={() => setActiveTab("credit")}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: activeTab === "credit" ? "rgba(16, 185, 129, 0.2)" : "transparent",
+                    color: activeTab === "credit" ? "var(--color-primary)" : "rgba(255,255,255,0.7)",
+                    cursor: "pointer",
+                    fontWeight: activeTab === "credit" ? "bold" : "normal",
+                    transition: "all 0.3s ease",
+                  }}
+                >
+                  💳 Crédito y Movimientos
+                </button>
+                <button
+                  onClick={() => setActiveTab("layaways")}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: activeTab === "layaways" ? "rgba(16, 185, 129, 0.2)" : "transparent",
+                    color: activeTab === "layaways" ? "var(--color-primary)" : "rgba(255,255,255,0.7)",
+                    cursor: "pointer",
+                    fontWeight: activeTab === "layaways" ? "bold" : "normal",
+                    transition: "all 0.3s ease",
+                  }}
+                >
+                  📦 Apartados ({customerLayaways.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab("quotes")}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: activeTab === "quotes" ? "rgba(16, 185, 129, 0.2)" : "transparent",
+                    color: activeTab === "quotes" ? "var(--color-primary)" : "rgba(255,255,255,0.7)",
+                    cursor: "pointer",
+                    fontWeight: activeTab === "quotes" ? "bold" : "normal",
+                    transition: "all 0.3s ease",
+                  }}
+                >
+                  📄 Cotizaciones ({customerQuotes.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab("services")}
+                  style={{
+                    padding: "8px 16px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: activeTab === "services" ? "rgba(16, 185, 129, 0.2)" : "transparent",
+                    color: activeTab === "services" ? "var(--color-primary)" : "rgba(255,255,255,0.7)",
+                    cursor: "pointer",
+                    fontWeight: activeTab === "services" ? "bold" : "normal",
+                    transition: "all 0.3s ease",
+                  }}
+                >
+                  🛠️ Servicios ({customerServices.length})
+                </button>
               </div>
 
-              {/* Historial de Servicios */}
-              <h3 style={{ marginBottom: "10px", marginTop: "20px" }}>Servicios y Trabajos Anteriores</h3>
-              <div style={{ flex: 1, overflowY: "auto", maxHeight: "250px" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr
-                      style={{
-                        background: "rgba(255,255,255,0.05)",
-                        textAlign: "left",
-                      }}
-                    >
-                      <th style={{ padding: "10px" }}>Fecha</th>
-                      <th style={{ padding: "10px" }}>Servicio</th>
-                      <th style={{ padding: "10px" }}>Técnico</th>
-                      <th style={{ padding: "10px" }}>Estado</th>
-                      <th style={{ padding: "10px", textAlign: "right" }}>Costo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {customerServices.map((srv) => (
-                      <tr
-                        key={srv.id}
-                        style={{
-                          borderBottom: "1px solid rgba(255,255,255,0.05)",
-                        }}
-                      >
-                        <td style={{ padding: "10px" }}>
-                          {new Date(srv.scheduled_at).toLocaleDateString()}
-                        </td>
-                        <td style={{ padding: "10px" }}>{srv.service_type}</td>
-                        <td style={{ padding: "10px" }}>{srv.technician_name}</td>
-                        <td style={{ padding: "10px" }}>
-                          <span style={{ 
-                            background: srv.status === 'completed' ? "rgba(16, 185, 129, 0.1)" : "rgba(245, 158, 11, 0.1)",
-                            color: srv.status === 'completed' ? "#10b981" : "#f59e0b",
-                            padding: "4px 8px", borderRadius: "4px" 
-                          }}>
-                            {srv.status === 'completed' ? 'Completado' : srv.status === 'pending' ? 'Pendiente' : srv.status === 'in_progress' ? 'En Proceso' : 'Cancelado'}
-                          </span>
-                        </td>
-                        <td
-                          style={{
-                            padding: "10px",
-                            textAlign: "right",
-                            fontWeight: "bold",
-                          }}
-                        >
-                          ${srv.cost.toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                    {customerServices.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={5}
-                          style={{
-                            padding: "20px",
-                            textAlign: "center",
-                            color: "rgba(255,255,255,0.5)",
-                          }}
-                        >
-                          No hay servicios registrados para este cliente.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              {/* Contenido de la pestaña activa */}
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                {activeTab === "credit" && (
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                    <h3 style={{ marginBottom: "10px" }}>Historial de Movimientos</h3>
+                    <div style={{ flex: 1, overflowY: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr
+                            style={{
+                              background: "rgba(255,255,255,0.05)",
+                              textAlign: "left",
+                            }}
+                          >
+                            <th style={{ padding: "10px" }}>Fecha</th>
+                            <th style={{ padding: "10px" }}>Tipo</th>
+                            <th style={{ padding: "10px" }}>Detalle</th>
+                            <th style={{ padding: "10px", textAlign: "right" }}>
+                              Monto
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {transactions.map((tx) => (
+                            <tr
+                              key={tx.id}
+                              style={{
+                                borderBottom: "1px solid rgba(255,255,255,0.05)",
+                              }}
+                            >
+                              <td style={{ padding: "10px" }}>
+                                {new Date(tx.created_at).toLocaleString()}
+                              </td>
+                              <td style={{ padding: "10px" }}>
+                                {tx.type === "charge" ? (
+                                  <span
+                                    style={{
+                                      color: "#ef4444",
+                                      background: "rgba(239, 68, 68, 0.1)",
+                                      padding: "4px 8px",
+                                      borderRadius: "4px",
+                                    }}
+                                  >
+                                    Cargo
+                                  </span>
+                                ) : (
+                                  <span
+                                    style={{
+                                      color: "var(--color-secondary)",
+                                      background: "rgba(16, 185, 129, 0.1)",
+                                      padding: "4px 8px",
+                                      borderRadius: "4px",
+                                    }}
+                                  >
+                                    Abono
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: "10px" }}>{tx.notes}</td>
+                              <td
+                                style={{
+                                  padding: "10px",
+                                  textAlign: "right",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                ${tx.amount.toFixed(2)}
+                              </td>
+                            </tr>
+                          ))}
+                          {transactions.length === 0 && (
+                            <tr>
+                              <td
+                                colSpan={4}
+                                style={{
+                                  padding: "20px",
+                                  textAlign: "center",
+                                  color: "rgba(255,255,255,0.5)",
+                                }}
+                              >
+                                Sin movimientos.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === "layaways" && (
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                    <h3 style={{ marginBottom: "10px" }}>Apartados Guardados</h3>
+                    <div style={{ flex: 1, overflowY: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ background: "rgba(255,255,255,0.05)", textAlign: "left" }}>
+                            <th style={{ padding: "10px" }}>Fecha / Vence</th>
+                            <th style={{ padding: "10px" }}>Artículos</th>
+                            <th style={{ padding: "10px" }}>Total</th>
+                            <th style={{ padding: "10px" }}>Abonado</th>
+                            <th style={{ padding: "10px" }}>Restante</th>
+                            <th style={{ padding: "10px", textAlign: "center" }}>Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {customerLayaways.map((l) => (
+                            <tr key={l.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                              <td style={{ padding: "10px" }}>
+                                <div>{new Date(l.created_at).toLocaleDateString()}</div>
+                                <div style={{ fontSize: "0.8rem", color: l.status === "pending" && new Date(l.due_date) < new Date() ? "#ef4444" : "rgba(255,255,255,0.5)" }}>
+                                  Vence: {new Date(l.due_date).toLocaleDateString()}
+                                </div>
+                              </td>
+                              <td style={{ padding: "10px", fontSize: "0.85rem" }}>
+                                {Array.isArray(l.items) && l.items.map((i: any, idx: number) => (
+                                  <div key={idx}>{i.qty}x {i.name}</div>
+                                ))}
+                              </td>
+                              <td style={{ padding: "10px", fontWeight: "bold" }}>${l.total_amount.toFixed(2)}</td>
+                              <td style={{ padding: "10px" }}>${(l.total_amount - l.balance).toFixed(2)}</td>
+                              <td style={{ padding: "10px", fontWeight: "bold", color: l.balance > 0 ? "var(--color-secondary)" : "#10b981" }}>
+                                ${l.balance.toFixed(2)}
+                              </td>
+                              <td style={{ padding: "10px", textAlign: "center" }}>
+                                <span style={{
+                                  background: l.status === "completed" ? "rgba(16, 185, 129, 0.1)" : l.status === "cancelled" ? "rgba(239, 68, 68, 0.1)" : "rgba(245, 158, 11, 0.1)",
+                                  color: l.status === "completed" ? "#10b981" : l.status === "cancelled" ? "#ef4444" : "#f59e0b",
+                                  padding: "4px 8px",
+                                  borderRadius: "4px"
+                                }}>
+                                  {l.status === "completed" ? "Liquidado" : l.status === "cancelled" ? "Cancelado" : "Pendiente"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                          {customerLayaways.length === 0 && (
+                            <tr>
+                              <td colSpan={6} style={{ padding: "20px", textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
+                                No hay apartados registrados para este cliente.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === "quotes" && (
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                    <h3 style={{ marginBottom: "10px" }}>Cotizaciones Guardadas</h3>
+                    <div style={{ flex: 1, overflowY: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ background: "rgba(255,255,255,0.05)", textAlign: "left" }}>
+                            <th style={{ padding: "10px" }}>Cot. #</th>
+                            <th style={{ padding: "10px" }}>Fecha</th>
+                            <th style={{ padding: "10px" }}>Artículos</th>
+                            <th style={{ padding: "10px" }}>Total</th>
+                            <th style={{ padding: "10px", textAlign: "center" }}>Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {customerQuotes.map((q) => (
+                            <tr key={q.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                              <td style={{ padding: "10px", fontWeight: "bold" }}>#{q.quote_number}</td>
+                              <td style={{ padding: "10px" }}>{new Date(q.created_at).toLocaleDateString()}</td>
+                              <td style={{ padding: "10px", fontSize: "0.85rem" }}>
+                                {Array.isArray(q.items) && q.items.map((i: any, idx: number) => (
+                                  <div key={idx}>{i.qty} {i.unit} - {i.name}</div>
+                                ))}
+                              </td>
+                              <td style={{ padding: "10px", fontWeight: "bold", color: "#3b82f6" }}>${q.total.toFixed(2)}</td>
+                              <td style={{ padding: "10px", textAlign: "center" }}>
+                                <span style={{
+                                  background: q.status === "converted" ? "rgba(16, 185, 129, 0.1)" : q.status === "expired" ? "rgba(239, 68, 68, 0.1)" : "rgba(245, 158, 11, 0.1)",
+                                  color: q.status === "converted" ? "#10b981" : q.status === "expired" ? "#ef4444" : "#f59e0b",
+                                  padding: "4px 8px",
+                                  borderRadius: "4px"
+                                }}>
+                                  {q.status === "converted" ? "Vendido" : q.status === "expired" ? "Expirado" : "Pendiente"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                          {customerQuotes.length === 0 && (
+                            <tr>
+                              <td colSpan={5} style={{ padding: "20px", textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
+                                No hay cotizaciones registradas para este cliente.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === "services" && (
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                    <h3 style={{ marginBottom: "10px" }}>Servicios y Trabajos Anteriores</h3>
+                    <div style={{ flex: 1, overflowY: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr
+                            style={{
+                              background: "rgba(255,255,255,0.05)",
+                              textAlign: "left",
+                            }}
+                          >
+                            <th style={{ padding: "10px" }}>Fecha</th>
+                            <th style={{ padding: "10px" }}>Servicio</th>
+                            <th style={{ padding: "10px" }}>Técnico</th>
+                            <th style={{ padding: "10px" }}>Estado</th>
+                            <th style={{ padding: "10px", textAlign: "right" }}>Costo</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {customerServices.map((srv) => (
+                            <tr
+                              key={srv.id}
+                              style={{
+                                borderBottom: "1px solid rgba(255,255,255,0.05)",
+                              }}
+                            >
+                              <td style={{ padding: "10px" }}>
+                                {new Date(srv.scheduled_at).toLocaleDateString()}
+                              </td>
+                              <td style={{ padding: "10px" }}>{srv.service_type}</td>
+                              <td style={{ padding: "10px" }}>{srv.technician_name}</td>
+                              <td style={{ padding: "10px" }}>
+                                <span style={{ 
+                                  background: srv.status === 'completed' ? "rgba(16, 185, 129, 0.1)" : "rgba(245, 158, 11, 0.1)",
+                                  color: srv.status === 'completed' ? "#10b981" : "#f59e0b",
+                                  padding: "4px 8px", borderRadius: "4px" 
+                                }}>
+                                  {srv.status === 'completed' ? 'Completado' : srv.status === 'pending' ? 'Pendiente' : srv.status === 'in_progress' ? 'En Proceso' : 'Cancelado'}
+                                </span>
+                              </td>
+                              <td
+                                style={{
+                                  padding: "10px",
+                                  textAlign: "right",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                ${srv.cost.toFixed(2)}
+                              </td>
+                            </tr>
+                          ))}
+                          {customerServices.length === 0 && (
+                            <tr>
+                              <td
+                                colSpan={5}
+                                style={{
+                                  padding: "20px",
+                                  textAlign: "center",
+                                  color: "rgba(255,255,255,0.5)",
+                                }}
+                              >
+                                No hay servicios registrados para este cliente.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           ) : (
