@@ -356,6 +356,30 @@ export default function CustomersModule() {
     fetchTransactions(customer.id);
   };
 
+  const handleDeleteCustomer = async (custId: string, name: string) => {
+    if (!window.confirm(`⚠️ ¿Seguro que deseas eliminar al cliente "${name}"?\nEsta acción es irreversible y eliminará su registro en el directorio.`)) return;
+
+    const customer = customers.find(c => c.id === custId);
+    if (customer && customer.balance > 0) {
+      if (!window.confirm(`⚠️ El cliente tiene un saldo deudor de $${customer.balance.toFixed(2)}.\n¿Deseas eliminarlo de todas formas?`)) {
+        return;
+      }
+    }
+
+    const { error } = await supabase
+      .from("customers")
+      .delete()
+      .eq("id", custId);
+
+    if (error) {
+      alert("Error al eliminar cliente: " + error.message);
+    } else {
+      alert("🗑️ Cliente eliminado exitosamente.");
+      setSelectedCustomerId("");
+      fetchCustomers();
+    }
+  };
+
   return (
     <div
       className="animate-fade-in"
@@ -531,7 +555,7 @@ export default function CustomersModule() {
                         </strong>{" "}
                         de ${c.credit_limit}
                       </div>
-                      <div style={{ display: "flex", gap: "10px" }}>
+                      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                         <button
                           className="btn-primary"
                           style={{
@@ -568,6 +592,17 @@ export default function CustomersModule() {
                           onClick={() => setShowPayModal(true)}
                         >
                           💰 Registrar Abono
+                        </button>
+                        <button
+                          className="btn-primary"
+                          style={{
+                            background: "transparent",
+                            border: "1px solid #ef4444",
+                            color: "#ef4444"
+                          }}
+                          onClick={() => handleDeleteCustomer(c.id, c.name)}
+                        >
+                          🗑️ Eliminar
                         </button>
                       </div>
                     </div>
