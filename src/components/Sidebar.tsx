@@ -12,6 +12,18 @@ export default function Sidebar() {
 
   const [pendingLayawaysCount, setPendingLayawaysCount] = useState(0);
   const [pendingQuotesCount, setPendingQuotesCount] = useState(0);
+  const [isPinned, setIsPinned] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("erika_sidebar_pinned") === "true";
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("erika_sidebar_pinned", String(isPinned));
+    }
+  }, [isPinned]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -135,7 +147,33 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="glass-panel sidebar-container" style={{ padding: "15px 8px" }}>
+    <aside className={`glass-panel sidebar-container ${isPinned ? "pinned" : ""}`} style={{ padding: "15px 8px" }}>
+      <div className="menu-header">
+        <span className="nav-text" style={{ fontSize: "0.8rem", fontWeight: "bold", color: "var(--color-primary)", textTransform: "uppercase" }}>
+          Menú ERIKA
+        </span>
+        <button 
+          onClick={() => setIsPinned(!isPinned)} 
+          title={isPinned ? "Desfijar Menú" : "Fijar Menú Abierto"} 
+          style={{ 
+            background: "transparent", 
+            border: "none", 
+            cursor: "pointer", 
+            fontSize: "1.1rem", 
+            padding: "4px", 
+            color: isPinned ? "var(--color-primary)" : "var(--color-text)",
+            opacity: 0.7,
+            transition: "all 0.2s",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = "1"}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = "0.7"}
+        >
+          {isPinned ? "📌" : "📍"}
+        </button>
+      </div>
       <nav style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
         {(isAdmin || p.pos) && (
           <Link
@@ -185,54 +223,52 @@ export default function Sidebar() {
               <span className="nav-text">Clientes y Agenda</span>
               <span className="shortcut-badge">Alt + 7</span>
             </Link>
-            {isActive("/clientes") && (
-              <div className="submenu-container" style={{ paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.8rem", borderLeft: "1px dashed var(--glass-border)", marginLeft: "12px", marginBottom: "6px" }}>
-                <Link href="/clientes" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
-                  <span>👥</span><span>Clientes y Crédito</span>
-                </Link>
-                <Link href="/clientes?tab=apartados" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-                  <div style={{ display: "flex", gap: "6px" }}>
-                    <span>📦</span><span>Apartados</span>
-                  </div>
-                  {pendingLayawaysCount > 0 && (
-                    <span style={{
-                      background: "#ef4444",
-                      color: "white",
-                      fontSize: "0.7rem",
-                      fontWeight: "bold",
-                      padding: "2px 6px",
-                      borderRadius: "10px",
-                      lineHeight: "1",
-                      marginRight: "6px"
-                    }}>
-                      {pendingLayawaysCount}
-                    </span>
-                  )}
-                </Link>
-                <Link href="/clientes?tab=presupuestos" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
-                  <div style={{ display: "flex", gap: "6px" }}>
-                    <span>📄</span><span>Presupuestos</span>
-                  </div>
-                  {pendingQuotesCount > 0 && (
-                    <span style={{
-                      background: "#eab308",
-                      color: "black",
-                      fontSize: "0.7rem",
-                      fontWeight: "bold",
-                      padding: "2px 6px",
-                      borderRadius: "10px",
-                      lineHeight: "1",
-                      marginRight: "6px"
-                    }}>
-                      {pendingQuotesCount}
-                    </span>
-                  )}
-                </Link>
-                <Link href="/clientes?tab=agenda" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
-                  <span>📅</span><span>Agenda de Servicios</span>
-                </Link>
-              </div>
-            )}
+            <div className="submenu-container">
+              <Link href="/clientes" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
+                <span>👥</span><span>Clientes y Crédito</span>
+              </Link>
+              <Link href="/clientes?tab=apartados" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <span>📦</span><span>Apartados</span>
+                </div>
+                {pendingLayawaysCount > 0 && (
+                  <span style={{
+                    background: "#ef4444",
+                    color: "white",
+                    fontSize: "0.7rem",
+                    fontWeight: "bold",
+                    padding: "2px 6px",
+                    borderRadius: "10px",
+                    lineHeight: "1",
+                    marginRight: "6px"
+                  }}>
+                    {pendingLayawaysCount}
+                  </span>
+                )}
+              </Link>
+              <Link href="/clientes?tab=presupuestos" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <span>📄</span><span>Presupuestos</span>
+                </div>
+                {pendingQuotesCount > 0 && (
+                  <span style={{
+                    background: "#eab308",
+                    color: "black",
+                    fontSize: "0.7rem",
+                    fontWeight: "bold",
+                    padding: "2px 6px",
+                    borderRadius: "10px",
+                    lineHeight: "1",
+                    marginRight: "6px"
+                  }}>
+                    {pendingQuotesCount}
+                  </span>
+                )}
+              </Link>
+              <Link href="/clientes?tab=agenda" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
+                <span>📅</span><span>Agenda de Servicios</span>
+              </Link>
+            </div>
           </>
         )}
 
@@ -248,34 +284,32 @@ export default function Sidebar() {
               <span className="nav-text">Almacén e Inventario</span>
               <span className="shortcut-badge">Alt + 5</span>
             </Link>
-            {isActive("/inventario") && (
-              <div className="submenu-container" style={{ paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.8rem", borderLeft: "1px dashed var(--glass-border)", marginLeft: "12px", marginBottom: "6px" }}>
-                <Link href="/inventario" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
-                  <span>📂</span><span>General</span>
-                </Link>
-                <Link href="/inventario?tab=recibir" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
-                  <span>📥</span><span>Recibir Mercancía</span>
-                </Link>
-                <Link href="/inventario?tab=proveedores" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
-                  <span>🏭</span><span>Proveedores</span>
-                </Link>
-                <Link href="/inventario?tab=cuentas" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
-                  <span>💳</span><span>Cuentas por Pagar</span>
-                </Link>
-                <Link href="/inventario?tab=gastos" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
-                  <span>📉</span><span>Gastos y Mermas</span>
-                </Link>
-                <Link href="/inventario?tab=apartados" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
-                  <span>📦</span><span>Apartados</span>
-                </Link>
-                <Link href="/inventario?tab=carga" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
-                  <span>⚡</span><span>Carga Inteligente</span>
-                </Link>
-                <Link href="/inventario?tab=arqueo" style={{ color: "var(--color-primary)", display: "flex", gap: "6px", padding: "4px", fontWeight: "bold" }}>
-                  <span>📋</span><span>Auditoría y Arqueos</span>
-                </Link>
-              </div>
-            )}
+            <div className="submenu-container">
+              <Link href="/inventario" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
+                <span>📂</span><span>General</span>
+              </Link>
+              <Link href="/inventario?tab=recibir" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
+                <span>📥</span><span>Recibir Mercancía</span>
+              </Link>
+              <Link href="/inventario?tab=proveedores" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
+                <span>🏭</span><span>Proveedores</span>
+              </Link>
+              <Link href="/inventario?tab=cuentas" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
+                <span>💳</span><span>Cuentas por Pagar</span>
+              </Link>
+              <Link href="/inventario?tab=gastos" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
+                <span>📉</span><span>Gastos y Mermas</span>
+              </Link>
+              <Link href="/inventario?tab=apartados" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
+                <span>📦</span><span>Apartados</span>
+              </Link>
+              <Link href="/inventario?tab=carga" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
+                <span>⚡</span><span>Carga Inteligente</span>
+              </Link>
+              <Link href="/inventario?tab=arqueo" style={{ color: "var(--color-primary)", display: "flex", gap: "6px", padding: "4px", fontWeight: "bold" }}>
+                <span>📋</span><span>Auditoría y Arqueos</span>
+              </Link>
+            </div>
           </>
         )}
         {(isAdmin || p.configuracion) && (
