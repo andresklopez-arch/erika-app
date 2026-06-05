@@ -39,4 +39,15 @@ ALTER TABLE credit_transactions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir todo a anonimos en transacciones de credito" ON credit_transactions;
 CREATE POLICY "Permitir todo a anonimos en transacciones de credito" ON credit_transactions FOR ALL USING (true) WITH CHECK (true);
 
+-- 7. HABILITAR SEGURIDAD Y PERMISOS PÚBLICOS PARA APARTADOS (LAYAWAYS)
+ALTER TABLE layaways ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en layaways" ON layaways;
+CREATE POLICY "Permitir todo a anonimos en layaways" ON layaways FOR ALL USING (true) WITH CHECK (true);
+
+-- 8. HABILITAR SEGURIDAD Y PERMISOS PÚBLICOS PARA BITÁCORAS DE ERROR (ERROR LOGS)
+ALTER TABLE error_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo a anonimos en error_logs" ON error_logs;
+CREATE POLICY "Permitir todo a anonimos en error_logs" ON error_logs FOR ALL USING (true) WITH CHECK (true);
+
 SELECT '✅ TODAS LAS TABLAS Y POLÍTICAS RLS FUERON CORREGIDAS CON ÉXITO.' as status;
+

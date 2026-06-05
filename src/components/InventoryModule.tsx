@@ -819,68 +819,79 @@ export default function InventoryModule() {
           onClose={clearTabParam}
           onImport={async (newProducts, isRestockMode) => {
             setIsLoading(true);
-            let updatedCount = 0;
-            let newCount = 0;
-            let rescuedCount = 0;
-            const undoLog: any[] = [];
+            try {
+              let updatedCount = 0;
+              let newCount = 0;
+              let rescuedCount = 0;
+              const undoLog: any[] = [];
 
-            for (const p of newProducts) {
-              const existing = items.find(
-                (i) => i.code === p.code && i.code !== "",
-              );
-              if (existing) {
-                undoLog.push({ id: existing.id, cost: existing.cost, price: existing.price, stock: existing.stock, supplier: existing.supplier, location: existing.location, priceChanged: existing.priceChanged });
-                
-                const inflationFlag = p.cost > existing.cost ? "up" : null;
-                const newStock = isRestockMode ? existing.stock + p.stock : p.stock;
-                
-                if (existing.stock <= existing.minStock && newStock > existing.minStock) {
-                  rescuedCount++;
-                }
+              for (const p of newProducts) {
+                const existing = items.find(
+                  (i) =>
+                    (i.code && p.code && i.code.trim().toUpperCase() === p.code.trim().toUpperCase() && p.code !== "") ||
+                    (i.name.toLowerCase().trim() === p.name.toLowerCase().trim())
+                );
+                if (existing) {
+                  undoLog.push({ id: existing.id, cost: existing.cost, price: existing.price, stock: existing.stock, supplier: existing.supplier, location: existing.location, priceChanged: existing.priceChanged });
+                  
+                  const inflationFlag = p.cost > existing.cost ? "up" : null;
+                  const newStock = isRestockMode ? existing.stock + p.stock : p.stock;
+                  
+                  if (existing.stock <= existing.minStock && newStock > existing.minStock) {
+                    rescuedCount++;
+                  }
 
-                await supabase
-                  .from("inventory")
-                  .update({
+                  const { error: updateError } = await supabase
+                    .from("inventory")
+                    .update({
+                      cost: p.cost,
+                      price: p.price,
+                      stock: newStock,
+                      supplier: p.supplier || existing.supplier,
+                      location: p.location || existing.location,
+                      priceChanged: inflationFlag,
+                    })
+                    .eq("id", existing.id);
+                  if (updateError) throw updateError;
+                  updatedCount++;
+                } else {
+                  undoLog.push({ isNew: true, code: p.code });
+                  const { error: insertError } = await supabase.from("inventory").insert({
+                    code: p.code,
+                    name: p.name,
                     cost: p.cost,
                     price: p.price,
-                    stock: newStock,
-                    supplier: p.supplier || existing.supplier,
-                    location: p.location || existing.location,
-                    priceChanged: inflationFlag,
-                  })
-                  .eq("id", existing.id);
-                updatedCount++;
-              } else {
-                undoLog.push({ isNew: true, code: p.code });
-                await supabase.from("inventory").insert({
-                  code: p.code,
-                  name: p.name,
-                  cost: p.cost,
-                  price: p.price,
-                  stock: p.stock,
-                  minStock: p.minStock,
-                  location: p.location,
-                  supplier: p.supplier,
-                  autoPriced: true,
-                });
-                newCount++;
+                    stock: p.stock,
+                    minStock: p.minStock,
+                    location: p.location,
+                    supplier: p.supplier,
+                    autoPriced: true,
+                  });
+                  if (insertError) throw insertError;
+                  newCount++;
+                }
               }
+              setUndoStack(prev => {
+                const newStack = [...(prev || []), undoLog].slice(-5); // Mantener máximo 5
+                if (typeof window !== "undefined") {
+                  localStorage.setItem("erika_undo_stack", JSON.stringify(newStack));
+                }
+                return newStack;
+              });
+              await fetchInventory(true);
+              
+              let rescueMsg = "";
+              if (rescuedCount > 0) rescueMsg = `\n🎉 ¡Excelente! Se han rescatado ${rescuedCount} productos de su estado CRÍTICO.`;
+              
+              alert(
+                `✅ ERIKA Procesó la Importación en la NUBE.\n\n📊 Actualizados: ${updatedCount} productos.\n🆕 Nuevos: ${newCount} productos.${rescueMsg}`,
+              );
+            } catch (err: any) {
+              console.error("Error en importación:", err);
+              alert(`❌ Error al importar artículos: ${err.message || err}`);
+            } finally {
+              setIsLoading(false);
             }
-            setUndoStack(prev => {
-              const newStack = [...(prev || []), undoLog].slice(-5); // Mantener máximo 5
-              if (typeof window !== "undefined") {
-                localStorage.setItem("erika_undo_stack", JSON.stringify(newStack));
-              }
-              return newStack;
-            });
-            await fetchInventory(true);
-            
-            let rescueMsg = "";
-            if (rescuedCount > 0) rescueMsg = `\n🎉 ¡Excelente! Se han rescatado ${rescuedCount} productos de su estado CRÍTICO.`;
-            
-            alert(
-              `✅ ERIKA Procesó la Importación en la NUBE.\n\n📊 Actualizados: ${updatedCount} productos.\n🆕 Nuevos: ${newCount} productos.${rescueMsg}`,
-            );
           }}
         />,
         document.body
