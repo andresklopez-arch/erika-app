@@ -313,16 +313,19 @@ export default function Sidebar() {
           </>
         )}
         {(isAdmin || p.configuracion) && (
-          <Link
-            href="/configuracion"
-            className={isActive("/configuracion") ? "active" : ""}
-            onClick={(e) => handleLinkClick(e, "/configuracion")}
-            title="Configuración (Alt + 6)"
-          >
-            <span className="icon">⚙️</span>
-            <span className="nav-text">Configuración</span>
-            <span className="shortcut-badge">Alt + 6</span>
-          </Link>
+          <>
+            <div className="menu-divider" style={{ borderTop: "1px dashed var(--glass-border)", margin: "8px 10px", opacity: 0.4 }} />
+            <Link
+              href="/configuracion"
+              className={isActive("/configuracion") ? "active" : ""}
+              onClick={(e) => handleLinkClick(e, "/configuracion")}
+              title="Configuración (Alt + 6)"
+            >
+              <span className="icon">⚙️</span>
+              <span className="nav-text">Configuración</span>
+              <span className="shortcut-badge">Alt + 6</span>
+            </Link>
+          </>
         )}
       </nav>
     </aside>
