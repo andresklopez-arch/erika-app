@@ -547,4 +547,75 @@ body {
   background: rgba(0, 0, 0, 0.05) !important;
 }
 
+/* --- SIDEBAR EXPANSION & PINNING SYSTEM --- */
+
+.sidebar-container.pinned {
+  width: 280px !important;
+  padding: 20px 20px !important;
+}
+
+.sidebar-container .menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-bottom: 15px;
+  padding: 0 6px;
+  min-height: 24px;
+}
+
+.sidebar-container:hover .menu-header,
+.sidebar-container.pinned .menu-header {
+  justify-content: space-between;
+}
+
+.sidebar-container .nav-text {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.sidebar-container:hover .nav-text,
+.sidebar-container.pinned .nav-text {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Sidebar Submenus Expansion */
+.sidebar-container .submenu-container {
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  border-left: 1px dashed var(--glass-border);
+  margin-left: 12px;
+  margin-bottom: 0;
+  margin-top: 0;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease, margin 0.3s ease;
+}
+
+.sidebar-container:hover .submenu-container,
+.sidebar-container.pinned .submenu-container {
+  max-height: 400px;
+  opacity: 1;
+  margin-bottom: 6px;
+  margin-top: 4px;
+}
+
+/* Specific theme hover colors for submenus */
+[data-theme="light"] .sidebar-container .submenu-container a {
+  color: rgba(15, 23, 42, 0.7) !important;
+}
+
+[data-theme="light"] .sidebar-container .submenu-container a:not([style*="color-primary"]):hover,
+[data-theme="light"] .sidebar-container .submenu-container a:not([style*="var(--color-primary)"]):hover {
+  color: var(--color-primary) !important;
+  background: rgba(0, 0, 0, 0.05) !important;
+}
+
 
