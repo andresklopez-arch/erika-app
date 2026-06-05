@@ -186,11 +186,11 @@ export default function Sidebar() {
               <span className="shortcut-badge">Alt + 7</span>
             </Link>
             {isActive("/clientes") && (
-              <div className="submenu-container" style={{ paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.8rem", borderLeft: "1px dashed rgba(255,255,255,0.1)", marginLeft: "12px", marginBottom: "6px" }}>
-                <Link href="/clientes" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+              <div className="submenu-container" style={{ paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.8rem", borderLeft: "1px dashed var(--glass-border)", marginLeft: "12px", marginBottom: "6px" }}>
+                <Link href="/clientes" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
                   <span>👥</span><span>Clientes y Crédito</span>
                 </Link>
-                <Link href="/clientes?tab=apartados" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                <Link href="/clientes?tab=apartados" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
                   <div style={{ display: "flex", gap: "6px" }}>
                     <span>📦</span><span>Apartados</span>
                   </div>
@@ -209,7 +209,7 @@ export default function Sidebar() {
                     </span>
                   )}
                 </Link>
-                <Link href="/clientes?tab=presupuestos" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                <Link href="/clientes?tab=presupuestos" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
                   <div style={{ display: "flex", gap: "6px" }}>
                     <span>📄</span><span>Presupuestos</span>
                   </div>
@@ -228,7 +228,7 @@ export default function Sidebar() {
                     </span>
                   )}
                 </Link>
-                <Link href="/clientes?tab=agenda" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                <Link href="/clientes?tab=agenda" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
                   <span>📅</span><span>Agenda de Servicios</span>
                 </Link>
               </div>
@@ -249,26 +249,26 @@ export default function Sidebar() {
               <span className="shortcut-badge">Alt + 5</span>
             </Link>
             {isActive("/inventario") && (
-              <div className="submenu-container" style={{ paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.8rem", borderLeft: "1px dashed rgba(255,255,255,0.1)", marginLeft: "12px", marginBottom: "6px" }}>
-                <Link href="/inventario" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+              <div className="submenu-container" style={{ paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.8rem", borderLeft: "1px dashed var(--glass-border)", marginLeft: "12px", marginBottom: "6px" }}>
+                <Link href="/inventario" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
                   <span>📂</span><span>General</span>
                 </Link>
-                <Link href="/inventario?tab=recibir" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                <Link href="/inventario?tab=recibir" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
                   <span>📥</span><span>Recibir Mercancía</span>
                 </Link>
-                <Link href="/inventario?tab=proveedores" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                <Link href="/inventario?tab=proveedores" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
                   <span>🏭</span><span>Proveedores</span>
                 </Link>
-                <Link href="/inventario?tab=cuentas" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                <Link href="/inventario?tab=cuentas" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
                   <span>💳</span><span>Cuentas por Pagar</span>
                 </Link>
-                <Link href="/inventario?tab=gastos" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                <Link href="/inventario?tab=gastos" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
                   <span>📉</span><span>Gastos y Mermas</span>
                 </Link>
-                <Link href="/inventario?tab=apartados" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                <Link href="/inventario?tab=apartados" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
                   <span>📦</span><span>Apartados</span>
                 </Link>
-                <Link href="/inventario?tab=carga" style={{ color: "rgba(255,255,255,0.7)", display: "flex", gap: "6px", padding: "4px" }}>
+                <Link href="/inventario?tab=carga" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
                   <span>⚡</span><span>Carga Inteligente</span>
                 </Link>
                 <Link href="/inventario?tab=arqueo" style={{ color: "var(--color-primary)", display: "flex", gap: "6px", padding: "4px", fontWeight: "bold" }}>
