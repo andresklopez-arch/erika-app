@@ -306,7 +306,7 @@ export default function POSModule() {
     const fetchInventoryAndCustomers = async () => {
       const { data: invData } = await supabase.from("inventory").select("*");
       if (invData) setGlobalCatalog(invData);
-      const { data: custData } = await supabase.from("customers").select("*");
+      const { data: custData } = await supabase.from("customers").select("*").not("deleted", "eq", true);
       if (custData) setCustomers(custData);
     };
 
@@ -1764,7 +1764,7 @@ export default function POSModule() {
                    alert(`✅ Canje exitoso. Se descontaron ${pointsToRedeem} puntos y se aplicó un descuento de $${discountAmount.toFixed(2)}.`);
                    
                    // Reload customers to refresh points
-                   const { data: custData } = await supabase.from("customers").select("*");
+                   const { data: custData } = await supabase.from("customers").select("*").not("deleted", "eq", true);
                    if (custData) setCustomers(custData);
                 }}
                 style={{

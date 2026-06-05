@@ -228,7 +228,7 @@ export default function Dashboard() {
       }
 
       // Fetch Overdue Customers (Credit limit exceeded)
-      const { data: custs } = await supabase.from("customers").select("*").gt("balance", 0);
+      const { data: custs } = await supabase.from("customers").select("*").gt("balance", 0).not("deleted", "eq", true);
       if (custs) {
          setOverdueCustomers(custs.filter((c: any) => c.credit_limit > 0 && c.balance >= c.credit_limit));
       }
@@ -258,6 +258,7 @@ export default function Dashboard() {
       const { data: customerData } = await supabase
         .from("customers")
         .select("*")
+        .not("deleted", "eq", true)
         .order("balance", { ascending: false })
         .limit(5);
       if (customerData) setTopCustomers(customerData);

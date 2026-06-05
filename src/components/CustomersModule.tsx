@@ -24,8 +24,13 @@ export default function CustomersModule() {
     credit_limit: 0,
   });
 
+  // States for Undo Toast
+  const [showUndoToast, setShowUndoToast] = useState(false);
+  const [undoCustomerId, setUndoCustomerId] = useState<string | null>(null);
+  const [undoCustomerName, setUndoCustomerName] = useState("");
+
   const fetchCustomers = async () => {
-    const { data } = await supabase.from("customers").select("*");
+    const { data } = await supabase.from("customers").select("*").not("deleted", "eq", true);
     if (data) setCustomers(data);
   };
 
@@ -368,17 +373,49 @@ export default function CustomersModule() {
 
     const { error } = await supabase
       .from("customers")
-      .delete()
+      .update({ deleted: true })
       .eq("id", custId);
 
     if (error) {
       alert("Error al eliminar cliente: " + error.message);
     } else {
-      alert("🗑️ Cliente eliminado exitosamente.");
+      setUndoCustomerId(custId);
+      setUndoCustomerName(name);
+      setShowUndoToast(true);
       setSelectedCustomerId("");
       fetchCustomers();
     }
   };
+
+  const handleUndoDelete = async () => {
+    if (!undoCustomerId) return;
+    const { error } = await supabase
+      .from("customers")
+      .update({ deleted: false })
+      .eq("id", undoCustomerId);
+
+    if (error) {
+      alert("Error al deshacer la eliminación: " + error.message);
+    } else {
+      setShowUndoToast(false);
+      const restoredId = undoCustomerId;
+      setUndoCustomerId(null);
+      setUndoCustomerName("");
+      await fetchCustomers();
+      setSelectedCustomerId(restoredId);
+    }
+  };
+
+  useEffect(() => {
+    if (showUndoToast) {
+      const timer = setTimeout(() => {
+        setShowUndoToast(false);
+        setUndoCustomerId(null);
+        setUndoCustomerName("");
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [showUndoToast]);
 
   return (
     <div
@@ -1318,6 +1355,84 @@ export default function CustomersModule() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {showUndoToast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "30px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "rgba(17, 24, 39, 0.9)",
+            backdropFilter: "blur(12px)",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            padding: "16px 24px",
+            borderRadius: "14px",
+            boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 10px 10px -5px rgba(0, 0, 0, 0.6)",
+            display: "flex",
+            alignItems: "center",
+            gap: "20px",
+            zIndex: 9999,
+            animation: "slide-up-toast 0.4s cubic-bezier(0.16, 1, 0.3, 1)",
+            color: "white",
+          }}
+        >
+          <span style={{ fontSize: "0.95rem", fontWeight: "500", display: "flex", alignItems: "center", gap: "8px" }}>
+            <span>🗑️</span> Cliente <strong style={{ color: "var(--color-primary)" }}>{undoCustomerName}</strong> eliminado.
+          </span>
+          <button
+            onClick={handleUndoDelete}
+            style={{
+              background: "var(--color-primary)",
+              color: "black",
+              border: "none",
+              padding: "8px 16px",
+              borderRadius: "8px",
+              fontWeight: "bold",
+              cursor: "pointer",
+              fontSize: "0.85rem",
+              transition: "transform 0.2s, opacity 0.2s",
+              boxShadow: "0 0 10px rgba(0, 242, 254, 0.3)",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "scale(1.03)";
+              e.currentTarget.style.opacity = "0.9";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "scale(1)";
+              e.currentTarget.style.opacity = "1";
+            }}
+          >
+            Deshacer
+          </button>
+          <button
+            onClick={() => setShowUndoToast(false)}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "rgba(255, 255, 255, 0.4)",
+              fontSize: "1.4rem",
+              cursor: "pointer",
+              lineHeight: 1,
+              padding: "4px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "color 0.2s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "white")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255, 255, 255, 0.4)")}
+          >
+            ×
+          </button>
+          <style dangerouslySetInnerHTML={{__html: `
+            @keyframes slide-up-toast {
+              from { transform: translate(-50%, 100px); opacity: 0; }
+              to { transform: translate(-50%, 0); opacity: 1; }
+            }
+          `}} />
         </div>
       )}
     </div>
