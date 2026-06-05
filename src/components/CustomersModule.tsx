@@ -29,39 +29,48 @@ export default function CustomersModule() {
     if (data) setCustomers(data);
   };
 
-  const fetchTransactions = async (custId: string) => {
+  const [txLimit, setTxLimit] = useState(10);
+  const [servicesLimit, setServicesLimit] = useState(10);
+  const [layawaysLimit, setLayawaysLimit] = useState(10);
+  const [quotesLimit, setQuotesLimit] = useState(10);
+
+  const fetchTransactions = async (custId: string, limitVal: number = txLimit) => {
     const { data } = await supabase
       .from("credit_transactions")
       .select("*")
       .eq("customer_id", custId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(limitVal);
     if (data) setTransactions(data);
   };
 
-  const fetchCustomerServices = async (customerName: string) => {
+  const fetchCustomerServices = async (customerName: string, limitVal: number = servicesLimit) => {
     const { data } = await supabase
       .from("services")
       .select("*")
       .eq("customer_name", customerName)
-      .order("scheduled_at", { ascending: false });
+      .order("scheduled_at", { ascending: false })
+      .limit(limitVal);
     if (data) setCustomerServices(data);
   };
 
-  const fetchCustomerLayaways = async (custId: string) => {
+  const fetchCustomerLayaways = async (custId: string, limitVal: number = layawaysLimit) => {
     const { data } = await supabase
       .from("layaways")
       .select("*")
       .eq("customer_id", custId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(limitVal);
     if (data) setCustomerLayaways(data);
   };
 
-  const fetchCustomerQuotes = async (customerName: string) => {
+  const fetchCustomerQuotes = async (custId: string, customerName: string, limitVal: number = quotesLimit) => {
     const { data } = await supabase
       .from("quotes")
       .select("*")
-      .eq("customer_name", customerName)
-      .order("created_at", { ascending: false });
+      .or(`customer_id.eq.${custId},customer_name.eq.${customerName}`)
+      .order("created_at", { ascending: false })
+      .limit(limitVal);
     if (data) setCustomerQuotes(data);
   };
 
@@ -70,13 +79,20 @@ export default function CustomersModule() {
   }, []);
 
   useEffect(() => {
+    setTxLimit(10);
+    setServicesLimit(10);
+    setLayawaysLimit(10);
+    setQuotesLimit(10);
+  }, [selectedCustomerId]);
+
+  useEffect(() => {
     if (selectedCustomerId) {
-      fetchTransactions(selectedCustomerId);
       const c = customers.find(x => x.id === selectedCustomerId);
       if (c) {
-        fetchCustomerServices(c.name);
-        fetchCustomerLayaways(c.id);
-        fetchCustomerQuotes(c.name);
+        fetchTransactions(selectedCustomerId, txLimit);
+        fetchCustomerServices(c.name, servicesLimit);
+        fetchCustomerLayaways(c.id, layawaysLimit);
+        fetchCustomerQuotes(c.id, c.name, quotesLimit);
       }
     } else {
       setTransactions([]);
@@ -84,7 +100,184 @@ export default function CustomersModule() {
       setCustomerLayaways([]);
       setCustomerQuotes([]);
     }
-  }, [selectedCustomerId, customers]);
+  }, [selectedCustomerId, customers, txLimit, servicesLimit, layawaysLimit, quotesLimit]);
+
+  // Acciones Rápidas: Apartados (Layaways)
+  const handleLayawayPay = async (layaway: any) => {
+    const payment = parseFloat(window.prompt(`Saldo pendiente: $${layaway.balance.toFixed(2)}\n¿Cuánto va a abonar?`) || "");
+    if (isNaN(payment) || payment <= 0) return;
+    if (payment > layaway.balance) return alert("El abono no puede superar el saldo pendiente.");
+
+    const newBalance = layaway.balance - payment;
+    const isCompleted = newBalance <= 0.01;
+
+    const { error } = await supabase
+      .from("layaways")
+      .update({ balance: newBalance, status: isCompleted ? "completed" : "pending" })
+      .eq("id", layaway.id);
+
+    if (error) return alert("Error al registrar el abono.");
+
+    // Print Thermal Ticket for Abono
+    const ticketWindow = window.open("", "_blank", "width=300,height=500");
+    if (ticketWindow) {
+      const ticketHtml = `
+        <html>
+          <head>
+            <style>
+              body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; width: 58mm; color: #000; background: #fff; }
+              .center { text-align: center; }
+              .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
+              .bold { font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            <div class="center bold" style="font-size: 16px; margin-bottom: 5px;">FERRETERÍA ERIKA</div>
+            <div class="center" style="font-size: 12px;">Comprobante de Abono</div>
+            <div class="divider"></div>
+            <div style="font-size: 12px; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
+            <div style="font-size: 12px; margin-bottom: 5px;">Cliente: ${layaway.customer_name}</div>
+            <div class="divider"></div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+              <div>Abono Recibido:</div>
+              <div class="bold">$${payment.toFixed(2)}</div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+              <div>Saldo Restante:</div>
+              <div class="bold">$${newBalance.toFixed(2)}</div>
+            </div>
+            <div class="divider"></div>
+            <div class="center bold" style="font-size: 12px; margin-top: 10px;">
+              ${isCompleted ? "¡APARTADO LIQUIDADO!" : "¡Gracias por su abono!"}
+            </div>
+          </body>
+        </html>
+      `;
+      ticketWindow.document.write(ticketHtml);
+      ticketWindow.document.close();
+      setTimeout(() => {
+        ticketWindow.print();
+        ticketWindow.close();
+      }, 500);
+    }
+
+    alert(`✅ Abono registrado. ${isCompleted ? "¡APARTADO LIQUIDADO, puede entregar la mercancía!" : `Saldo restante: $${newBalance.toFixed(2)}`}`);
+    fetchCustomerLayaways(selectedCustomerId, layawaysLimit);
+  };
+
+  const handleLayawayCancel = async (layaway: any) => {
+    if (!window.confirm("¿Seguro que deseas cancelar este apartado? La mercancía regresará al inventario físico.")) return;
+    
+    for (const item of layaway.items) {
+      const { data: currentStock } = await supabase.from("inventory").select("stock").eq("name", item.name).single();
+      if (currentStock) {
+        await supabase.from("inventory").update({ stock: currentStock.stock + item.qty }).eq("name", item.name);
+      }
+    }
+
+    const { error } = await supabase.from("layaways").update({ status: "cancelled" }).eq("id", layaway.id);
+    if (error) return alert("Error al cancelar.");
+    alert("❌ Apartado cancelado. Productos devueltos.");
+    fetchCustomerLayaways(selectedCustomerId, layawaysLimit);
+  };
+
+  // Acciones Rápidas: Cotizaciones (Quotes)
+  const sendQuoteWhatsApp = (quote: any) => {
+    const text =
+      `Hola ${quote.customer_name}, te enviamos tu cotización de *Ferretería Erika* por un total de *$${quote.total.toFixed(2)}*.\n\n` +
+      quote.items.map((i: any) => `- ${i.qty} ${i.unit || 'pz'} ${i.name}`).join("\n") +
+      `\n\nVálida por 7 días. ¡Quedamos a tus órdenes!`;
+    const encodedText = encodeURIComponent(text);
+    window.open(`https://wa.me/?text=${encodedText}`, "_blank");
+  };
+
+  const printQuotePdf = (quote: any) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    const itemsHtml = quote.items
+      .map(
+        (i: any) => `
+      <tr style="border-bottom: 1px solid #ddd;">
+        <td style="padding: 8px;">${i.qty} ${i.unit || 'pz'}</td>
+        <td style="padding: 8px;">${i.name}</td>
+        <td style="padding: 8px;">$${i.price.toFixed(2)}</td>
+        <td style="padding: 8px;">$${(i.price * i.qty).toFixed(2)}</td>
+      </tr>
+    `,
+      )
+      .join("");
+
+    const html = `
+      <html>
+        <head>
+          <title>Cotización - Ferretería Erika</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { text-align: left; padding: 8px; border-bottom: 2px solid #333; }
+            .header { display: flex; justify-content: space-between; margin-bottom: 40px; border-bottom: 2px solid #eab308; padding-bottom: 20px; }
+            .total { font-size: 1.5rem; font-weight: bold; text-align: right; margin-top: 20px; color: #eab308; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 style="margin: 0; color: #eab308;">Ferretería Erika</h1>
+              <p>Fecha: ${new Date(quote.created_at).toLocaleString()}</p>
+            </div>
+            <div style="text-align: right;">
+              <h2>COTIZACIÓN #${quote.quote_number}</h2>
+              <p>Cliente: <strong>${quote.customer_name}</strong></p>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Cant.</th><th>Descripción</th><th>Precio Unit.</th><th>Importe</th></tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+          <div class="total">
+            TOTAL: $${quote.total.toFixed(2)}
+          </div>
+          <p style="text-align: center; margin-top: 50px; font-size: 0.9rem; color: #777;">
+            * Los precios en esta cotización están sujetos a cambios sin previo aviso.<br>
+            * Vigencia de 7 días.
+          </p>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 500);
+  };
+
+  const convertQuoteToSale = async (quote: any) => {
+    const pass = window.prompt(
+      "¿Seguro que deseas enviar esta cotización a la Caja para cobrar? (Ingresa tu PIN)",
+    );
+    if (!pass) return;
+
+    const { error } = await supabase
+      .from("quotes")
+      .update({ status: "converted" })
+      .eq("id", quote.id);
+    if (error) return alert("Error: " + error.message);
+
+    localStorage.setItem("ERIKA_RESTORE_QUOTE", JSON.stringify(quote.items));
+
+    alert(
+      `✅ Cotización de ${quote.customer_name} enviada a caja. Serás redirigido para proceder con el cobro.`,
+    );
+    window.location.href = "/caja";
+  };
 
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -532,6 +725,17 @@ export default function CustomersModule() {
                           )}
                         </tbody>
                       </table>
+                      {transactions.length >= txLimit && (
+                        <div style={{ textAlign: "center", marginTop: "15px", marginBottom: "15px" }}>
+                          <button
+                            className="btn-primary"
+                            style={{ padding: "6px 12px", background: "transparent", border: "1px solid var(--color-primary)", fontSize: "0.85rem" }}
+                            onClick={() => setTxLimit(prev => prev + 10)}
+                          >
+                            ➕ Cargar más movimientos
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -549,6 +753,7 @@ export default function CustomersModule() {
                             <th style={{ padding: "10px" }}>Abonado</th>
                             <th style={{ padding: "10px" }}>Restante</th>
                             <th style={{ padding: "10px", textAlign: "center" }}>Estado</th>
+                            <th style={{ padding: "10px", textAlign: "center" }}>Acciones</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -580,17 +785,52 @@ export default function CustomersModule() {
                                   {l.status === "completed" ? "Liquidado" : l.status === "cancelled" ? "Cancelado" : "Pendiente"}
                                 </span>
                               </td>
+                              <td style={{ padding: "10px", textAlign: "center" }}>
+                                <div style={{ display: "flex", gap: "5px", justifyContent: "center" }}>
+                                  {l.status === "pending" && (
+                                    <>
+                                      <button
+                                        className="btn-primary"
+                                        style={{ padding: "3px 6px", fontSize: "0.75rem", background: "transparent", border: "1px solid var(--color-secondary)", color: "var(--color-secondary)" }}
+                                        onClick={() => handleLayawayPay(l)}
+                                      >
+                                        💵 Abono
+                                      </button>
+                                      <button
+                                        className="btn-primary"
+                                        style={{ padding: "3px 6px", fontSize: "0.75rem", background: "transparent", border: "1px solid #ef4444", color: "#ef4444" }}
+                                        onClick={() => handleLayawayCancel(l)}
+                                      >
+                                        ❌ Cancelar
+                                      </button>
+                                    </>
+                                  )}
+                                  {l.status === "completed" && <span style={{ color: "#10b981", fontSize: "0.8rem", fontWeight: "bold" }}>✅ Pagado</span>}
+                                  {l.status === "cancelled" && <span style={{ color: "#ef4444", fontSize: "0.8rem", fontWeight: "bold" }}>🚫 Cancelado</span>}
+                                </div>
+                              </td>
                             </tr>
                           ))}
                           {customerLayaways.length === 0 && (
                             <tr>
-                              <td colSpan={6} style={{ padding: "20px", textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
+                              <td colSpan={7} style={{ padding: "20px", textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
                                 No hay apartados registrados para este cliente.
                               </td>
                             </tr>
                           )}
                         </tbody>
                       </table>
+                      {customerLayaways.length >= layawaysLimit && (
+                        <div style={{ textAlign: "center", marginTop: "15px", marginBottom: "15px" }}>
+                          <button
+                            className="btn-primary"
+                            style={{ padding: "6px 12px", background: "transparent", border: "1px solid var(--color-primary)", fontSize: "0.85rem" }}
+                            onClick={() => setLayawaysLimit(prev => prev + 10)}
+                          >
+                            ➕ Cargar más apartados
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -607,6 +847,7 @@ export default function CustomersModule() {
                             <th style={{ padding: "10px" }}>Artículos</th>
                             <th style={{ padding: "10px" }}>Total</th>
                             <th style={{ padding: "10px", textAlign: "center" }}>Estado</th>
+                            <th style={{ padding: "10px", textAlign: "center" }}>Acciones</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -616,7 +857,7 @@ export default function CustomersModule() {
                               <td style={{ padding: "10px" }}>{new Date(q.created_at).toLocaleDateString()}</td>
                               <td style={{ padding: "10px", fontSize: "0.85rem" }}>
                                 {Array.isArray(q.items) && q.items.map((i: any, idx: number) => (
-                                  <div key={idx}>{i.qty} {i.unit} - {i.name}</div>
+                                  <div key={idx}>{i.qty} {i.unit || 'pz'} - {i.name}</div>
                                 ))}
                               </td>
                               <td style={{ padding: "10px", fontWeight: "bold", color: "#3b82f6" }}>${q.total.toFixed(2)}</td>
@@ -630,17 +871,59 @@ export default function CustomersModule() {
                                   {q.status === "converted" ? "Vendido" : q.status === "expired" ? "Expirado" : "Pendiente"}
                                 </span>
                               </td>
+                              <td style={{ padding: "10px", textAlign: "center" }}>
+                                <div style={{ display: "flex", gap: "5px", justifyContent: "center" }}>
+                                  {q.status === "pending" && (
+                                    <>
+                                      <button
+                                        className="btn-primary"
+                                        style={{ padding: "3px 6px", fontSize: "0.75rem", background: "#25D366", color: "white", border: "none" }}
+                                        onClick={() => sendQuoteWhatsApp(q)}
+                                      >
+                                        🟢 WA
+                                      </button>
+                                      <button
+                                        className="btn-primary"
+                                        style={{ padding: "3px 6px", fontSize: "0.75rem", background: "transparent", border: "1px solid #3b82f6", color: "#3b82f6" }}
+                                        onClick={() => printQuotePdf(q)}
+                                      >
+                                        🖨️ PDF
+                                      </button>
+                                      <button
+                                        className="btn-primary"
+                                        style={{ padding: "3px 6px", fontSize: "0.75rem" }}
+                                        onClick={() => convertQuoteToSale(q)}
+                                      >
+                                        ✅ Vender
+                                      </button>
+                                    </>
+                                  )}
+                                  {q.status === "converted" && <span style={{ color: "#10b981", fontSize: "0.8rem", fontWeight: "bold" }}>Pagado</span>}
+                                  {q.status === "expired" && <span style={{ color: "#ef4444", fontSize: "0.8rem", fontWeight: "bold" }}>Expirado</span>}
+                                </div>
+                              </td>
                             </tr>
                           ))}
                           {customerQuotes.length === 0 && (
                             <tr>
-                              <td colSpan={5} style={{ padding: "20px", textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
+                              <td colSpan={6} style={{ padding: "20px", textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
                                 No hay cotizaciones registradas para este cliente.
                               </td>
                             </tr>
                           )}
                         </tbody>
                       </table>
+                      {customerQuotes.length >= quotesLimit && (
+                        <div style={{ textAlign: "center", marginTop: "15px", marginBottom: "15px" }}>
+                          <button
+                            className="btn-primary"
+                            style={{ padding: "6px 12px", background: "transparent", border: "1px solid var(--color-primary)", fontSize: "0.85rem" }}
+                            onClick={() => setQuotesLimit(prev => prev + 10)}
+                          >
+                            ➕ Cargar más cotizaciones
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -713,6 +996,17 @@ export default function CustomersModule() {
                           )}
                         </tbody>
                       </table>
+                      {customerServices.length >= servicesLimit && (
+                        <div style={{ textAlign: "center", marginTop: "15px", marginBottom: "15px" }}>
+                          <button
+                            className="btn-primary"
+                            style={{ padding: "6px 12px", background: "transparent", border: "1px solid var(--color-primary)", fontSize: "0.85rem" }}
+                            onClick={() => setServicesLimit(prev => prev + 10)}
+                          >
+                            ➕ Cargar más servicios
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

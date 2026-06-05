@@ -799,6 +799,7 @@ export default function POSModule() {
       let realTicketId = Date.now();
       const { data: quoteData } = await supabase.from("quotes").insert({
          customer_name: selectedCustomerId ? (customers.find(c => c.id === selectedCustomerId)?.name || "Venta Registrada") : "Venta Mostrador",
+         customer_id: selectedCustomerId || null,
          items: activeTicket.items,
          total: totalAmt,
          status: "ticket"
@@ -1899,6 +1900,7 @@ export default function POSModule() {
 
                 const { error } = await supabase.from("quotes").insert({
                   customer_name: customerName,
+                  customer_id: selectedCustomerId || null,
                   items: activeTicket.items,
                   total: finalTotal,
                   status: "pending",
