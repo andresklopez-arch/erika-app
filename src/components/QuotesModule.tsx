@@ -39,6 +39,47 @@ export default function QuotesModule() {
     window.location.href = "/caja";
   };
 
+  const handleDirectCharge = async (quote: any) => {
+    // 1. Guardar artículos en localStorage
+    localStorage.setItem("ERIKA_RESTORE_QUOTE", JSON.stringify(quote.items));
+
+    // 2. Guardar id del cliente si existe
+    if (quote.customer_id) {
+      localStorage.setItem("ERIKA_RESTORE_CUSTOMER_ID", quote.customer_id);
+    } else {
+      // Intentar buscar el cliente por nombre en la base de datos de clientes si no está guardado el customer_id
+      try {
+        const { data: customer } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("name", quote.customer_name)
+          .eq("deleted", false)
+          .single();
+        if (customer) {
+          localStorage.setItem("ERIKA_RESTORE_CUSTOMER_ID", customer.id);
+        }
+      } catch (e) {
+        console.error("Error al buscar cliente por nombre:", e);
+      }
+    }
+
+    // 3. Actualizar el estado del presupuesto a "converted" en supabase
+    try {
+      const { error } = await supabase
+        .from("quotes")
+        .update({ status: "converted" })
+        .eq("id", quote.id);
+      if (error) {
+        console.error("Error al actualizar estado del presupuesto:", error);
+      }
+    } catch (e) {
+      console.error("Error al conectar con la base de datos:", e);
+    }
+
+    // 4. Redirigir de inmediato al punto de venta (home page /)
+    window.location.href = "/";
+  };
+
   const printQuote = (quote: any) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
