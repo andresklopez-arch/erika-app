@@ -23,8 +23,8 @@ export default function SmartImporter({
   const [previewData, setPreviewData] = useState<any[] | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
-  const [columnMapping, setColumnMapping] = useState({ name: -1, cost: -1, stock: -1, code: -1 });
-  const [detectionSource, setDetectionSource] = useState({ name: "", cost: "", stock: "", code: "" });
+  const [columnMapping, setColumnMapping] = useState({ name: -1, cost: -1, stock: -1, code: -1, price: -1 });
+  const [detectionSource, setDetectionSource] = useState({ name: "", cost: "", stock: "", code: "", price: "" });
   const [rawHeaders, setRawHeaders] = useState<string[]>([]);
   const [processedRawData, setProcessedRawData] = useState<any[][]>([]);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
@@ -53,6 +53,17 @@ export default function SmartImporter({
       .toLowerCase()
       .replace(/\s+/g, " ")
       .replace(/\b\w/g, (c) => c.toUpperCase());
+  };
+
+  const normalizeString = (str: string) => {
+    if (!str) return "";
+    return str
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   };
 
   const [minBatchMargin, setMinBatchMargin] = useState<number>(() => {
@@ -99,7 +110,7 @@ export default function SmartImporter({
     return { price, alertText, isInflation, isNew, prevPrice, prevCost };
   };
 
-  const generatePreview = (mapping: { name: number, cost: number, stock: number, code: number, supplier?: number, location?: number }, data: any[][]) => {
+  const generatePreview = (mapping: { name: number, cost: number, stock: number, code: number, price: number, supplier?: number, location?: number }, data: any[][]) => {
     const importedProducts: any[] = [];
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
@@ -125,11 +136,11 @@ export default function SmartImporter({
       let rawCode = row[mapping.code] ? String(row[mapping.code]).trim() : `SKU-${Date.now()}-${i}`;
       const cleanName = cleanAndCapitalize(String(row[mapping.name]));
 
-      // 🔍 Detección Anti-Duplicados
+      // 🔍 Detección Anti-Duplicados usando normalizeString
       const existing = existingItems.find(
         (item) =>
           (item.code && item.code.trim().toUpperCase() === rawCode.trim().toUpperCase() && rawCode !== "") ||
-          item.name.toLowerCase().trim() === cleanName.toLowerCase().trim()
+          normalizeString(item.name) === normalizeString(cleanName)
       );
 
       if (existing && existing.code) {
@@ -145,12 +156,20 @@ export default function SmartImporter({
          stockHasError = true;
       }
       
-      let finalPrice = row[4];
+      // Obtener el precio de la columna mapeada si está definida, de lo contrario auto-calcular
+      let finalPrice = (mapping.price !== undefined && mapping.price !== -1 && row[mapping.price] !== undefined) ? row[mapping.price] : undefined;
+      let autoPriced = true;
       if (finalPrice === undefined || finalPrice === null || String(finalPrice).trim() === "") {
         finalPrice = smartPrices.price;
+        autoPriced = true;
       } else {
         finalPrice = Number(String(finalPrice).replace(/[^0-9.-]+/g, ""));
-        if (isNaN(finalPrice)) finalPrice = smartPrices.price;
+        if (isNaN(finalPrice)) {
+          finalPrice = smartPrices.price;
+          autoPriced = true;
+        } else {
+          autoPriced = false;
+        }
       }
 
       const isDuplicateInFile = importedProducts.some(p => p.code && p.code.trim().toUpperCase() === rawCode.trim().toUpperCase());
@@ -171,7 +190,7 @@ export default function SmartImporter({
         location: rawLocation,
         minStock: 5,
         salesIndex: 50,
-        autoPriced: true,
+        autoPriced: autoPriced,
         alertText: isDuplicateInFile ? "⚠️ Código Repetido" : smartPrices.alertText,
         isInflation: smartPrices.isInflation,
         isNew: smartPrices.isNew,
@@ -193,10 +212,10 @@ export default function SmartImporter({
     generatePreview(newMapping, processedRawData);
   };
 
-  const handleEditField = (index: number, field: string, value: string | number | boolean) => {
+  const handleEditRow = (index: number, updates: Partial<any>) => {
     if (!previewData) return;
     const newData = [...previewData];
-    newData[index] = { ...newData[index], [field]: value };
+    newData[index] = { ...newData[index], ...updates };
     setPreviewData(newData);
   };
 
@@ -229,8 +248,24 @@ export default function SmartImporter({
   };
 
   useEffect(() => {
-    if (previewData && processedRawData) {
-      generatePreview(columnMapping, processedRawData);
+    if (previewData) {
+      setPreviewData(prev => {
+        if (!prev) return null;
+        return prev.map(p => {
+          if (p.autoPriced) {
+            const smartPrices = getSmartPriceSuggestion(p.name, p.cost, p.code, minBatchMargin);
+            return {
+              ...p,
+              price: smartPrices.price,
+              alertText: smartPrices.alertText,
+              isInflation: smartPrices.isInflation,
+              prevPrice: smartPrices.prevPrice,
+              prevCost: smartPrices.prevCost
+            };
+          }
+          return p;
+        });
+      });
     }
   }, [minBatchMargin]);
 
@@ -288,10 +323,11 @@ export default function SmartImporter({
         let finalNameIdx = 1;
         let finalStockIdx = 2;
         let finalCostIdx = 3;
+        let finalPriceIdx = 4;
         let finalSupplierIdx = 5;
         let finalLocationIdx = 6;
         
-        let detectedCode = false, detectedName = false, detectedStock = false, detectedCost = false;
+        let detectedCode = false, detectedName = false, detectedStock = false, detectedCost = false, detectedPrice = false;
 
         // Intentar detectar por cabeceras en la primera fila
         if (rawData.length > 0) {
@@ -309,6 +345,9 @@ export default function SmartImporter({
             } else if (val.includes("cost") || val.includes("comp") || val.includes("prov") || val.includes("costo")) {
               finalCostIdx = idx;
               detectedCost = true;
+            } else if (val.includes("prec") || val.includes("vent") || val.includes("precio")) {
+              finalPriceIdx = idx;
+              detectedPrice = true;
             } else if (val.includes("prove") || val.includes("brand") || val.includes("proveedor")) {
               finalSupplierIdx = idx;
             } else if (val.includes("ubica") || val.includes("pasi") || val.includes("loc") || val.includes("bod") || val.includes("bodega")) {
@@ -322,11 +361,12 @@ export default function SmartImporter({
           name: detectedName ? "🤖 Auto-detectado" : "📋 Plantilla Oficial",
           stock: detectedStock ? "🤖 Auto-detectado" : "📋 Plantilla Oficial",
           cost: detectedCost ? "🤖 Auto-detectado" : "📋 Plantilla Oficial",
+          price: detectedPrice ? "🤖 Auto-detectado" : "📋 Plantilla Oficial",
           supplier: "📋 Plantilla Oficial",
           location: "📋 Plantilla Oficial",
         };
 
-        const mapping = { name: finalNameIdx, cost: finalCostIdx, stock: finalStockIdx, code: finalCodeIdx, supplier: finalSupplierIdx, location: finalLocationIdx };
+        const mapping = { name: finalNameIdx, cost: finalCostIdx, stock: finalStockIdx, code: finalCodeIdx, price: finalPriceIdx, supplier: finalSupplierIdx, location: finalLocationIdx };
         setColumnMapping(mapping);
         setDetectionSource(source);
         setRawHeaders(headersForSelect);
@@ -465,7 +505,8 @@ export default function SmartImporter({
           areaChar = String.fromCharCode(areaChar.charCodeAt(0) + 1);
         }
       }
-      return { ...p, supplier: globalSupplier, location: assignedLocation };
+      const finalSupplier = (p.supplier && p.supplier !== "Pendiente" && p.supplier !== "") ? p.supplier : globalSupplier;
+      return { ...p, supplier: finalSupplier, location: assignedLocation };
     });
 
     onImport(finalProducts, isRestockMode);
@@ -652,7 +693,13 @@ export default function SmartImporter({
                           {rawHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
                         </select>
                       </th>
-                      <th style={{ padding: "8px", color: "white", background: "rgba(16, 185, 129, 0.2)" }}>Precio Sugerido</th>
+                      <th style={{ padding: "8px", color: "white", background: "rgba(16, 185, 129, 0.2)" }}>
+                        <div style={{ fontSize: "0.7rem", marginBottom: "4px" }}>{detectionSource.price || "📋 Auto calcular"}</div>
+                        <select value={columnMapping.price} onChange={(e) => handleMappingChange("price", parseInt(e.target.value))} style={{ background: "rgba(0,0,0,0.5)", color: "white", border: "1px solid var(--glass-border)", borderRadius: "4px", padding: "2px", width: "100%", fontSize: "0.8rem" }}>
+                          <option value={-1}>-- Auto calcular --</option>
+                          {rawHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
+                        </select>
+                      </th>
                       <th style={{ padding: "8px" }}>Detalle</th>
                     </tr>
                   </thead>
@@ -670,7 +717,7 @@ export default function SmartImporter({
                             id={`input-${i}-code`}
                             type="text" 
                             value={p.code || ""} 
-                            onChange={(e) => handleEditField(i, 'code', e.target.value)}
+                            onChange={(e) => handleEditRow(i, { code: e.target.value })}
                             onKeyDown={(e) => handleKeyDown(e, i, 'code')}
                             disabled={!p.isNew}
                             style={{ 
@@ -693,7 +740,7 @@ export default function SmartImporter({
                                 id={`input-${i}-name`}
                                 type="text" 
                                 value={p.name} 
-                                onChange={(e) => handleEditField(i, 'name', e.target.value)}
+                                onChange={(e) => handleEditRow(i, { name: e.target.value })}
                                 onFocus={() => setActiveSuggestRow(i)}
                                 onBlur={() => setTimeout(() => setActiveSuggestRow(null), 250)}
                                 onKeyDown={(e) => handleKeyDown(e, i, 'name')}
@@ -716,12 +763,7 @@ export default function SmartImporter({
                                     <div 
                                       key={idx} 
                                       onClick={() => {
-                                        handleEditField(i, 'name', item.name);
-                                        if (item.code) handleEditField(i, 'code', item.code);
-                                        // Update status to existing
-                                        const newData = [...previewData];
-                                        newData[i] = { ...newData[i], name: item.name, code: item.code || newData[i].code, isNew: false, prevCost: item.cost, prevPrice: item.price };
-                                        setPreviewData(newData);
+                                        handleEditRow(i, { name: item.name, code: item.code || p.code, isNew: false, prevCost: item.cost, prevPrice: item.price, autoPriced: false });
                                       }}
                                       style={{ padding: "8px", cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: "0.75rem", color: "white" }}
                                     >
@@ -758,8 +800,7 @@ export default function SmartImporter({
                             type="number" 
                             value={p.stock} 
                             onChange={(e) => {
-                              handleEditField(i, 'stock', Number(e.target.value));
-                              handleEditField(i, 'stockHasError', false);
+                              handleEditRow(i, { stock: Number(e.target.value), stockHasError: false });
                             }}
                             onKeyDown={(e) => handleKeyDown(e, i, 'stock')}
                             style={{ 
@@ -780,8 +821,15 @@ export default function SmartImporter({
                               type="number" 
                               value={p.cost} 
                               onChange={(e) => {
-                                handleEditField(i, 'cost', Number(e.target.value));
-                                handleEditField(i, 'costHasError', false);
+                                const newCost = Number(e.target.value);
+                                const smart = getSmartPriceSuggestion(p.name, newCost, p.code, minBatchMargin);
+                                handleEditRow(i, {
+                                  cost: newCost,
+                                  costHasError: false,
+                                  price: p.autoPriced ? smart.price : p.price,
+                                  alertText: p.autoPriced ? smart.alertText : p.alertText,
+                                  isInflation: p.autoPriced ? smart.isInflation : p.isInflation
+                                });
                               }}
                               onKeyDown={(e) => handleKeyDown(e, i, 'cost')}
                               style={{ 
@@ -809,7 +857,9 @@ export default function SmartImporter({
                               id={`input-${i}-price`}
                               type="number" 
                               value={p.price} 
-                              onChange={(e) => handleEditField(i, 'price', Number(e.target.value))}
+                              onChange={(e) => {
+                                handleEditRow(i, { price: Number(e.target.value), autoPriced: false });
+                              }}
                               onKeyDown={(e) => handleKeyDown(e, i, 'price')}
                               style={{ width: "70px", background: "transparent", border: "1px dashed var(--color-primary)", color: "var(--color-secondary)", padding: "2px 4px", borderRadius: "4px", fontWeight: "bold" }}
                             />

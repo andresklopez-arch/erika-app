@@ -14,6 +14,17 @@ import InboundModal from "./InboundModal";
 import AuditModule from "./AuditModule";
 import { useAuth } from "./AuthProvider";
 
+const normalizeString = (str: string) => {
+  if (!str) return "";
+  return str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
 export interface InventoryItem {
   id: string;
   code?: string;
@@ -112,6 +123,7 @@ export default function InventoryModule() {
   const showImporter = tab === "carga";
   const showAudit = tab === "arqueo";
   const showCritical = tab === "criticos";
+  const showDuplicates = tab === "duplicados";
   const createParam = searchParams ? searchParams.get("create") : null;
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -181,6 +193,101 @@ export default function InventoryModule() {
     } else {
       alert("🗑️ Producto enviado a la papelera.");
       fetchInventory();
+    }
+  };
+
+  const getDuplicateGroups = () => {
+    const codeGroups: { [key: string]: InventoryItem[] } = {};
+    const nameGroups: { [key: string]: InventoryItem[] } = {};
+
+    items.forEach((item) => {
+      if (item.code && item.code.trim() !== "") {
+        const cleanCode = item.code.trim().toUpperCase();
+        if (!codeGroups[cleanCode]) codeGroups[cleanCode] = [];
+        codeGroups[cleanCode].push(item);
+      }
+
+      const cleanName = normalizeString(item.name);
+      if (cleanName !== "") {
+        if (!nameGroups[cleanName]) nameGroups[cleanName] = [];
+        nameGroups[cleanName].push(item);
+      }
+    });
+
+    const groups: { key: string; type: "Código" | "Nombre"; products: InventoryItem[] }[] = [];
+
+    Object.keys(codeGroups).forEach((code) => {
+      if (codeGroups[code].length > 1) {
+        groups.push({
+          key: code,
+          type: "Código",
+          products: codeGroups[code],
+        });
+      }
+    });
+
+    Object.keys(nameGroups).forEach((nameKey) => {
+      if (nameGroups[nameKey].length > 1) {
+        const alreadyGroupedByCode = groups.some((g) =>
+          g.type === "Código" &&
+          g.products.some((p) => nameGroups[nameKey].some((np) => np.id === p.id))
+        );
+        if (!alreadyGroupedByCode) {
+          const nameLabel = nameGroups[nameKey][0].name;
+          groups.push({
+            key: nameLabel,
+            type: "Nombre",
+            products: nameGroups[nameKey],
+          });
+        }
+      }
+    });
+
+    return groups;
+  };
+
+  const handleMergeDuplicates = async (principalItem: InventoryItem, allGroupItems: InventoryItem[]) => {
+    const duplicates = allGroupItems.filter((item) => item.id !== principalItem.id);
+    if (duplicates.length === 0) return;
+
+    const totalStockToTransfer = duplicates.reduce((sum, item) => sum + item.stock, 0);
+    const newStock = principalItem.stock + totalStockToTransfer;
+
+    const confirmMsg = `¿Deseas combinar los duplicados?\n\n` +
+      `Se sumarán ${totalStockToTransfer} unidades al producto principal:\n` +
+      `👉 "${principalItem.name}" (Stock final: ${newStock})\n\n` +
+      `Se enviarán a la Papelera los siguientes productos duplicados:\n` +
+      duplicates.map(d => `- [${d.code || 'Sin código'}] ${d.name} (Stock: ${d.stock})`).join("\n") +
+      `\n\n¿Proceder con la combinación?`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsLoading(true);
+    try {
+      const { error: updateError } = await supabase
+        .from("inventory")
+        .update({ stock: newStock })
+        .eq("id", principalItem.id);
+
+      if (updateError) throw updateError;
+
+      const nowStr = new Date().toISOString();
+      for (const duplicate of duplicates) {
+        const { error: deleteError } = await supabase
+          .from("inventory")
+          .update({ deleted: true, deleted_at: nowStr })
+          .eq("id", duplicate.id);
+        
+        if (deleteError) throw deleteError;
+      }
+
+      alert("✅ Productos combinados con éxito.");
+      await fetchInventory(true);
+    } catch (err: any) {
+      console.error("Error al combinar duplicados:", err);
+      alert(`❌ Error al combinar productos: ${err.message || err}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -529,6 +636,17 @@ export default function InventoryModule() {
           )}
           <button
             className="btn-primary"
+            onClick={() => router.push(showDuplicates ? "/inventario" : "/inventario?tab=duplicados")}
+            style={{
+              background: showDuplicates ? "#eab308" : "transparent",
+              border: "1px solid #eab308",
+              color: showDuplicates ? "black" : "#eab308",
+            }}
+          >
+            👯 Posibles Duplicados
+          </button>
+          <button
+            className="btn-primary"
             onClick={() => router.push("/inventario?tab=carga")}
             style={{
               background:
@@ -667,6 +785,104 @@ export default function InventoryModule() {
                 )}
               </tbody>
             </table>
+          </div>
+        ) : showDuplicates ? (
+          <div style={{ padding: "20px" }}>
+            <h2 style={{ color: "#eab308", marginBottom: "10px" }}>
+              👯 Posibles Productos Duplicados
+            </h2>
+            <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.9rem", marginBottom: "25px" }}>
+              Aquí se muestran grupos de productos con códigos de barra idénticos o nombres muy similares. 
+              Puedes <strong>eliminar</strong> los registros redundantes o <strong>combinar sus inventarios</strong> (sumar existencias en un producto principal y desechar los otros).
+            </p>
+
+            {(() => {
+              const groups = getDuplicateGroups();
+              if (groups.length === 0) {
+                return (
+                  <div style={{ padding: "40px", textAlign: "center", color: "var(--color-secondary)", background: "rgba(255,255,255,0.02)", borderRadius: "10px", border: "1px dashed var(--glass-border)" }}>
+                    🎉 ¡No se detectaron productos duplicados en tu catálogo activo!
+                  </div>
+                );
+              }
+
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: "25px" }}>
+                  {groups.map((group, gIdx) => (
+                    <div 
+                      key={gIdx} 
+                      className="glass-panel" 
+                      style={{ 
+                        border: "1px solid rgba(234, 179, 8, 0.3)", 
+                        borderRadius: "10px", 
+                        padding: "15px",
+                        background: "rgba(0,0,0,0.2)"
+                      }}
+                    >
+                      <div className="flex-between" style={{ borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: "10px", marginBottom: "15px" }}>
+                        <div>
+                          <span style={{ fontSize: "0.75rem", background: "rgba(234, 179, 8, 0.2)", color: "#eab308", padding: "3px 8px", borderRadius: "5px", fontWeight: "bold", marginRight: "10px" }}>
+                            Duplicado por {group.type}
+                          </span>
+                          <strong style={{ fontSize: "1.1rem", color: "white" }}>"{group.key}"</strong>
+                        </div>
+                        <span style={{ color: "var(--color-secondary)", fontSize: "0.85rem" }}>
+                          ({group.products.length} coincidencias)
+                        </span>
+                      </div>
+
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                        <thead>
+                          <tr style={{ color: "rgba(255,255,255,0.6)", borderBottom: "1px solid rgba(255,255,255,0.1)", textAlign: "left" }}>
+                            <th style={{ padding: "8px" }}>Código</th>
+                            <th style={{ padding: "8px" }}>Nombre</th>
+                            <th style={{ padding: "8px" }}>Bodega / Ubicación</th>
+                            <th style={{ padding: "8px" }}>Proveedor</th>
+                            <th style={{ padding: "8px", textAlign: "right" }}>Stock</th>
+                            <th style={{ padding: "8px", textAlign: "right" }}>Costo</th>
+                            <th style={{ padding: "8px", textAlign: "right" }}>Precio</th>
+                            <th style={{ padding: "8px", textAlign: "center" }}>Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.products.map((p) => (
+                            <tr key={p.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                              <td style={{ padding: "8px", fontFamily: "monospace" }}>{p.code || "N/A"}</td>
+                              <td style={{ padding: "8px", fontWeight: "bold" }}>{p.name}</td>
+                              <td style={{ padding: "8px" }}>{p.location || "N/A"}</td>
+                              <td style={{ padding: "8px" }}>{p.supplier || "N/A"}</td>
+                              <td style={{ padding: "8px", textAlign: "right", fontWeight: "bold", color: p.stock <= 0 ? "#ef4444" : "white" }}>{p.stock}</td>
+                              <td style={{ padding: "8px", textAlign: "right" }}>${p.cost.toFixed(2)}</td>
+                              <td style={{ padding: "8px", textAlign: "right" }}>${p.price.toFixed(2)}</td>
+                              <td style={{ padding: "8px", textAlign: "center" }}>
+                                <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
+                                  <button 
+                                    onClick={() => handleMergeDuplicates(p, group.products)}
+                                    title="Definir este como principal y combinar el stock de los demás en este"
+                                    className="btn-primary"
+                                    style={{ padding: "4px 8px", background: "rgba(16, 185, 129, 0.2)", border: "1px solid #10b981", color: "#10b981", fontSize: "0.75rem" }}
+                                  >
+                                    🔄 Combinar aquí
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteProduct(p.id, p.name)}
+                                    title="Eliminar este duplicado"
+                                    className="btn-primary"
+                                    style={{ padding: "4px 8px", background: "rgba(239, 68, 68, 0.2)", border: "1px solid #ef4444", color: "#ef4444", fontSize: "0.75rem" }}
+                                  >
+                                    🗑️ Eliminar
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <table
@@ -865,11 +1081,11 @@ export default function InventoryModule() {
               const undoLog: any[] = [];
 
               for (const p of newProducts) {
-                const existing = items.find(
-                  (i) =>
-                    (i.code && p.code && i.code.trim().toUpperCase() === p.code.trim().toUpperCase() && p.code !== "") ||
-                    (i.name.toLowerCase().trim() === p.name.toLowerCase().trim())
-                );
+                 const existing = items.find(
+                   (i) =>
+                     (i.code && p.code && i.code.trim().toUpperCase() === p.code.trim().toUpperCase() && p.code !== "") ||
+                     (normalizeString(i.name) === normalizeString(p.name))
+                 );
                 if (existing) {
                   undoLog.push({ id: existing.id, cost: existing.cost, price: existing.price, stock: existing.stock, supplier: existing.supplier, location: existing.location, priceChanged: existing.priceChanged });
                   
