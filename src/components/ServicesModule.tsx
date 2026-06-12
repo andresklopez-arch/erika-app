@@ -1,6 +1,8 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import toast from "react-hot-toast";
+import { LoggerService } from "../services/loggerService";
 
 interface ServiceAppointment {
   id: string;
@@ -46,16 +48,20 @@ export default function ServicesModule() {
       const { data, error } = await supabase
         .from("services")
         .select("*")
+        .not("deleted", "eq", true)
         .order("scheduled_at", { ascending: true });
 
       if (error) {
         console.error("Supabase error fetching services:", error);
+        LoggerService.logError("ServicesModule_fetchServices", error);
+        toast.error(`Error de base de datos al cargar servicios: ${error.message}`);
         setDbError(true);
       } else if (data) {
         setServices(data);
       }
     } catch (err) {
       console.error("Connection error fetching services:", err);
+      LoggerService.logError("ServicesModule_fetchServices_Catch", err);
       setDbError(true);
     } finally {
       setLoading(false);
@@ -136,8 +142,9 @@ export default function ServicesModule() {
       setShowModal(false);
       fetchServices();
     } catch (err) {
-      alert("Error al guardar la cita en la base de datos.");
       console.error(err);
+      LoggerService.logError("ServicesModule_handleSave", err);
+      toast.error("Error al guardar la cita en la base de datos.");
     } finally {
       setLoading(false);
     }
@@ -164,20 +171,26 @@ export default function ServicesModule() {
         }
       }
     } catch (err) {
-      alert("Error al actualizar el estado.");
       console.error(err);
+      LoggerService.logError("ServicesModule_handleUpdateStatus", err);
+      toast.error("Error al actualizar el estado.");
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("¿Estás seguro de eliminar esta cita de servicio?")) {
+    if (confirm("¿Estás seguro de eliminar esta cita de servicio?\nSe moverá a la Papelera.")) {
       try {
-        const { error } = await supabase.from("services").delete().eq("id", id);
+        const { error } = await supabase
+          .from("services")
+          .update({ deleted: true, deleted_at: new Date().toISOString() })
+          .eq("id", id);
         if (error) throw error;
+        toast.success("Servicio movido a la Papelera.");
         fetchServices();
       } catch (err) {
-        alert("Error al eliminar la cita.");
         console.error(err);
+        LoggerService.logError("ServicesModule_handleDelete", err);
+        toast.error("Error al eliminar la cita.");
       }
     }
   };

@@ -332,6 +332,14 @@ export default function POSModule() {
              if (items && items.length > 0) {
                 setTickets([{ id: 1, items, discountPct: 0 }]);
                 setActiveTicketId(1);
+                
+                // Restablecer cliente si existe
+                const savedCustId = localStorage.getItem("ERIKA_RESTORE_CUSTOMER_ID");
+                if (savedCustId) {
+                   setSelectedCustomerId(savedCustId);
+                   localStorage.removeItem("ERIKA_RESTORE_CUSTOMER_ID");
+                }
+                
                 localStorage.removeItem("ERIKA_RESTORE_QUOTE");
                 alert("✅ Cotización cargada en la caja exitosamente.");
              }

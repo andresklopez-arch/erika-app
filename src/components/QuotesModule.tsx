@@ -292,61 +292,77 @@ export default function QuotesModule() {
                           >
                             ${q.total.toFixed(2)}
                           </div>
-                          {q.status === "pending" && (
-                            <div
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "10px",
+                              marginTop: "10px",
+                              flexWrap: "wrap",
+                              justifyContent: "flex-end",
+                            }}
+                          >
+                            <button
+                              className="btn-primary"
                               style={{
-                                display: "flex",
-                                gap: "10px",
-                                marginTop: "10px",
-                                flexWrap: "wrap",
-                                justifyContent: "flex-end",
+                                padding: "8px 15px",
+                                background: "linear-gradient(135deg, #10b981, #059669)",
+                                color: "white",
+                                border: "none",
+                                fontWeight: "bold"
                               }}
+                              onClick={() => handleDirectCharge(q)}
                             >
-                              <button
-                                className="btn-primary"
-                                style={{
-                                  padding: "8px 15px",
-                                  background: "#25D366",
-                                  color: "white",
-                                  border: "none",
-                                }}
-                                onClick={() => sendWhatsApp(q)}
-                              >
-                                🟢 WhatsApp
-                              </button>
-                              <button
-                                className="btn-primary"
-                                style={{
-                                  padding: "8px 15px",
-                                  background: "#8b5cf6",
-                                  color: "white",
-                                  border: "none",
-                                }}
-                                onClick={() => generateInvoice(q)}
-                              >
-                                🧾 Facturar
-                              </button>
-                              <button
-                                className="btn-primary"
-                                style={{
-                                  padding: "8px 15px",
-                                  background: "transparent",
-                                  border: "1px solid #3b82f6",
-                                  color: "#3b82f6",
-                                }}
-                                onClick={() => printQuote(q)}
-                              >
-                                🖨️ PDF
-                              </button>
-                              <button
-                                className="btn-primary"
-                                style={{ padding: "8px 15px" }}
-                                onClick={() => convertToSale(q)}
-                              >
-                                ✅ Vender
-                              </button>
-                            </div>
-                          )}
+                              💰 Cobrar de Inmediato
+                            </button>
+
+                            {q.status === "pending" && (
+                              <>
+                                <button
+                                  className="btn-primary"
+                                  style={{
+                                    padding: "8px 15px",
+                                    background: "#25D366",
+                                    color: "white",
+                                    border: "none",
+                                  }}
+                                  onClick={() => sendWhatsApp(q)}
+                                >
+                                  🟢 WhatsApp
+                                </button>
+                                <button
+                                  className="btn-primary"
+                                  style={{
+                                    padding: "8px 15px",
+                                    background: "#8b5cf6",
+                                    color: "white",
+                                    border: "none",
+                                  }}
+                                  onClick={() => generateInvoice(q)}
+                                >
+                                  🧾 Facturar
+                                </button>
+                                <button
+                                  className="btn-primary"
+                                  style={{
+                                    padding: "8px 15px",
+                                    background: "transparent",
+                                    border: "1px solid #3b82f6",
+                                    color: "#3b82f6",
+                                  }}
+                                  onClick={() => printQuote(q)}
+                                >
+                                  🖨️ PDF
+                                </button>
+                                <button
+                                  className="btn-primary"
+                                  style={{ padding: "8px 15px" }}
+                                  onClick={() => convertToSale(q)}
+                                >
+                                  ✅ Vender
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>

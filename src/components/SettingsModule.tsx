@@ -79,7 +79,7 @@ export default function SettingsModule() {
   interface TrashItem {
     id: string;
     name: string;
-    type: "producto" | "cliente" | "proveedor";
+    type: "producto" | "cliente" | "proveedor" | "servicio";
     deleted_at: string;
   }
   const [trashItems, setTrashItems] = useState<TrashItem[]>([]);
@@ -104,6 +104,12 @@ export default function SettingsModule() {
       if (suppError) {
         console.error("Error al cargar papelera de proveedores:", suppError);
         LoggerService.logError("SettingsModule_fetchTrash_Suppliers", suppError);
+      }
+
+      const { data: servData, error: servError } = await supabase.from("services").select("id, customer_name, service_type, deleted_at").eq("deleted", true);
+      if (servError) {
+        console.error("Error al cargar papelera de servicios:", servError);
+        LoggerService.logError("SettingsModule_fetchTrash_Services", servError);
       }
 
       const items: TrashItem[] = [];
@@ -141,6 +147,17 @@ export default function SettingsModule() {
         });
       }
 
+      if (servData) {
+        servData.forEach((s: any) => {
+          items.push({
+            id: s.id,
+            name: `Servicio: ${s.service_type} (${s.customer_name})`,
+            type: "servicio",
+            deleted_at: s.deleted_at || new Date().toISOString()
+          });
+        });
+      }
+
       // Auto-purging logic (older than 33 days)
       const now = Date.now();
       const activeTrash: TrashItem[] = [];
@@ -156,6 +173,8 @@ export default function SettingsModule() {
             await supabase.from("customers").delete().eq("id", item.id);
           } else if (item.type === "proveedor") {
             await supabase.from("suppliers").delete().eq("id", item.id);
+          } else if (item.type === "servicio") {
+            await supabase.from("services").delete().eq("id", item.id);
           }
         } else {
           activeTrash.push(item);
@@ -182,6 +201,9 @@ export default function SettingsModule() {
         error = err;
       } else if (item.type === "proveedor") {
         const { error: err } = await supabase.from("suppliers").update({ deleted: false, deleted_at: null }).eq("id", item.id);
+        error = err;
+      } else if (item.type === "servicio") {
+        const { error: err } = await supabase.from("services").update({ deleted: false, deleted_at: null }).eq("id", item.id);
         error = err;
       }
 
@@ -217,6 +239,9 @@ export default function SettingsModule() {
         error = err;
       } else if (item.type === "proveedor") {
         const { error: err } = await supabase.from("suppliers").delete().eq("id", item.id);
+        error = err;
+      } else if (item.type === "servicio") {
+        const { error: err } = await supabase.from("services").delete().eq("id", item.id);
         error = err;
       }
 

@@ -4,7 +4,7 @@
 -- ==========================================================
 -- Ejecuta este código en el "SQL Editor" de tu panel de Supabase.
 -- Este script agrega las columnas 'deleted' y 'deleted_at' a las
--- tablas 'customers', 'inventory' y 'suppliers' si no existen,
+-- tablas 'customers', 'inventory', 'suppliers' y 'services' si no existen,
 -- las inicializa en false para los registros actuales, y establece
 -- la restricción NOT NULL para asegurar la integridad de datos.
 
@@ -25,6 +25,12 @@ ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT false;
 ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;
 UPDATE suppliers SET deleted = false WHERE deleted IS NULL;
 ALTER TABLE suppliers ALTER COLUMN deleted SET NOT NULL;
+
+-- 4. CORRECCIÓN EN TABLA SERVICIOS/AGENDA (SERVICES)
+ALTER TABLE services ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT false;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;
+UPDATE services SET deleted = false WHERE deleted IS NULL;
+ALTER TABLE services ALTER COLUMN deleted SET NOT NULL;
 
 -- Confirmación visual
 SELECT '✅ COLUMNAS DE SOFT DELETE (deleted, deleted_at) AGREGADAS CON NOT NULL E INICIALIZADAS CON ÉXITO.' as status;
