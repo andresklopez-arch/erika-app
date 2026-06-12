@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import toast from "react-hot-toast";
 
 export default function CustomersModule() {
   const [customers, setCustomers] = useState<any[]>([]);
@@ -30,8 +31,13 @@ export default function CustomersModule() {
   const [undoCustomerName, setUndoCustomerName] = useState("");
 
   const fetchCustomers = async () => {
-    const { data } = await supabase.from("customers").select("*").not("deleted", "eq", true);
-    if (data) setCustomers(data);
+    const { data, error } = await supabase.from("customers").select("*").not("deleted", "eq", true);
+    if (error) {
+      console.error("Error al cargar clientes:", error);
+      toast.error(`Error de Base de Datos al cargar clientes: ${error.message}`);
+    } else if (data) {
+      setCustomers(data);
+    }
   };
 
   const [txLimit, setTxLimit] = useState(10);

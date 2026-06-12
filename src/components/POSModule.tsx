@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { LoggerService } from "../services/loggerService";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { supabase } from "../lib/supabaseClient";
+import toast from "react-hot-toast";
 import {
   saveTransactionOffline,
   syncOfflineTransactions,
@@ -304,10 +305,23 @@ export default function POSModule() {
     if (saved) setSecurityKeyword(saved.toLowerCase());
 
     const fetchInventoryAndCustomers = async () => {
-      const { data: invData } = await supabase.from("inventory").select("*");
-      if (invData) setGlobalCatalog(invData);
-      const { data: custData } = await supabase.from("customers").select("*").not("deleted", "eq", true);
-      if (custData) setCustomers(custData);
+      const { data: invData, error: invError } = await supabase.from("inventory").select("*");
+      if (invError) {
+        console.error("Error al cargar inventario:", invError);
+        LoggerService.logError("POSModule_fetchInventory", invError);
+        toast.error(`Error al cargar catálogo de inventario: ${invError.message}`);
+      } else if (invData) {
+        setGlobalCatalog(invData);
+      }
+
+      const { data: custData, error: custError } = await supabase.from("customers").select("*").not("deleted", "eq", true);
+      if (custError) {
+        console.error("Error al cargar clientes:", custError);
+        LoggerService.logError("POSModule_fetchCustomers", custError);
+        toast.error(`Error al cargar lista de clientes: ${custError.message}`);
+      } else if (custData) {
+        setCustomers(custData);
+      }
     };
 
     const restoreQuote = () => {
@@ -1764,8 +1778,13 @@ export default function POSModule() {
                    alert(`✅ Canje exitoso. Se descontaron ${pointsToRedeem} puntos y se aplicó un descuento de $${discountAmount.toFixed(2)}.`);
                    
                    // Reload customers to refresh points
-                   const { data: custData } = await supabase.from("customers").select("*").not("deleted", "eq", true);
-                   if (custData) setCustomers(custData);
+                   const { data: custData, error: custError } = await supabase.from("customers").select("*").not("deleted", "eq", true);
+                   if (custError) {
+                     console.error("Error al recargar clientes:", custError);
+                     LoggerService.logError("POSModule_reloadCustomers_Points", custError);
+                   } else if (custData) {
+                     setCustomers(custData);
+                   };
                 }}
                 style={{
                   width: "100%",
@@ -2107,10 +2126,15 @@ export default function POSModule() {
           );
         }}
         reloadCustomers={async () => {
-          const { data: custData } = await supabase
+          const { data: custData, error: custError } = await supabase
             .from("customers")
             .select("*");
-          if (custData) setCustomers(custData);
+          if (custError) {
+            console.error("Error al recargar clientes:", custError);
+            LoggerService.logError("POSModule_reloadCustomers_CreditModal", custError);
+          } else if (custData) {
+            setCustomers(custData);
+          }
         }}
       />
 

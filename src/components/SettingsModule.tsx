@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "./AuthProvider";
+import { LoggerService } from "../services/loggerService";
 
 export default function SettingsModule() {
   const { currentUser, businessSettings, updateBusinessSettings } = useAuth();
@@ -87,9 +88,23 @@ export default function SettingsModule() {
   const fetchTrash = async () => {
     setIsLoadingTrash(true);
     try {
-      const { data: invData } = await supabase.from("inventory").select("id, name, code, deleted_at").eq("deleted", true);
-      const { data: custData } = await supabase.from("customers").select("id, name, deleted_at").eq("deleted", true);
-      const { data: suppData } = await supabase.from("suppliers").select("id, name, deleted_at").eq("deleted", true);
+      const { data: invData, error: invError } = await supabase.from("inventory").select("id, name, code, deleted_at").eq("deleted", true);
+      if (invError) {
+        console.error("Error al cargar papelera de inventario:", invError);
+        LoggerService.logError("SettingsModule_fetchTrash_Inventory", invError);
+      }
+
+      const { data: custData, error: custError } = await supabase.from("customers").select("id, name, deleted_at").eq("deleted", true);
+      if (custError) {
+        console.error("Error al cargar papelera de clientes:", custError);
+        LoggerService.logError("SettingsModule_fetchTrash_Customers", custError);
+      }
+
+      const { data: suppData, error: suppError } = await supabase.from("suppliers").select("id, name, deleted_at").eq("deleted", true);
+      if (suppError) {
+        console.error("Error al cargar papelera de proveedores:", suppError);
+        LoggerService.logError("SettingsModule_fetchTrash_Suppliers", suppError);
+      }
 
       const items: TrashItem[] = [];
 

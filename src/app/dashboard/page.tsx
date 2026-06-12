@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../components/AuthProvider";
+import { LoggerService } from "../../services/loggerService";
 
 // 1. Error Boundary para robustecer la importación dinámica frente a fallos de red
 interface ErrorBoundaryProps {
@@ -228,8 +229,11 @@ export default function Dashboard() {
       }
 
       // Fetch Overdue Customers (Credit limit exceeded)
-      const { data: custs } = await supabase.from("customers").select("*").gt("balance", 0).not("deleted", "eq", true);
-      if (custs) {
+      const { data: custs, error: custsError } = await supabase.from("customers").select("*").gt("balance", 0).not("deleted", "eq", true);
+      if (custsError) {
+         console.error("Error al cargar clientes deudores en Dashboard:", custsError);
+         LoggerService.logError("Dashboard_fetchOverdueCustomers", custsError);
+      } else if (custs) {
          setOverdueCustomers(custs.filter((c: any) => c.credit_limit > 0 && c.balance >= c.credit_limit));
       }
 
