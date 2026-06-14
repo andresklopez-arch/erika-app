@@ -12,6 +12,7 @@ import {
 import PosScannerModal from "./PosScannerModal";
 import PosCreditModal from "./PosCreditModal";
 import { useAuth } from "./AuthProvider";
+import { CustomerSchema, CashSessionSchema } from "../lib/schemas";
 
 interface POSItem {
   id: string;
@@ -334,7 +335,26 @@ export default function POSModule() {
         }
       }
       if (!custError && custData) {
-        setCustomers(custData);
+        const validated = custData.map((item: any) => {
+          const result = CustomerSchema.safeParse(item);
+          if (!result.success) {
+            console.error("Error de validacion Zod en cliente de caja:", result.error);
+            return {
+              id: item.id || String(Math.random()),
+              name: item.name || "Cliente Invalido",
+              phone: item.phone || "",
+              rfc: item.rfc || "",
+              email: item.email || "",
+              company_name: item.company_name || "",
+              credit_limit: Number(item.credit_limit) || 0,
+              balance: Number(item.balance) || 0,
+              points: Number(item.points) || 0,
+              deleted: item.deleted === true
+            };
+          }
+          return result.data;
+        });
+        setCustomers(validated);
       }
     };
 
@@ -789,13 +809,25 @@ export default function POSModule() {
       );
       updateOfflineStatus();
     } else {
-      const { data: session } = await supabase
+      const { data: rawSession } = await supabase
         .from("cash_sessions")
         .select("*")
         .eq("status", "open")
         .order("opened_at", { ascending: false })
         .limit(1)
         .single();
+      
+      let session = null;
+      if (rawSession) {
+        const result = CashSessionSchema.safeParse(rawSession);
+        if (!result.success) {
+          console.error("Error validando sesion de caja con Zod:", result.error);
+          session = rawSession; // Fallback
+        } else {
+          session = result.data;
+        }
+      }
+
       if (!session)
         return alert(
           "❌ LA CAJA ESTÁ CERRADA. Ve al menú 'Arqueo de Caja' para iniciar tu turno y declarar el fondo inicial.",
@@ -840,7 +872,18 @@ export default function POSModule() {
          total: totalAmt,
          status: "ticket"
       }).select("id").single();
-      if (quoteData) realTicketId = quoteData.id;
+      if (quoteData) {
+         realTicketId = quoteData.id;
+         try {
+            await supabase.from("invoice_claims").insert({
+               ticket_id: realTicketId,
+               token: invoiceToken,
+               claimed: false
+            });
+         } catch (err) {
+            console.warn("No se pudo registrar token de facturacion en invoice_claims:", err);
+         }
+      }
 
       let puntosGanados = 0;
       if (selectedCustomerId) {
@@ -1901,13 +1944,24 @@ export default function POSModule() {
               if (!reason) return alert("Debe especificar un motivo.");
 
               if (!isOffline) {
-                 const { data: session } = await supabase
+                 const { data: rawSession } = await supabase
                     .from("cash_sessions")
                     .select("*")
                     .eq("status", "open")
                     .order("opened_at", { ascending: false })
                     .limit(1)
                     .single();
+                 
+                 let session = null;
+                 if (rawSession) {
+                    const result = CashSessionSchema.safeParse(rawSession);
+                    if (!result.success) {
+                       console.error("Error validando sesion de caja con Zod en devolucion:", result.error);
+                       session = rawSession;
+                    } else {
+                       session = result.data;
+                    }
+                 }
                  if (!session) return alert("La caja está cerrada.");
                  
                  const { error } = await supabase.from("cash_transactions").insert({

@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import toast from "react-hot-toast";
+import { CustomerSchema } from "../lib/schemas";
 
 export default function CustomersModule() {
   const [customers, setCustomers] = useState<any[]>([]);
@@ -44,7 +45,26 @@ export default function CustomersModule() {
       }
     }
     if (!error && data) {
-      setCustomers(data);
+      const validated = data.map((item: any) => {
+        const result = CustomerSchema.safeParse(item);
+        if (!result.success) {
+          console.error("Error de validacion Zod en cliente:", result.error);
+          return {
+            id: item.id || String(Math.random()),
+            name: item.name || "Cliente Invalido",
+            phone: item.phone || "",
+            rfc: item.rfc || "",
+            email: item.email || "",
+            company_name: item.company_name || "",
+            credit_limit: Number(item.credit_limit) || 0,
+            balance: Number(item.balance) || 0,
+            points: Number(item.points) || 0,
+            deleted: item.deleted === true
+          };
+        }
+        return result.data;
+      });
+      setCustomers(validated);
     }
   };
 

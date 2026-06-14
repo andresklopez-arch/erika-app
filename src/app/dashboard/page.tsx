@@ -119,27 +119,13 @@ const prefetchReports = () => {
 
 // Eliminado el inventario estatico ficticio en favor de agrupacion dinamica por BD
 
-const InventoryItemSchema = z.object({
-  id: z.string(),
-  code: z.string().optional().nullable(),
-  name: z.string().default("Producto sin nombre"),
-  price: z.preprocess((val) => Number(val) || 0, z.number()),
-  cost: z.preprocess((val) => Number(val) || 0, z.number()),
-  stock: z.preprocess((val) => Number(val) || 0, z.number()),
-  minStock: z.preprocess((val) => Number(val) || 5, z.number()),
-  supplier: z.string().optional().nullable(),
-});
-
-interface InventoryItem {
-  id: string;
-  code?: string;
-  name: string;
-  price: number;
-  cost: number;
-  stock: number;
-  minStock: number;
-  supplier?: string;
-}
+import {
+  InventoryItemSchema,
+  CustomerSchema,
+  LayawaySchema,
+  CashSessionSchema,
+  type InventoryItem,
+} from "../../lib/schemas";
 
 interface DiscrepancyItem {
   id: string;
@@ -173,7 +159,16 @@ interface DistItem {
   value: number;
 }
 
-const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444"];
+const getCategoryColor = (name: string) => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash % 360);
+  const saturation = 70 + (Math.abs(hash) % 15);
+  const lightness = 45 + (Math.abs(hash) % 10);
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+};
 
 export default function Dashboard() {
   const { currentUser } = useAuth();
@@ -264,7 +259,27 @@ export default function Dashboard() {
       const { data: debts } = await supabase.from("supplier_debts").select("*").eq("status", "pending").lte("due_date", todayStr);
       const { data: layaways } = await supabase.from("layaways").select("*").eq("status", "pending").lt("due_date", todayStr);
       
-      if (layaways) setOverdueLayaways(layaways);
+      if (layaways) {
+        const parsedLayaways = layaways.map((item: any) => {
+          const result = LayawaySchema.safeParse(item);
+          if (!result.success) {
+            console.error("Error validando apartado vencido con Zod:", result.error);
+            return {
+              id: item.id || String(Math.random()),
+              customer_name: item.customer_name || "Cliente Invalido",
+              balance: Number(item.balance) || 0,
+              due_date: item.due_date || new Date().toISOString(),
+            };
+          }
+          return {
+            id: result.data.id,
+            customer_name: result.data.customer_name,
+            balance: result.data.balance,
+            due_date: result.data.due_date,
+          };
+        });
+        setOverdueLayaways(parsedLayaways);
+      }
 
       if (((debts && debts.length > 0) || (layaways && layaways.length > 0)) && !hasPlayedBell) {
           // Play Bell
@@ -295,7 +310,21 @@ export default function Dashboard() {
          console.error("Error al cargar clientes deudores en Dashboard:", custsError);
          LoggerService.logError("Dashboard_fetchOverdueCustomers", custsError);
       } else if (custs) {
-         setOverdueCustomers(custs.filter((c: any) => c.credit_limit > 0 && c.balance >= c.credit_limit));
+         const parsedCusts = custs.map((item: any) => {
+           const result = CustomerSchema.safeParse(item);
+           if (!result.success) {
+             console.error("Error validando cliente deudor con Zod:", result.error);
+             return {
+               id: item.id || String(Math.random()),
+               name: item.name || "Cliente Invalido",
+               balance: Number(item.balance) || 0,
+               credit_limit: Number(item.credit_limit) || 0,
+               points: 0
+             };
+           }
+           return result.data;
+         });
+         setOverdueCustomers(parsedCusts.filter((c) => c.credit_limit > 0 && c.balance >= c.credit_limit));
       }
 
       // 2. Ventas de Hoy
@@ -316,7 +345,25 @@ export default function Dashboard() {
         .order("closed_at", { ascending: false })
         .limit(5);
       if (sessions) {
-        setDiscrepancies(sessions);
+        const parsedSessions = sessions.map((item: any) => {
+          const result = CashSessionSchema.safeParse(item);
+          if (!result.success) {
+             console.error("Error validando discrepancia de caja con Zod:", result.error);
+             return {
+               id: item.id || String(Math.random()),
+               discrepancy: Number(item.discrepancy) || 0,
+               closed_at: item.closed_at || new Date().toISOString(),
+               opened_by: item.opened_by || "Cajero",
+             };
+          }
+          return {
+             id: result.data.id,
+             discrepancy: result.data.discrepancy || 0,
+             closed_at: result.data.closed_at || new Date().toISOString(),
+             opened_by: result.data.opened_by,
+          };
+        });
+        setDiscrepancies(parsedSessions);
       }
 
       // 4. Clientes VIP
@@ -337,7 +384,27 @@ export default function Dashboard() {
           customerData = fallback.data.filter((c: any) => c.deleted !== true).slice(0, 5);
         }
       }
-      if (customerData) setTopCustomers(customerData);
+      if (customerData) {
+        const parsedVIP = customerData.map((item: any) => {
+          const result = CustomerSchema.safeParse(item);
+          if (!result.success) {
+            console.error("Error validando cliente VIP con Zod:", result.error);
+            return {
+              id: item.id || String(Math.random()),
+              name: item.name || "Cliente Invalido",
+              balance: Number(item.balance) || 0,
+              credit_limit: Number(item.credit_limit) || 0,
+            };
+          }
+          return {
+            id: result.data.id,
+            name: result.data.name,
+            balance: result.data.balance,
+            credit_limit: result.data.credit_limit,
+          };
+        });
+        setTopCustomers(parsedVIP);
+      }
 
       // 5. Alertas Criticas e Inventario
       const { data: inv } = await supabase.from("inventory").select("*");
@@ -835,7 +902,7 @@ export default function Dashboard() {
                           {inventoryDistData.map((entry, index) => (
                             <Cell
                               key={`cell-${index}`}
-                              fill={COLORS[index % COLORS.length]}
+                              fill={getCategoryColor(entry.name)}
                             />
                           ))}
                         </Pie>

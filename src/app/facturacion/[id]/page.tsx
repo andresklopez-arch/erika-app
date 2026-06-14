@@ -15,13 +15,51 @@ export default function FacturacionExpress() {
 
   useEffect(() => {
     const fetchTicket = async () => {
-       const { data, error } = await supabase.from("quotes").select("*").eq("id", ticketId).eq("status", "ticket").single();
-       if (error || !data) {
-          setStatus("error");
-          setErrorMsg("Ticket no encontrado o ya facturado.");
+       // 1. Intentar buscar por token en invoice_claims
+       const { data: claim, error: claimError } = await supabase
+          .from("invoice_claims")
+          .select("*")
+          .eq("token", ticketId)
+          .single();
+
+       if (!claimError && claim) {
+          if (claim.claimed) {
+             setStatus("error");
+             setErrorMsg("Esta factura ya ha sido reclamada o procesada.");
+             return;
+          }
+          // Si encontramos el reclamo, buscamos el ticket por su ticket_id
+          const { data: ticket, error: ticketError } = await supabase
+             .from("quotes")
+             .select("*")
+             .eq("id", claim.ticket_id)
+             .single();
+
+          if (ticketError || !ticket) {
+             setStatus("error");
+             setErrorMsg("El ticket asociado no se pudo encontrar.");
+          } else {
+             setTicketData(ticket);
+             setStatus("pending");
+          }
        } else {
-          setTicketData(data);
-          setStatus("pending");
+          // Fallback: buscar directamente en quotes por ID (por si no se ha migrado la tabla o es un ticket antiguo)
+          const { data: ticket, error: ticketError } = await supabase
+             .from("quotes")
+             .select("*")
+             .eq("id", ticketId)
+             .single();
+
+          if (ticketError || !ticket) {
+             setStatus("error");
+             setErrorMsg("Ticket no encontrado o token invalido.");
+          } else if (ticket.status !== "ticket") {
+             setStatus("error");
+             setErrorMsg("Este ticket ya ha sido facturado o no esta disponible.");
+          } else {
+             setTicketData(ticket);
+             setStatus("pending");
+          }
        }
     };
     if (ticketId) fetchTicket();
@@ -36,7 +74,7 @@ export default function FacturacionExpress() {
          method: "POST",
          headers: { "Content-Type": "application/json" },
          body: JSON.stringify({
-            ticketId,
+            ticketId: ticketData.id, // Enviar el ID real del ticket
             rfc,
             name,
             uso,
@@ -47,6 +85,26 @@ export default function FacturacionExpress() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error al facturar.");
       
+      // Marcar el token como reclamado en invoice_claims
+      try {
+         await supabase
+            .from("invoice_claims")
+            .update({ claimed: true })
+            .eq("token", ticketId);
+      } catch (err) {
+         console.warn("No se pudo marcar el token como reclamado en la BD:", err);
+      }
+
+      // Marcar el ticket como facturado (converted) en la tabla quotes
+      try {
+         await supabase
+            .from("quotes")
+            .update({ status: "converted" })
+            .eq("id", ticketData.id);
+      } catch (err) {
+         console.warn("No se pudo actualizar el estado del ticket en quotes:", err);
+      }
+
       setStatus("success");
     } catch (err: any) {
       alert(err.message);

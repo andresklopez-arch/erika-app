@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { LayawaySchema } from "../lib/schemas";
 
 export default function LayawaysModule() {
   const [layaways, setLayaways] = useState<any[]>([]);
@@ -10,7 +11,27 @@ export default function LayawaysModule() {
       .from("layaways")
       .select("*")
       .order("created_at", { ascending: false });
-    if (data) setLayaways(data);
+    if (data) {
+      const validated = data.map((item: any) => {
+        const result = LayawaySchema.safeParse(item);
+        if (!result.success) {
+          console.error("Error de validacion Zod en apartado (layaway):", result.error);
+          return {
+            id: item.id || String(Math.random()),
+            customer_id: item.customer_id || "",
+            customer_name: item.customer_name || "Cliente Invalido",
+            total_amount: Number(item.total_amount) || 0,
+            balance: Number(item.balance) || 0,
+            status: item.status || "pending",
+            items: Array.isArray(item.items) ? item.items : [],
+            created_at: item.created_at || new Date().toISOString(),
+            due_date: item.due_date || new Date().toISOString()
+          };
+        }
+        return result.data;
+      });
+      setLayaways(validated);
+    }
   };
 
   useEffect(() => {
