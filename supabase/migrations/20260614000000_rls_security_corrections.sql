@@ -47,3 +47,7 @@ CREATE POLICY "Permitir todo a anonimos en layaways" ON layaways FOR ALL USING (
 ALTER TABLE error_logs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Permitir todo a anonimos en error_logs" ON error_logs;
 CREATE POLICY "Permitir todo a anonimos en error_logs" ON error_logs FOR ALL USING (true) WITH CHECK (true);
+
+-- 9. AGREGAR COLUMNAS PARA ELIMINADO LOGICO EN CLIENTES (SOFT DELETE)
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT false;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;

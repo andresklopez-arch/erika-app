@@ -124,14 +124,8 @@ function createBuilderProxy(originalBuilder: any, table: string, callHistory: an
                 
                 console.warn(`[Self-Healing Client] Registered missing column '${missingColumn}' for table '${table}'. Retrying...`);
                 
-                // Re-sanitize and retry
-                const retryResult = sanitizeHistory(callHistory, table);
-                let newBuilder = rawSupabase.from(table);
-                for (const call of retryResult.sanitizedHistory) {
-                  newBuilder = (newBuilder as any)[call.method](...call.args);
-                }
-                
-                return (newBuilder as any).then(onfulfilled, onrejected);
+                const retriedBuilder = createBuilderProxy(rawSupabase.from(table), table, callHistory);
+                return retriedBuilder.then(onfulfilled, onrejected);
               }
             }
             return onfulfilled ? onfulfilled(result) : result;
