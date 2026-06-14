@@ -100,7 +100,7 @@ export default function QuotesModule() {
     const html = `
       <html>
         <head>
-          <title>Cotización - Ferretería Erika</title>
+          <title>Cotización - ${(typeof window !== 'undefined' ? localStorage.getItem("ERIKA_BIZ_NAME") : '') || "Ferretería Erika"}</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -112,7 +112,7 @@ export default function QuotesModule() {
         <body>
           <div class="header">
             <div>
-              <h1 style="margin: 0; color: #eab308;">Ferretería Erika</h1>
+              <h1 style="margin: 0; color: #eab308;">${(typeof window !== 'undefined' ? localStorage.getItem("ERIKA_BIZ_NAME") : '') || "Ferretería Erika"}</h1>
               <p>Fecha: ${new Date(quote.created_at).toLocaleString()}</p>
             </div>
             <div style="text-align: right;">
@@ -150,7 +150,7 @@ export default function QuotesModule() {
 
   const sendWhatsApp = (quote: any) => {
     const text =
-      `Hola ${quote.customer_name}, te enviamos tu cotización de *Ferretería Erika* por un total de *$${quote.total.toFixed(2)}*.\n\n` +
+      `Hola ${quote.customer_name}, te enviamos tu cotización de *${(typeof window !== 'undefined' ? localStorage.getItem("ERIKA_BIZ_NAME") : '') || "Ferretería Erika"}* por un total de *$${quote.total.toFixed(2)}*.\n\n` +
       quote.items.map((i: any) => `- ${i.qty} ${i.unit} ${i.name}`).join("\n") +
       `\n\nVálida por 7 días. ¡Quedamos a tus órdenes!`;
     const encodedText = encodeURIComponent(text);

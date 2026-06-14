@@ -124,7 +124,7 @@ const renderHighlightedName = (name: string, query: string) => {
 };
 
 export default function POSModule() {
-  const { currentUser } = useAuth();
+  const { currentUser, businessSettings } = useAuth();
   const [globalCatalog, setGlobalCatalog] = useState<any[]>([]);
   const [offlinePendingCount, setOfflinePendingCount] = useState(0);
 
@@ -156,16 +156,29 @@ export default function POSModule() {
       minQty: sWQ > 0 ? sWQ : 10,
       discountPct: sWP > 0 ? sWP : 10
     });
-
-    setBusinessProfile({
-      name: localStorage.getItem("ERIKA_BIZ_NAME") || "Ferretería ERIKA",
-      rfc: localStorage.getItem("ERIKA_BIZ_RFC") || "",
-      phone: localStorage.getItem("ERIKA_BIZ_PHONE") || "",
-      email: localStorage.getItem("ERIKA_BIZ_EMAIL") || "",
-      address: localStorage.getItem("ERIKA_BIZ_ADDR") || "",
-      logo: localStorage.getItem("ERIKA_BIZ_LOGO") || ""
-    });
   }, []);
+
+  useEffect(() => {
+    if (businessSettings && businessSettings.config) {
+      setBusinessProfile({
+        name: businessSettings.config.business_name || "Ferretería ERIKA",
+        rfc: businessSettings.config.business_rfc || "",
+        phone: businessSettings.config.business_phone || "",
+        email: businessSettings.config.business_email || "",
+        address: businessSettings.config.business_address || "",
+        logo: businessSettings.config.business_logo || ""
+      });
+    } else {
+      setBusinessProfile({
+        name: localStorage.getItem("ERIKA_BIZ_NAME") || "Ferretería ERIKA",
+        rfc: localStorage.getItem("ERIKA_BIZ_RFC") || "",
+        phone: localStorage.getItem("ERIKA_BIZ_PHONE") || "",
+        email: localStorage.getItem("ERIKA_BIZ_EMAIL") || "",
+        address: localStorage.getItem("ERIKA_BIZ_ADDR") || "",
+        logo: localStorage.getItem("ERIKA_BIZ_LOGO") || ""
+      });
+    }
+  }, [businessSettings]);
 
   const [businessProfile, setBusinessProfile] = useState<any>({});
 
@@ -979,7 +992,7 @@ export default function POSModule() {
       `).join("");
       const html = `
         <html><head><style>body{font-family: monospace;}</style></head><body>
-          <h3 style="text-align:center; margin:0 0 5px 0;">FERRETERÍA ERIKA</h3>
+          <h3 style="text-align:center; margin:0 0 5px 0;">${businessProfile.name || "FERRETERÍA ERIKA"}</h3>
           <p style="text-align:center; margin:0 0 10px 0;">Ticket: #${realTicketId}</p>
           <div style="border-bottom: 1px dashed #000; margin-bottom: 5px;"></div>
           ${itemsHtml}
@@ -1018,7 +1031,7 @@ export default function POSModule() {
             </style>
           </head>
           <body>
-            <div class="center bold" style="font-size: 16px; margin-bottom: 5px;">FERRETERÍA ERIKA</div>
+            <div class="center bold" style="font-size: 16px; margin-bottom: 5px;">${businessProfile.name || "FERRETERÍA ERIKA"}</div>
             <div class="center" style="font-size: 12px;">Comprobante de Apartado</div>
             <div class="divider"></div>
             <div style="font-size: 12px; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
@@ -1125,7 +1138,8 @@ export default function POSModule() {
       return alert("❌ Número inválido. Por favor ingresa un número de 10 dígitos (ej: 5512345678).");
     }
     
-    const title = type === "quote" ? "*COTIZACIÓN - FERRETERÍA ERIKA*" : "*RECIBO DE COMPRA - FERRETERÍA ERIKA*";
+    const bizUpper = (businessProfile.name || "FERRETERÍA ERIKA").toUpperCase();
+    const title = type === "quote" ? `*COTIZACIÓN - ${bizUpper}*` : `*RECIBO DE COMPRA - ${bizUpper}*`;
     const itemsText = activeTicket.items.map(i => `▪️ ${i.qty}x ${i.name} - $${(i.price * i.qty).toFixed(2)}`).join("\n");
     const totalText = applyIva 
       ? `*SUBTOTAL: $${subtotalNeto.toFixed(2)}*\n*IVA (16%): $${iva.toFixed(2)}*\n*TOTAL: $${finalTotal.toFixed(2)}*` 

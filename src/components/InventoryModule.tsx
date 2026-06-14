@@ -38,6 +38,8 @@ export interface InventoryItem {
   location?: string;
   autoPriced?: boolean;
   priceChanged?: "up" | "down";
+  deleted?: boolean;
+  deleted_at?: string | null;
 }
 
 export default function InventoryModule() {
@@ -48,6 +50,7 @@ export default function InventoryModule() {
   const tab = searchParams ? searchParams.get("tab") : null;
 
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [allItems, setAllItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
   const [undoStack, setUndoStack] = useState<any[][]>(() => {
@@ -173,21 +176,12 @@ export default function InventoryModule() {
     let { data, error } = await supabase
       .from("inventory")
       .select("*")
-      .not("deleted", "eq", true)
       .order("name", { ascending: true });
     
-    if (error) {
-      console.warn("Fallo el filtro de base de datos 'deleted' en inventario, usando fallback local:", error.message);
-      const fallback = await supabase
-        .from("inventory")
-        .select("*")
-        .order("name", { ascending: true });
-      if (fallback.data) {
-        data = fallback.data.filter((c: any) => c.deleted !== true);
-        error = null;
-      }
+    if (data) {
+      setAllItems(data);
+      setItems(data.filter((item: any) => item.deleted !== true));
     }
-    if (data) setItems(data);
     if (error) console.error(error);
     setIsLoading(false);
   };
@@ -686,7 +680,7 @@ export default function InventoryModule() {
 
       <div
         className="glass-panel"
-        style={{ flex: 1, overflowY: "auto", overflowX: "auto", padding: "0" }}
+        style={{ flex: 1, overflowY: "auto", overflowX: "auto", padding: "0", maxHeight: "calc(100vh - 240px)" }}
       >
         {isLoading ? (
           <div
@@ -1082,7 +1076,7 @@ export default function InventoryModule() {
       {mounted && showImporter && createPortal(
         <SmartImporter
           avgMargin={avgMargin}
-          existingItems={items}
+          existingItems={allItems}
           onClose={clearTabParam}
           onImport={async (newProducts, isRestockMode) => {
             setIsLoading(true);
@@ -1093,7 +1087,7 @@ export default function InventoryModule() {
               const undoLog: any[] = [];
 
               for (const p of newProducts) {
-                 const existing = items.find(
+                 const existing = allItems.find(
                    (i) =>
                      (i.code && p.code && i.code.trim().toUpperCase() === p.code.trim().toUpperCase() && p.code !== "") ||
                      (normalizeString(i.name) === normalizeString(p.name))
@@ -1102,9 +1096,10 @@ export default function InventoryModule() {
                   undoLog.push({ id: existing.id, cost: existing.cost, price: existing.price, stock: existing.stock, supplier: existing.supplier, location: existing.location, priceChanged: existing.priceChanged });
                   
                   const inflationFlag = p.cost > existing.cost ? "up" : null;
-                  const newStock = isRestockMode ? existing.stock + p.stock : p.stock;
+                  const currentStock = existing.deleted ? 0 : existing.stock;
+                  const newStock = isRestockMode ? currentStock + p.stock : p.stock;
                   
-                  if (existing.stock <= existing.minStock && newStock > existing.minStock) {
+                  if (currentStock <= existing.minStock && newStock > existing.minStock) {
                     rescuedCount++;
                   }
 
@@ -1117,6 +1112,8 @@ export default function InventoryModule() {
                       supplier: p.supplier || existing.supplier,
                       location: p.location || existing.location,
                       priceChanged: inflationFlag,
+                      deleted: false,
+                      deleted_at: null,
                     })
                     .eq("id", existing.id);
                   if (updateError) throw updateError;

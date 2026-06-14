@@ -97,7 +97,7 @@ export default function LayawaysModule() {
             </style>
           </head>
           <body>
-            <div class="center bold" style="font-size: 16px; margin-bottom: 5px;">FERRETERÍA ERIKA</div>
+            <div class="center bold" style="font-size: 16px; margin-bottom: 5px;">${(typeof window !== 'undefined' ? localStorage.getItem("ERIKA_BIZ_NAME") : '') || "FERRETERÍA ERIKA"}</div>
             <div class="center" style="font-size: 12px;">Comprobante de Abono</div>
             <div class="divider"></div>
             <div style="font-size: 12px; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>

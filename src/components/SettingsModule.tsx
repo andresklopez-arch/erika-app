@@ -579,7 +579,7 @@ export default function SettingsModule() {
     const html = `
       <html><head><style>body { font-family: 'Courier New', monospace; font-size: 12px; margin: 0; padding: 10px; width: 58mm; color: #000; }</style></head>
       <body>
-        <h3 style="text-align:center; margin:0 0 5px 0;">FERRETERÍA ERIKA</h3>
+        <h3 style="text-align:center; margin:0 0 5px 0;">${businessName.toUpperCase()}</h3>
         <p style="text-align:center; margin:0 0 10px 0;">TICKET DE PRUEBA</p>
         <div style="border-bottom: 1px dashed #000; margin-bottom: 5px;"></div>
         <p style="text-align:center;">¡Impresora térmica configurada correctamente!</p>

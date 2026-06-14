@@ -139,7 +139,7 @@ export default function AccountsPayableModal({ onClose }: AccountsPayableModalPr
             </style>
           </head>
           <body>
-            <h2>FERRETERÍA ERIKA</h2>
+            <h2>${(typeof window !== 'undefined' ? localStorage.getItem("ERIKA_BIZ_NAME") : '') || "FERRETERÍA ERIKA"}</h2>
             <p>TICKET DE ABONO A PROVEEDOR</p>
             <div class="divider"></div>
             <div class="text-left">

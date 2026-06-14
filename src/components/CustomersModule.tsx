@@ -206,7 +206,7 @@ export default function CustomersModule() {
             </style>
           </head>
           <body>
-            <div class="center bold" style="font-size: 16px; margin-bottom: 5px;">FERRETERÍA ERIKA</div>
+            <div class="center bold" style="font-size: 16px; margin-bottom: 5px;">${(typeof window !== 'undefined' ? localStorage.getItem("ERIKA_BIZ_NAME") : '') || "FERRETERÍA ERIKA"}</div>
             <div class="center" style="font-size: 12px;">Comprobante de Abono</div>
             <div class="divider"></div>
             <div style="font-size: 12px; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
@@ -258,7 +258,7 @@ export default function CustomersModule() {
   // Acciones Rápidas: Cotizaciones (Quotes)
   const sendQuoteWhatsApp = (quote: any) => {
     const text =
-      `Hola ${quote.customer_name}, te enviamos tu cotización de *Ferretería Erika* por un total de *$${quote.total.toFixed(2)}*.\n\n` +
+      `Hola ${quote.customer_name}, te enviamos tu cotización de *${(typeof window !== 'undefined' ? localStorage.getItem("ERIKA_BIZ_NAME") : '') || "Ferretería Erika"}* por un total de *$${quote.total.toFixed(2)}*.\n\n` +
       quote.items.map((i: any) => `- ${i.qty} ${i.unit || 'pz'} ${i.name}`).join("\n") +
       `\n\nVálida por 7 días. ¡Quedamos a tus órdenes!`;
     const encodedText = encodeURIComponent(text);
@@ -285,7 +285,7 @@ export default function CustomersModule() {
     const html = `
       <html>
         <head>
-          <title>Cotización - Ferretería Erika</title>
+          <title>Cotización - ${(typeof window !== 'undefined' ? localStorage.getItem("ERIKA_BIZ_NAME") : '') || "Ferretería Erika"}</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -297,7 +297,7 @@ export default function CustomersModule() {
         <body>
           <div class="header">
             <div>
-              <h1 style="margin: 0; color: #eab308;">Ferretería Erika</h1>
+              <h1 style="margin: 0; color: #eab308;">${(typeof window !== 'undefined' ? localStorage.getItem("ERIKA_BIZ_NAME") : '') || "Ferretería Erika"}</h1>
               <p>Fecha: ${new Date(quote.created_at).toLocaleString()}</p>
             </div>
             <div style="text-align: right;">
@@ -1240,11 +1240,11 @@ export default function CustomersModule() {
             bottom: 0,
             background: "rgba(0,0,0,0.8)",
             display: "flex",
-            alignItems: "center",
+            alignItems: "flex-start",
             justifyContent: "center",
             zIndex: 1000,
             overflowY: "auto",
-            padding: "20px",
+            padding: "40px 20px",
           }}
         >
           <form

@@ -186,7 +186,7 @@ export default function ReportsModule() {
     const html = `
       <html>
         <head>
-          <title>Corte de Caja - Ferretería Erika</title>
+          <title>Corte de Caja - ${(typeof window !== 'undefined' ? localStorage.getItem("ERIKA_BIZ_NAME") : '') || "Ferretería Erika"}</title>
           <style>
             @media print {
               @page { margin: 0; }
@@ -201,7 +201,7 @@ export default function ReportsModule() {
           </style>
         </head>
         <body>
-          <h2>FERRETERÍA ERIKA</h2>
+          <h2>${((typeof window !== 'undefined' ? localStorage.getItem("ERIKA_BIZ_NAME") : '') || "Ferretería Erika").toUpperCase()}</h2>
           <p style="text-align: center;">--- CORTE DE CAJA ---</p>
           <div class="divider"></div>
           <p><strong>Apertura:</strong> ${new Date(session.opened_at).toLocaleString()}</p>
