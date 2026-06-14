@@ -13,6 +13,10 @@ function createBuilderProxy(originalBuilder: any, table: string, callHistory: an
           return target.then(async (result: any) => {
             const { error } = result;
             if (error && error.message) {
+              if (error.message.includes("row-level security policy")) {
+                error.message = `${error.message}. \n👉 SUGERENCIA ERIKA: Ejecuta la política RLS para la tabla '${table}' en el SQL Editor de tu panel de Supabase (el script está en supabase_corregir_seguridad_y_restricciones.sql).`;
+              }
+
               let missingColumn: string | null = null;
               
               if (error.message.includes("column") && error.message.includes("does not exist")) {
