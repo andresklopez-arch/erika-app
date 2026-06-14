@@ -280,7 +280,7 @@ export default function POSModule() {
   const [invoiceToken, setInvoiceToken] = useState("");
 
   useEffect(() => {
-    setInvoiceToken(`FAC-${activeTicketId}-${Date.now()}`);
+    setInvoiceToken(`FAC-${activeTicketId}-${crypto.randomUUID()}`);
   }, [activeTicketId, activeTicket.items.length === 0]);
 
   const updateOfflineStatus = async () => {

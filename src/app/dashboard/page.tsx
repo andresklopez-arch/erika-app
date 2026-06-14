@@ -2,6 +2,7 @@
 import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from "react";
 import dynamic from "next/dynamic";
 import ProtectedRoute from "../../components/ProtectedRoute";
+import { z } from "zod";
 import {
   BarChart,
   Bar,
@@ -118,6 +119,17 @@ const prefetchReports = () => {
 
 // Eliminado el inventario estatico ficticio en favor de agrupacion dinamica por BD
 
+const InventoryItemSchema = z.object({
+  id: z.string(),
+  code: z.string().optional().nullable(),
+  name: z.string().default("Producto sin nombre"),
+  price: z.preprocess((val) => Number(val) || 0, z.number()),
+  cost: z.preprocess((val) => Number(val) || 0, z.number()),
+  stock: z.preprocess((val) => Number(val) || 0, z.number()),
+  minStock: z.preprocess((val) => Number(val) || 5, z.number()),
+  supplier: z.string().optional().nullable(),
+});
+
 interface InventoryItem {
   id: string;
   code?: string;
@@ -185,6 +197,7 @@ export default function Dashboard() {
   const [overdueLayaways, setOverdueLayaways] = useState<LayawayItem[]>([]);
   const [overdueCustomers, setOverdueCustomers] = useState<CustomerItem[]>([]);
   const [inventoryDistData, setInventoryDistData] = useState<DistItem[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
 
   const changeTab = (tab: "dashboard" | "reportes") => {
     // Sanitización estricta del valor
@@ -228,6 +241,7 @@ export default function Dashboard() {
   }, [currentUser, canSeeDashboard, canSeeReportes, activeTab]);
 
   useEffect(() => {
+    setIsMounted(true);
     const dismissed = localStorage.getItem("erika_banner_dismissed") === "true";
     if (!dismissed) {
       setShowBanner(true);
@@ -328,16 +342,29 @@ export default function Dashboard() {
       // 5. Alertas Criticas e Inventario
       const { data: inv } = await supabase.from("inventory").select("*");
       if (inv) {
-        setLowStockAlerts(inv.filter((i) => (Number(i.stock) || 0) <= (Number(i.minStock) || 0)).slice(0, 5) as InventoryItem[]);
-        setInventoryValue(inv.reduce((sum, i) => sum + (Number(i.price) || 0) * (Number(i.stock) || 0), 0));
+        // Validacion en tiempo de ejecucion con Zod
+        const parsedInv = inv.map((item) => {
+          const result = InventoryItemSchema.safeParse(item);
+          if (!result.success) {
+            console.error("Error validando producto con Zod:", result.error);
+            return {
+              id: item.id || String(Math.random()),
+              name: item.name || "Invalido",
+              price: Number(item.price) || 0,
+              cost: Number(item.cost) || 0,
+              stock: Number(item.stock) || 0,
+              minStock: Number(item.minStock) || 5
+            };
+          }
+          return result.data;
+        }) as InventoryItem[];
+
+        setLowStockAlerts(parsedInv.filter((i) => i.stock <= i.minStock).slice(0, 5));
+        setInventoryValue(parsedInv.reduce((sum, i) => sum + i.price * i.stock, 0));
         
-        const validCostItems = inv.filter((i) => i.cost && Number(i.cost) > 0);
+        const validCostItems = parsedInv.filter((i) => i.cost > 0);
         const margin = validCostItems.length > 0
-          ? validCostItems.reduce((acc, i) => {
-              const cost = Number(i.cost);
-              const price = Number(i.price) || 0;
-              return acc + (price - cost) / cost;
-            }, 0) / validCostItems.length
+          ? validCostItems.reduce((acc, i) => acc + (i.price - i.cost) / i.cost, 0) / validCostItems.length
           : 0.35;
         setAvgMargin(margin);
 
@@ -348,11 +375,9 @@ export default function Dashboard() {
           "Herramientas": 0,
           "Otros": 0
         };
-        inv.forEach(item => {
+        parsedInv.forEach(item => {
           const name = (item.name || "").toLowerCase();
-          const price = Number(item.price) || 0;
-          const stock = Number(item.stock) || 0;
-          const value = price * stock;
+          const value = item.price * item.stock;
 
           if (name.includes("pintur") || name.includes("brocha") || name.includes("rodillo") || name.includes("sayer") || name.includes("comex") || name.includes("thinner")) {
             categories["Pinturas"] += value;
@@ -629,34 +654,36 @@ export default function Dashboard() {
                   📊 Flujo de Efectivo (Mes Actual)
                 </h3>
                 <div style={{ width: "100%", height: "300px" }}>
-                  <ResponsiveContainer>
-                    <BarChart data={incomeVsExpenses}>
-                      <XAxis
-                        dataKey="name"
-                        stroke="#fff"
-                        tick={{ fill: "#ccc", fontSize: 12 }}
-                      />
-                      <YAxis stroke="#fff" tick={{ fill: "#ccc" }} />
-                      <Tooltip
-                        cursor={{ fill: "rgba(255,255,255,0.1)" }}
-                        contentStyle={{
-                          background: "#111",
-                          border: "1px solid var(--color-primary)",
-                        }}
-                        formatter={(value: any) => `$${Number(value).toFixed(2)}`}
-                      />
-                      <Bar
-                        dataKey="Total"
-                        radius={[4, 4, 0, 0]}
-                      >
-                          {
-                            incomeVsExpenses.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.fill} />
-                            ))
-                          }
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {isMounted && (
+                    <ResponsiveContainer>
+                      <BarChart data={incomeVsExpenses}>
+                        <XAxis
+                          dataKey="name"
+                          stroke="#fff"
+                          tick={{ fill: "#ccc", fontSize: 12 }}
+                        />
+                        <YAxis stroke="#fff" tick={{ fill: "#ccc" }} />
+                        <Tooltip
+                          cursor={{ fill: "rgba(255,255,255,0.1)" }}
+                          contentStyle={{
+                            background: "#111",
+                            border: "1px solid var(--color-primary)",
+                          }}
+                          formatter={(value: any) => `$${Number(value).toFixed(2)}`}
+                        />
+                        <Bar
+                          dataKey="Total"
+                          radius={[4, 4, 0, 0]}
+                        >
+                            {
+                              incomeVsExpenses.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.fill} />
+                              ))
+                            }
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
 
                 <div style={{ marginTop: "20px" }}>
@@ -795,30 +822,32 @@ export default function Dashboard() {
                   >
                     📦 Valor del Inventario
                   </h3>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={inventoryDistData}
-                        innerRadius={50}
-                        outerRadius={70}
-                        paddingAngle={5}
-                        dataKey="value"
-                      >
-                        {inventoryDistData.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={COLORS[index % COLORS.length]}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          background: "#111",
-                          border: "1px solid #3b82f6",
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  {isMounted && (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={inventoryDistData}
+                          innerRadius={50}
+                          outerRadius={70}
+                          paddingAngle={5}
+                          dataKey="value"
+                        >
+                          {inventoryDistData.map((entry, index) => (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={COLORS[index % COLORS.length]}
+                            />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
+                            background: "#111",
+                            border: "1px solid #3b82f6",
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
               </div>
             </div>
