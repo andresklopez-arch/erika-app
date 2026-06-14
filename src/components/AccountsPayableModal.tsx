@@ -92,7 +92,7 @@ export default function AccountsPayableModal({ onClose }: AccountsPayableModalPr
       penalty_rate_percent: parseFloat(penaltyRate) || 0
     });
     if (error) {
-      alert("Error al registrar la deuda.");
+      alert("Error al registrar la deuda: " + error.message);
       console.error(error);
     } else {
       alert("✅ Deuda registrada.");
