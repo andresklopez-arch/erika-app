@@ -395,7 +395,7 @@ export default function POSModule() {
             matched.image_url,
           );
           let msg = `Escaneado: ${matched.name}.`;
-          if (matched.stock <= matched.min_stock)
+          if (matched.stock <= matched.minStock)
             msg += ` Alerta: Quedan pocas unidades en bodega.`;
           speak(msg);
         } else {
@@ -1105,7 +1105,7 @@ export default function POSModule() {
               matched.image_url,
             );
             let msg = `Visión detectada. ${matched.name} agregado.`;
-            if (matched.stock <= matched.min_stock)
+            if (matched.stock <= matched.minStock)
               msg += ` Alerta: Quedan pocas unidades en bodega.`;
             speak(msg);
           } else {

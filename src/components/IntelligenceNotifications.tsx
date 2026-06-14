@@ -77,16 +77,6 @@ export default function IntelligenceNotifications() {
         });
       }
 
-      // Si no hay alertas reales, agregamos una informativa del motor IA ERIKA
-      if (activeAlerts.length === 0) {
-        activeAlerts.push({
-          id: "erika-ok",
-          type: "info",
-          message: "🟢 ERIKA: Operaciones estables. No hay alertas de fugas o fallas de stock hoy.",
-          targetPath: "/dashboard"
-        });
-      }
-
       setAlerts(activeAlerts);
     } catch (e) {
       console.error("Error al cargar alertas de inteligencia:", e);
@@ -323,33 +313,46 @@ export default function IntelligenceNotifications() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "250px", overflowY: "auto" }}>
-              {alerts.map((alert) => {
-                const borderCol = alert.type === "critical" ? "#ef4444" : alert.type === "warning" ? "#eab308" : "#10b981";
-                const bgCol = alert.type === "critical" ? "rgba(239, 68, 68, 0.05)" : alert.type === "warning" ? "rgba(234, 179, 8, 0.05)" : "rgba(16, 185, 129, 0.05)";
-                return (
-                  <div
-                    key={alert.id}
-                    onClick={() => handleAlertClick(alert.targetPath)}
-                    style={{
-                      background: bgCol,
-                      borderLeft: `4px solid ${borderCol}`,
-                      border: `1px solid rgba(255,255,255,0.03)`,
-                      borderLeftWidth: "4px",
-                      padding: "10px",
-                      borderRadius: "8px",
-                      cursor: "pointer",
-                      fontSize: "0.8rem",
-                      color: "white",
-                      transition: "all 0.2s ease",
-                      textAlign: "left"
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
-                    onMouseLeave={(e) => e.currentTarget.style.background = bgCol}
-                  >
-                    {alert.message}
-                  </div>
-                );
-              })}
+              {alerts.length === 0 ? (
+                <div style={{
+                  padding: "15px",
+                  color: "rgba(255,255,255,0.4)",
+                  fontSize: "0.85rem",
+                  textAlign: "center",
+                  border: "1px dashed rgba(255,255,255,0.1)",
+                  borderRadius: "8px"
+                }}>
+                  No hay alertas activas hoy
+                </div>
+              ) : (
+                alerts.map((alert) => {
+                  const borderCol = alert.type === "critical" ? "#ef4444" : alert.type === "warning" ? "#eab308" : "#10b981";
+                  const bgCol = alert.type === "critical" ? "rgba(239, 68, 68, 0.05)" : alert.type === "warning" ? "rgba(234, 179, 8, 0.05)" : "rgba(16, 185, 129, 0.05)";
+                  return (
+                    <div
+                      key={alert.id}
+                      onClick={() => handleAlertClick(alert.targetPath)}
+                      style={{
+                        background: bgCol,
+                        borderLeft: `4px solid ${borderCol}`,
+                        border: `1px solid rgba(255,255,255,0.03)`,
+                        borderLeftWidth: "4px",
+                        padding: "10px",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        fontSize: "0.8rem",
+                        color: "white",
+                        transition: "all 0.2s ease",
+                        textAlign: "left"
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+                      onMouseLeave={(e) => e.currentTarget.style.background = bgCol}
+                    >
+                      {alert.message}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>

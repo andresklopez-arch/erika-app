@@ -116,12 +116,7 @@ const prefetchReports = () => {
   import("../../components/ReportsModule").catch(() => {});
 };
 
-const INVENTORY_DIST_DATA = [
-  { name: "Construcción", value: 45 },
-  { name: "Pinturas", value: 25 },
-  { name: "Herramientas", value: 20 },
-  { name: "Eléctrico", value: 10 },
-];
+// Eliminado el inventario estatico ficticio en favor de agrupacion dinamica por BD
 
 const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444"];
 
@@ -146,6 +141,7 @@ export default function Dashboard() {
   const [hasPlayedBell, setHasPlayedBell] = useState(false);
   const [overdueLayaways, setOverdueLayaways] = useState<any[]>([]);
   const [overdueCustomers, setOverdueCustomers] = useState<any[]>([]);
+  const [inventoryDistData, setInventoryDistData] = useState<any[]>([]);
 
   const changeTab = (tab: "dashboard" | "reportes") => {
     // Sanitización estricta del valor
@@ -286,10 +282,10 @@ export default function Dashboard() {
       }
       if (customerData) setTopCustomers(customerData);
 
-      // 5. Alertas Críticas e Inventario
+      // 5. Alertas Criticas e Inventario
       const { data: inv } = await supabase.from("inventory").select("*");
       if (inv) {
-        setLowStockAlerts(inv.filter((i) => i.stock <= i.min_stock).slice(0, 5));
+        setLowStockAlerts(inv.filter((i) => i.stock <= i.minStock).slice(0, 5));
         setInventoryValue(inv.reduce((sum, i) => sum + i.price * i.stock, 0));
         const margin = inv.length > 0 
           ? inv.reduce((acc, i) => {
@@ -298,6 +294,34 @@ export default function Dashboard() {
             }, 0) / (inv.filter((i) => i.cost > 0).length || 1)
           : 0.35;
         setAvgMargin(margin);
+
+        // Agrupacion dinamica real del valor de inventario por categoria
+        const categories: { [key: string]: number } = {
+          "Construccion": 0,
+          "Pinturas": 0,
+          "Herramientas": 0,
+          "Otros": 0
+        };
+        inv.forEach(item => {
+          const name = (item.name || "").toLowerCase();
+          if (name.includes("pintur") || name.includes("brocha") || name.includes("rodillo") || name.includes("sayer") || name.includes("comex") || name.includes("thinner")) {
+            categories["Pinturas"] += item.price * item.stock;
+          } else if (name.includes("cemento") || name.includes("yeso") || name.includes("varilla") || name.includes("arena") || name.includes("concreto")) {
+            categories["Construccion"] += item.price * item.stock;
+          } else if (name.includes("martillo") || name.includes("pala") || name.includes("carretilla") || name.includes("pinza") || name.includes("llave") || name.includes("truper")) {
+            categories["Herramientas"] += item.price * item.stock;
+          } else {
+            categories["Otros"] += item.price * item.stock;
+          }
+        });
+        const distData = Object.keys(categories)
+          .map(name => ({ name, value: categories[name] }))
+          .filter(c => c.value > 0);
+        
+        if (distData.length === 0) {
+          distData.push({ name: "Sin Inventario", value: 1 });
+        }
+        setInventoryDistData(distData);
       }
 
       // 6. Income vs Expenses Graph (Current Month)
@@ -474,7 +498,7 @@ export default function Dashboard() {
                       <div key={item.id} style={{ background: "rgba(0,0,0,0.3)", padding: "8px 12px", borderRadius: "6px", border: "1px solid #ef4444" }}>
                         <strong style={{ color: "white" }}>{item.name}</strong>
                         <br />
-                        <span style={{ fontSize: "0.85rem", color: "#fca5a5" }}>Stock: {item.stock} / Mín: {item.min_stock}</span>
+                        <span style={{ fontSize: "0.85rem", color: "#fca5a5" }}>Stock: {item.stock} / Mín: {item.minStock}</span>
                       </div>
                    ))}
                 </div>
@@ -664,7 +688,7 @@ export default function Dashboard() {
                       >
                         <span>📉 Bajo Stock: {alert.name}</span>
                         <strong style={{ color: "#f59e0b" }}>
-                          {alert.stock} (Min: {alert.min_stock})
+                          {alert.stock} (Min: {alert.minStock})
                         </strong>
                       </li>
                     ))}
@@ -724,13 +748,13 @@ export default function Dashboard() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={INVENTORY_DIST_DATA}
+                        data={inventoryDistData}
                         innerRadius={50}
                         outerRadius={70}
                         paddingAngle={5}
                         dataKey="value"
                       >
-                        {INVENTORY_DIST_DATA.map((entry, index) => (
+                        {inventoryDistData.map((entry, index) => (
                           <Cell
                             key={`cell-${index}`}
                             fill={COLORS[index % COLORS.length]}
