@@ -99,7 +99,9 @@ export default function InventoryModule() {
           stock: log.stock,
           supplier: log.supplier,
           location: log.location,
-          priceChanged: log.priceChanged
+          priceChanged: log.priceChanged,
+          deleted: log.deleted,
+          deleted_at: log.deleted_at
         }).eq("id", log.id);
       }
     }
@@ -176,11 +178,11 @@ export default function InventoryModule() {
     let { data, error } = await supabase
       .from("inventory")
       .select("*")
+      .not("deleted", "eq", true)
       .order("name", { ascending: true });
     
     if (data) {
-      setAllItems(data);
-      setItems(data.filter((item: any) => item.deleted !== true));
+      setItems(data);
     }
     if (error) console.error(error);
     setIsLoading(false);
@@ -302,6 +304,25 @@ export default function InventoryModule() {
     setMounted(true);
     fetchInventory(false);
   }, []);
+
+  const loadAllItemsForImport = async () => {
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from("inventory")
+      .select("*")
+      .order("name", { ascending: true });
+    if (data) {
+      setAllItems(data);
+    }
+    if (error) console.error(error);
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    if (showImporter) {
+      loadAllItemsForImport();
+    }
+  }, [showImporter]);
 
   useEffect(() => {
     if (tab && tab !== "criticos") {
@@ -1093,7 +1114,17 @@ export default function InventoryModule() {
                      (normalizeString(i.name) === normalizeString(p.name))
                  );
                 if (existing) {
-                  undoLog.push({ id: existing.id, cost: existing.cost, price: existing.price, stock: existing.stock, supplier: existing.supplier, location: existing.location, priceChanged: existing.priceChanged });
+                  undoLog.push({ 
+                    id: existing.id, 
+                    cost: existing.cost, 
+                    price: existing.price, 
+                    stock: existing.stock, 
+                    supplier: existing.supplier, 
+                    location: existing.location, 
+                    priceChanged: existing.priceChanged,
+                    deleted: existing.deleted || false,
+                    deleted_at: existing.deleted_at || null
+                  });
                   
                   const inflationFlag = p.cost > existing.cost ? "up" : null;
                   const currentStock = existing.deleted ? 0 : existing.stock;

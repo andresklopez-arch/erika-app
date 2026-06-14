@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useBusinessProfile } from "./AuthProvider";
 
 interface Supplier {
   id: string;
@@ -24,6 +25,7 @@ interface AccountsPayableModalProps {
 }
 
 export default function AccountsPayableModal({ onClose }: AccountsPayableModalProps) {
+  const businessProfile = useBusinessProfile();
   const [debts, setDebts] = useState<Debt[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -139,7 +141,7 @@ export default function AccountsPayableModal({ onClose }: AccountsPayableModalPr
             </style>
           </head>
           <body>
-            <h2>${(typeof window !== 'undefined' ? localStorage.getItem("ERIKA_BIZ_NAME") : '') || "FERRETERÍA ERIKA"}</h2>
+            <h2>${businessProfile.name.toUpperCase()}</h2>
             <p>TICKET DE ABONO A PROVEEDOR</p>
             <div class="divider"></div>
             <div class="text-left">

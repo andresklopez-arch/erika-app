@@ -49,6 +49,42 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
+export const useBusinessProfile = () => {
+  const { businessSettings } = useAuth();
+  const [profile, setProfile] = useState<any>({
+    name: "Ferretería ERIKA",
+    rfc: "",
+    phone: "",
+    email: "",
+    address: "",
+    logo: ""
+  });
+
+  useEffect(() => {
+    if (businessSettings && businessSettings.config) {
+      setProfile({
+        name: businessSettings.config.business_name || "Ferretería ERIKA",
+        rfc: businessSettings.config.business_rfc || "",
+        phone: businessSettings.config.business_phone || "",
+        email: businessSettings.config.business_email || "",
+        address: businessSettings.config.business_address || "",
+        logo: businessSettings.config.business_logo || ""
+      });
+    } else {
+      setProfile({
+        name: localStorage.getItem("ERIKA_BIZ_NAME") || "Ferretería ERIKA",
+        rfc: localStorage.getItem("ERIKA_BIZ_RFC") || "",
+        phone: localStorage.getItem("ERIKA_BIZ_PHONE") || "",
+        email: localStorage.getItem("ERIKA_BIZ_EMAIL") || "",
+        address: localStorage.getItem("ERIKA_BIZ_ADDR") || "",
+        logo: localStorage.getItem("ERIKA_BIZ_LOGO") || ""
+      });
+    }
+  }, [businessSettings]);
+
+  return profile;
+};
+
 export default function AuthProvider({
   children,
 }: {

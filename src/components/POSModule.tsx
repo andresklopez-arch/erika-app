@@ -12,7 +12,7 @@ import {
 } from "../lib/offlineSync";
 import PosScannerModal from "./PosScannerModal";
 import PosCreditModal from "./PosCreditModal";
-import { useAuth } from "./AuthProvider";
+import { useAuth, useBusinessProfile } from "./AuthProvider";
 import { CustomerSchema, CashSessionSchema } from "../lib/schemas";
 
 interface POSItem {
@@ -124,7 +124,8 @@ const renderHighlightedName = (name: string, query: string) => {
 };
 
 export default function POSModule() {
-  const { currentUser, businessSettings } = useAuth();
+  const { currentUser } = useAuth();
+  const businessProfile = useBusinessProfile();
   const [globalCatalog, setGlobalCatalog] = useState<any[]>([]);
   const [offlinePendingCount, setOfflinePendingCount] = useState(0);
 
@@ -157,30 +158,6 @@ export default function POSModule() {
       discountPct: sWP > 0 ? sWP : 10
     });
   }, []);
-
-  useEffect(() => {
-    if (businessSettings && businessSettings.config) {
-      setBusinessProfile({
-        name: businessSettings.config.business_name || "Ferretería ERIKA",
-        rfc: businessSettings.config.business_rfc || "",
-        phone: businessSettings.config.business_phone || "",
-        email: businessSettings.config.business_email || "",
-        address: businessSettings.config.business_address || "",
-        logo: businessSettings.config.business_logo || ""
-      });
-    } else {
-      setBusinessProfile({
-        name: localStorage.getItem("ERIKA_BIZ_NAME") || "Ferretería ERIKA",
-        rfc: localStorage.getItem("ERIKA_BIZ_RFC") || "",
-        phone: localStorage.getItem("ERIKA_BIZ_PHONE") || "",
-        email: localStorage.getItem("ERIKA_BIZ_EMAIL") || "",
-        address: localStorage.getItem("ERIKA_BIZ_ADDR") || "",
-        logo: localStorage.getItem("ERIKA_BIZ_LOGO") || ""
-      });
-    }
-  }, [businessSettings]);
-
-  const [businessProfile, setBusinessProfile] = useState<any>({});
 
   const [tickets, setTickets] = useState<Ticket[]>([
     { id: 1, items: [], discountPct: 0 },

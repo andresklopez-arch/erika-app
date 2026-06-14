@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { useAuth } from "./AuthProvider";
+import { useAuth, useBusinessProfile } from "./AuthProvider";
 
 interface CashSession {
   id: string;
@@ -21,6 +21,7 @@ interface CashSession {
 
 export default function ReportsModule() {
   const { businessSettings } = useAuth();
+  const businessProfile = useBusinessProfile();
   const monthlyGoal = businessSettings.monthly_goals;
 
   const [netProfit, setNetProfit] = useState({
@@ -186,7 +187,7 @@ export default function ReportsModule() {
     const html = `
       <html>
         <head>
-          <title>Corte de Caja - ${(typeof window !== 'undefined' ? localStorage.getItem("ERIKA_BIZ_NAME") : '') || "Ferretería Erika"}</title>
+          <title>Corte de Caja - ${businessProfile.name}</title>
           <style>
             @media print {
               @page { margin: 0; }
@@ -201,7 +202,7 @@ export default function ReportsModule() {
           </style>
         </head>
         <body>
-          <h2>${((typeof window !== 'undefined' ? localStorage.getItem("ERIKA_BIZ_NAME") : '') || "Ferretería Erika").toUpperCase()}</h2>
+          <h2>${businessProfile.name.toUpperCase()}</h2>
           <p style="text-align: center;">--- CORTE DE CAJA ---</p>
           <div class="divider"></div>
           <p><strong>Apertura:</strong> ${new Date(session.opened_at).toLocaleString()}</p>

@@ -2,8 +2,10 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { LayawaySchema } from "../lib/schemas";
+import { useBusinessProfile } from "./AuthProvider";
 
 export default function LayawaysModule() {
+  const businessProfile = useBusinessProfile();
   const [layaways, setLayaways] = useState<any[]>([]);
   const [limit, setLimit] = useState(20);
   const [hasMore, setHasMore] = useState(true);
@@ -97,7 +99,7 @@ export default function LayawaysModule() {
             </style>
           </head>
           <body>
-            <div class="center bold" style="font-size: 16px; margin-bottom: 5px;">${(typeof window !== 'undefined' ? localStorage.getItem("ERIKA_BIZ_NAME") : '') || "FERRETERÍA ERIKA"}</div>
+            <div class="center bold" style="font-size: 16px; margin-bottom: 5px;">${businessProfile.name.toUpperCase()}</div>
             <div class="center" style="font-size: 12px;">Comprobante de Abono</div>
             <div class="divider"></div>
             <div style="font-size: 12px; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
