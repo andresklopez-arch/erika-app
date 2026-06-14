@@ -866,13 +866,25 @@ export default function POSModule() {
       }
 
       let realTicketId = Date.now();
-      const { data: quoteData } = await supabase.from("quotes").insert({
+      let insertQuoteRes = await supabase.from("quotes").insert({
          customer_name: selectedCustomerId ? (customers.find(c => c.id === selectedCustomerId)?.name || "Venta Registrada") : "Venta Mostrador",
          customer_id: selectedCustomerId || null,
          items: activeTicket.items,
          total: totalAmt,
          status: "ticket"
       }).select("id").single();
+
+      if (insertQuoteRes.error && insertQuoteRes.error.message.includes("customer_id")) {
+         console.warn("Columna customer_id no existe en 'quotes', reintentando sin ella...");
+         insertQuoteRes = await supabase.from("quotes").insert({
+            customer_name: selectedCustomerId ? (customers.find(c => c.id === selectedCustomerId)?.name || "Venta Registrada") : "Venta Mostrador",
+            items: activeTicket.items,
+            total: totalAmt,
+            status: "ticket"
+         }).select("id").single();
+      }
+
+      const { data: quoteData } = insertQuoteRes;
       if (quoteData) {
          realTicketId = quoteData.id;
          try {
@@ -2019,7 +2031,7 @@ export default function POSModule() {
                 );
                 if (!customerName) return;
 
-                const { error } = await supabase.from("quotes").insert({
+                let insertResult = await supabase.from("quotes").insert({
                   customer_name: customerName,
                   customer_id: selectedCustomerId || null,
                   items: activeTicket.items,
@@ -2027,6 +2039,17 @@ export default function POSModule() {
                   status: "pending",
                 });
 
+                if (insertResult.error && insertResult.error.message.includes("customer_id")) {
+                  console.warn("Columna customer_id no existe en 'quotes', reintentando sin ella...");
+                  insertResult = await supabase.from("quotes").insert({
+                    customer_name: customerName,
+                    items: activeTicket.items,
+                    total: finalTotal,
+                    status: "pending",
+                  });
+                }
+
+                const { error } = insertResult;
                 if (error)
                   return alert("Error al guardar cotización: " + error.message);
                 alert("✅ Cotización guardada con éxito.");

@@ -139,12 +139,24 @@ export default function CustomersModule() {
   };
 
   const fetchCustomerQuotes = async (custId: string, customerName: string, limitVal: number = quotesLimit) => {
-    const { data } = await supabase
+    let { data, error } = await supabase
       .from("quotes")
       .select("*")
       .or(`customer_id.eq.${custId},customer_name.eq.${customerName}`)
       .order("created_at", { ascending: false })
       .limit(limitVal);
+
+    if (error && error.message.includes("customer_id")) {
+      console.warn("Columna customer_id no existe en 'quotes', reintentando buscar solo por customer_name...");
+      const fallbackResult = await supabase
+        .from("quotes")
+        .select("*")
+        .eq("customer_name", customerName)
+        .order("created_at", { ascending: false })
+        .limit(limitVal);
+      data = fallbackResult.data;
+    }
+
     if (data) setCustomerQuotes(data);
   };
 
