@@ -153,10 +153,10 @@ export default function ServicesModule() {
       }
       setShowModal(false);
       fetchServices();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       LoggerService.logError("ServicesModule_handleSave", err);
-      toast.error("Error al guardar la cita en la base de datos.");
+      toast.error("Error al guardar la cita: " + (err.message || "Error de base de datos"));
     } finally {
       setLoading(false);
     }
