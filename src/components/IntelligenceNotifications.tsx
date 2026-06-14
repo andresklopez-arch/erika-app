@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./AuthProvider";
+import Image from "next/image";
 
 interface AlertItem {
   id: string;
@@ -173,12 +174,12 @@ export default function IntelligenceNotifications() {
             boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
           }}
         >
-          <img
+          <Image
             src="/erika_avatar.png"
             alt="ERIKA"
+            width={24}
+            height={24}
             style={{
-              width: "24px",
-              height: "24px",
               borderRadius: "50%",
               border: "1.5px solid var(--color-primary)",
               objectFit: "cover"
@@ -265,10 +266,12 @@ export default function IntelligenceNotifications() {
           {/* SECCIÓN PERFIL DE EMPLEADO */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: "12px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <img
+              <Image
                 src="/erika_avatar.png"
                 alt="Avatar"
-                style={{ width: "36px", height: "36px", borderRadius: "50%", border: "2px solid var(--color-primary)", objectFit: "cover" }}
+                width={36}
+                height={36}
+                style={{ borderRadius: "50%", border: "2px solid var(--color-primary)", objectFit: "cover" }}
               />
               <div style={{ display: "flex", flexDirection: "column", textAlign: "left" }}>
                 <span style={{ fontSize: "0.9rem", fontWeight: "bold", color: "white" }}>{currentUser?.name || "Cajero"}</span>

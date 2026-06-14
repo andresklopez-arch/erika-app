@@ -118,6 +118,49 @@ const prefetchReports = () => {
 
 // Eliminado el inventario estatico ficticio en favor de agrupacion dinamica por BD
 
+interface InventoryItem {
+  id: string;
+  code?: string;
+  name: string;
+  price: number;
+  cost: number;
+  stock: number;
+  minStock: number;
+  supplier?: string;
+}
+
+interface DiscrepancyItem {
+  id: string;
+  discrepancy: number;
+  closed_at: string;
+  opened_by?: string;
+}
+
+interface CustomerItem {
+  id: string;
+  name: string;
+  balance: number;
+  credit_limit: number;
+}
+
+interface LayawayItem {
+  id: string;
+  customer_name: string;
+  balance: number;
+  due_date: string;
+}
+
+interface FlowItem {
+  name: string;
+  Total: number;
+  fill: string;
+}
+
+interface DistItem {
+  name: string;
+  value: number;
+}
+
 const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444"];
 
 export default function Dashboard() {
@@ -131,17 +174,17 @@ export default function Dashboard() {
   const canSeeReportes = isAdmin || p.reportes;
 
   const [salesToday, setSalesToday] = useState(0);
-  const [discrepancies, setDiscrepancies] = useState<any[]>([]);
-  const [lowStockAlerts, setLowStockAlerts] = useState<any[]>([]);
-  const [topCustomers, setTopCustomers] = useState<any[]>([]);
+  const [discrepancies, setDiscrepancies] = useState<DiscrepancyItem[]>([]);
+  const [lowStockAlerts, setLowStockAlerts] = useState<InventoryItem[]>([]);
+  const [topCustomers, setTopCustomers] = useState<CustomerItem[]>([]);
   const [inventoryValue, setInventoryValue] = useState(0);
   const [avgMargin, setAvgMargin] = useState(0);
   
-  const [incomeVsExpenses, setIncomeVsExpenses] = useState<any[]>([]);
+  const [incomeVsExpenses, setIncomeVsExpenses] = useState<FlowItem[]>([]);
   const [hasPlayedBell, setHasPlayedBell] = useState(false);
-  const [overdueLayaways, setOverdueLayaways] = useState<any[]>([]);
-  const [overdueCustomers, setOverdueCustomers] = useState<any[]>([]);
-  const [inventoryDistData, setInventoryDistData] = useState<any[]>([]);
+  const [overdueLayaways, setOverdueLayaways] = useState<LayawayItem[]>([]);
+  const [overdueCustomers, setOverdueCustomers] = useState<CustomerItem[]>([]);
+  const [inventoryDistData, setInventoryDistData] = useState<DistItem[]>([]);
 
   const changeTab = (tab: "dashboard" | "reportes") => {
     // Sanitización estricta del valor
@@ -285,13 +328,16 @@ export default function Dashboard() {
       // 5. Alertas Criticas e Inventario
       const { data: inv } = await supabase.from("inventory").select("*");
       if (inv) {
-        setLowStockAlerts(inv.filter((i) => i.stock <= i.minStock).slice(0, 5));
-        setInventoryValue(inv.reduce((sum, i) => sum + i.price * i.stock, 0));
-        const margin = inv.length > 0 
-          ? inv.reduce((acc, i) => {
-              if (!i.cost || i.cost <= 0) return acc;
-              return acc + (i.price - i.cost) / i.cost;
-            }, 0) / (inv.filter((i) => i.cost > 0).length || 1)
+        setLowStockAlerts(inv.filter((i) => (Number(i.stock) || 0) <= (Number(i.minStock) || 0)).slice(0, 5) as InventoryItem[]);
+        setInventoryValue(inv.reduce((sum, i) => sum + (Number(i.price) || 0) * (Number(i.stock) || 0), 0));
+        
+        const validCostItems = inv.filter((i) => i.cost && Number(i.cost) > 0);
+        const margin = validCostItems.length > 0
+          ? validCostItems.reduce((acc, i) => {
+              const cost = Number(i.cost);
+              const price = Number(i.price) || 0;
+              return acc + (price - cost) / cost;
+            }, 0) / validCostItems.length
           : 0.35;
         setAvgMargin(margin);
 
@@ -304,14 +350,18 @@ export default function Dashboard() {
         };
         inv.forEach(item => {
           const name = (item.name || "").toLowerCase();
+          const price = Number(item.price) || 0;
+          const stock = Number(item.stock) || 0;
+          const value = price * stock;
+
           if (name.includes("pintur") || name.includes("brocha") || name.includes("rodillo") || name.includes("sayer") || name.includes("comex") || name.includes("thinner")) {
-            categories["Pinturas"] += item.price * item.stock;
+            categories["Pinturas"] += value;
           } else if (name.includes("cemento") || name.includes("yeso") || name.includes("varilla") || name.includes("arena") || name.includes("concreto")) {
-            categories["Construccion"] += item.price * item.stock;
+            categories["Construccion"] += value;
           } else if (name.includes("martillo") || name.includes("pala") || name.includes("carretilla") || name.includes("pinza") || name.includes("llave") || name.includes("truper")) {
-            categories["Herramientas"] += item.price * item.stock;
+            categories["Herramientas"] += value;
           } else {
-            categories["Otros"] += item.price * item.stock;
+            categories["Otros"] += value;
           }
         });
         const distData = Object.keys(categories)

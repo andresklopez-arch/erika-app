@@ -277,6 +277,12 @@ export default function POSModule() {
   const activeTicket =
     tickets.find((t) => t.id === activeTicketId) || tickets[0];
 
+  const [invoiceToken, setInvoiceToken] = useState("");
+
+  useEffect(() => {
+    setInvoiceToken(`FAC-${activeTicketId}-${Date.now()}`);
+  }, [activeTicketId, activeTicket.items.length === 0]);
+
   const updateOfflineStatus = async () => {
     setIsOffline(!navigator.onLine);
     if (navigator.onLine) {
@@ -2128,8 +2134,8 @@ export default function POSModule() {
         
         <div style={{ marginTop: "50px", textAlign: "center", color: "#888", fontSize: "12px", borderTop: "1px solid #eee", paddingTop: "20px" }}>
           <p style={{ color: "#000", fontWeight: "bold", marginBottom: "10px" }}>Auto-Facturación Express</p>
-          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=http://localhost:3000/facturacion/${Date.now()}`} alt="QR Code" style={{ width: "100px", height: "100px" }} />
-          <p>Escanea este código o entra a localhost:3000/facturacion</p>
+          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://erika-app.vercel.app/facturacion/${invoiceToken}`} alt="QR Code" style={{ width: "100px", height: "100px" }} />
+          <p>Escanea este código o entra a erika-app.vercel.app/facturacion</p>
           <p style={{ marginTop: "20px" }}>¡Gracias por su preferencia!</p>
         </div>
       </div>
