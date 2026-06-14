@@ -229,7 +229,15 @@ export default function Dashboard() {
       }
 
       // Fetch Overdue Customers (Credit limit exceeded)
-      const { data: custs, error: custsError } = await supabase.from("customers").select("*").gt("balance", 0).not("deleted", "eq", true);
+      let { data: custs, error: custsError } = await supabase.from("customers").select("*").gt("balance", 0).not("deleted", "eq", true);
+      if (custsError) {
+         console.warn("Fallo el filtro de base de datos 'deleted' en deudores del Dashboard, usando fallback local:", custsError.message);
+         const fallback = await supabase.from("customers").select("*").gt("balance", 0);
+         if (fallback.data) {
+            custs = fallback.data.filter((c: any) => c.deleted !== true);
+            custsError = null;
+         }
+      }
       if (custsError) {
          console.error("Error al cargar clientes deudores en Dashboard:", custsError);
          LoggerService.logError("Dashboard_fetchOverdueCustomers", custsError);
@@ -259,12 +267,23 @@ export default function Dashboard() {
       }
 
       // 4. Clientes VIP
-      const { data: customerData } = await supabase
+      let { data: customerData, error: customerDataError } = await supabase
         .from("customers")
         .select("*")
         .not("deleted", "eq", true)
         .order("balance", { ascending: false })
         .limit(5);
+      
+      if (customerDataError) {
+        console.warn("Fallo el filtro de base de datos 'deleted' en clientes VIP del Dashboard, usando fallback local:", customerDataError.message);
+        const fallback = await supabase
+          .from("customers")
+          .select("*")
+          .order("balance", { ascending: false });
+        if (fallback.data) {
+          customerData = fallback.data.filter((c: any) => c.deleted !== true).slice(0, 5);
+        }
+      }
       if (customerData) setTopCustomers(customerData);
 
       // 5. Alertas Críticas e Inventario

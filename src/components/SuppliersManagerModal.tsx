@@ -48,7 +48,15 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
 
   const fetchSuppliers = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase.from("suppliers").select("*").not("deleted", "eq", true).order("name");
+    let { data, error } = await supabase.from("suppliers").select("*").not("deleted", "eq", true).order("name");
+    if (error) {
+      console.warn("Fallo el filtro de base de datos 'deleted' en proveedores, usando fallback local:", error.message);
+      const fallback = await supabase.from("suppliers").select("*").order("name");
+      if (fallback.data) {
+        data = fallback.data.filter((s: any) => s.deleted !== true);
+        error = null;
+      }
+    }
     if (!error && data) setSuppliers(data);
     setIsLoading(false);
   };

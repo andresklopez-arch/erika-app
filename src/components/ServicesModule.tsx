@@ -45,11 +45,23 @@ export default function ServicesModule() {
     setLoading(true);
     setDbError(false);
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("services")
         .select("*")
         .not("deleted", "eq", true)
         .order("scheduled_at", { ascending: true });
+
+      if (error) {
+        console.warn("Fallo el filtro de base de datos 'deleted' en servicios, usando fallback local:", error.message);
+        const fallback = await supabase
+          .from("services")
+          .select("*")
+          .order("scheduled_at", { ascending: true });
+        if (fallback.data) {
+          data = fallback.data.filter((s: any) => s.deleted !== true);
+          error = null;
+        }
+      }
 
       if (error) {
         console.error("Supabase error fetching services:", error);

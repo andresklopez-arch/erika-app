@@ -31,11 +31,19 @@ export default function CustomersModule() {
   const [undoCustomerName, setUndoCustomerName] = useState("");
 
   const fetchCustomers = async () => {
-    const { data, error } = await supabase.from("customers").select("*").not("deleted", "eq", true);
+    let { data, error } = await supabase.from("customers").select("*").not("deleted", "eq", true);
     if (error) {
-      console.error("Error al cargar clientes:", error);
-      toast.error(`Error de Base de Datos al cargar clientes: ${error.message}`);
-    } else if (data) {
+      console.warn("Fallo el filtro de base de datos 'deleted' en CustomersModule, usando fallback local:", error.message);
+      const fallback = await supabase.from("customers").select("*");
+      if (fallback.error) {
+        console.error("Error al cargar clientes (fallback):", fallback.error);
+        toast.error(`Error de Base de Datos al cargar clientes: ${fallback.error.message}`);
+      } else if (fallback.data) {
+        data = fallback.data.filter((c: any) => c.deleted !== true);
+        error = null;
+      }
+    }
+    if (!error && data) {
       setCustomers(data);
     }
   };

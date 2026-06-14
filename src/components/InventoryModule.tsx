@@ -170,11 +170,23 @@ export default function InventoryModule() {
 
   const fetchInventory = async (showLoading = false) => {
     if (showLoading) setIsLoading(true);
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("inventory")
       .select("*")
       .not("deleted", "eq", true)
       .order("name", { ascending: true });
+    
+    if (error) {
+      console.warn("Fallo el filtro de base de datos 'deleted' en inventario, usando fallback local:", error.message);
+      const fallback = await supabase
+        .from("inventory")
+        .select("*")
+        .order("name", { ascending: true });
+      if (fallback.data) {
+        data = fallback.data.filter((c: any) => c.deleted !== true);
+        error = null;
+      }
+    }
     if (data) setItems(data);
     if (error) console.error(error);
     setIsLoading(false);
