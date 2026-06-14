@@ -8,6 +8,7 @@ import {
   saveTransactionOffline,
   syncOfflineTransactions,
   getOfflineTransactions,
+  saveInvoiceClaimOffline,
 } from "../lib/offlineSync";
 import PosScannerModal from "./PosScannerModal";
 import PosCreditModal from "./PosCreditModal";
@@ -875,13 +876,30 @@ export default function POSModule() {
       if (quoteData) {
          realTicketId = quoteData.id;
          try {
-            await supabase.from("invoice_claims").insert({
+            const { error: insertErr } = await supabase.from("invoice_claims").insert({
                ticket_id: realTicketId,
                token: invoiceToken,
                claimed: false
             });
+            if (insertErr) {
+               console.warn("Error insertando claim en la nube, guardando offline:", insertErr);
+               await saveInvoiceClaimOffline({
+                  ticket_id: realTicketId,
+                  token: invoiceToken,
+                  claimed: false
+               });
+            }
          } catch (err) {
-            console.warn("No se pudo registrar token de facturacion en invoice_claims:", err);
+            console.warn("No se pudo registrar token de facturacion en invoice_claims, guardando offline:", err);
+            try {
+               await saveInvoiceClaimOffline({
+                  ticket_id: realTicketId,
+                  token: invoiceToken,
+                  claimed: false
+               });
+            } catch (idbErr) {
+               console.error("Fallo al guardar reclamo offline en IndexedDB:", idbErr);
+            }
          }
       }
 

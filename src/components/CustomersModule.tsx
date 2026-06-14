@@ -31,8 +31,17 @@ export default function CustomersModule() {
   const [undoCustomerId, setUndoCustomerId] = useState<string | null>(null);
   const [undoCustomerName, setUndoCustomerName] = useState("");
 
-  const fetchCustomers = async () => {
-    let { data, error } = await supabase.from("customers").select("*").not("deleted", "eq", true);
+  const [limit, setLimit] = useState(20);
+  const [hasMore, setHasMore] = useState(true);
+
+  const fetchCustomers = async (currentLimit = limit) => {
+    let { data, error } = await supabase
+      .from("customers")
+      .select("*")
+      .not("deleted", "eq", true)
+      .order("name", { ascending: true })
+      .limit(currentLimit + 1);
+
     if (error) {
       console.warn("Fallo el filtro de base de datos 'deleted' en CustomersModule, usando fallback local:", error.message);
       const fallback = await supabase.from("customers").select("*");
@@ -45,7 +54,11 @@ export default function CustomersModule() {
       }
     }
     if (!error && data) {
-      const validated = data.map((item: any) => {
+      const hasMoreRows = data.length > currentLimit;
+      const sliceData = hasMoreRows ? data.slice(0, currentLimit) : data;
+      setHasMore(hasMoreRows);
+
+      const validated = sliceData.map((item: any) => {
         const result = CustomerSchema.safeParse(item);
         if (!result.success) {
           console.error("Error de validacion Zod en cliente:", result.error);
@@ -66,6 +79,12 @@ export default function CustomersModule() {
       });
       setCustomers(validated);
     }
+  };
+
+  const handleLoadMore = () => {
+    const newLimit = limit + 20;
+    setLimit(newLimit);
+    fetchCustomers(newLimit);
   };
 
   const [txLimit, setTxLimit] = useState(10);
@@ -551,6 +570,24 @@ export default function CustomersModule() {
               </li>
             ))}
           </ul>
+          {hasMore && (
+            <button
+              onClick={handleLoadMore}
+              style={{
+                width: "100%",
+                padding: "10px",
+                background: "transparent",
+                color: "var(--color-primary)",
+                border: "1px dashed var(--color-primary)",
+                borderRadius: "5px",
+                cursor: "pointer",
+                marginTop: "10px",
+                fontWeight: "bold"
+              }}
+            >
+              ➕ Cargar más clientes
+            </button>
+          )}
         </div>
 
         {/* Right Side: Customer Details & Transactions */}

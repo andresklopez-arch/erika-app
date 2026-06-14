@@ -85,24 +85,41 @@ export default function FacturacionExpress() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Error al facturar.");
       
-      // Marcar el token como reclamado en invoice_claims
+      // Intentar usar la funcion RPC claim_invoice para transaccionalidad atomica
+      let rpcSuccess = false;
       try {
-         await supabase
-            .from("invoice_claims")
-            .update({ claimed: true })
-            .eq("token", ticketId);
+         const { error: rpcError } = await supabase.rpc("claim_invoice", {
+            p_token: ticketId,
+            p_ticket_id: ticketData.id
+         });
+         if (!rpcError) {
+            rpcSuccess = true;
+         } else {
+            console.warn("Fallo el RPC claim_invoice, usando fallback secuencial:", rpcError);
+         }
       } catch (err) {
-         console.warn("No se pudo marcar el token como reclamado en la BD:", err);
+         console.warn("Error invocando RPC, usando fallback secuencial:", err);
       }
 
-      // Marcar el ticket como facturado (converted) en la tabla quotes
-      try {
-         await supabase
-            .from("quotes")
-            .update({ status: "converted" })
-            .eq("id", ticketData.id);
-      } catch (err) {
-         console.warn("No se pudo actualizar el estado del ticket en quotes:", err);
+      if (!rpcSuccess) {
+         // Fallback secuencial de actualizacion
+         try {
+            await supabase
+               .from("invoice_claims")
+               .update({ claimed: true })
+               .eq("token", ticketId);
+         } catch (err) {
+            console.warn("No se pudo marcar el token como reclamado en la BD:", err);
+         }
+
+         try {
+            await supabase
+               .from("quotes")
+               .update({ status: "converted" })
+               .eq("id", ticketData.id);
+         } catch (err) {
+            console.warn("No se pudo actualizar el estado del ticket en quotes:", err);
+         }
       }
 
       setStatus("success");

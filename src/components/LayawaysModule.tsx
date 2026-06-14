@@ -5,14 +5,22 @@ import { LayawaySchema } from "../lib/schemas";
 
 export default function LayawaysModule() {
   const [layaways, setLayaways] = useState<any[]>([]);
+  const [limit, setLimit] = useState(20);
+  const [hasMore, setHasMore] = useState(true);
 
-  const fetchLayaways = async () => {
+  const fetchLayaways = async (currentLimit = limit) => {
     const { data } = await supabase
       .from("layaways")
       .select("*")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(currentLimit + 1);
+    
     if (data) {
-      const validated = data.map((item: any) => {
+      const hasMoreRows = data.length > currentLimit;
+      const sliceData = hasMoreRows ? data.slice(0, currentLimit) : data;
+      setHasMore(hasMoreRows);
+
+      const validated = sliceData.map((item: any) => {
         const result = LayawaySchema.safeParse(item);
         if (!result.success) {
           console.error("Error de validacion Zod en apartado (layaway):", result.error);
@@ -32,6 +40,12 @@ export default function LayawaysModule() {
       });
       setLayaways(validated);
     }
+  };
+
+  const handleLoadMore = () => {
+    const newLimit = limit + 20;
+    setLimit(newLimit);
+    fetchLayaways(newLimit);
   };
 
   useEffect(() => {
@@ -218,6 +232,24 @@ export default function LayawaysModule() {
             )}
           </tbody>
         </table>
+        {hasMore && (
+          <div style={{ display: "flex", justifyContent: "center", padding: "15px" }}>
+            <button
+              onClick={handleLoadMore}
+              style={{
+                background: "transparent",
+                color: "var(--color-secondary)",
+                border: "1px dashed var(--color-secondary)",
+                padding: "8px 20px",
+                borderRadius: "5px",
+                cursor: "pointer",
+                fontWeight: "bold",
+              }}
+            >
+              ➕ Cargar más apartados
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

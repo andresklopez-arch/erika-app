@@ -2,7 +2,7 @@ import { supabase } from "./supabaseClient";
 
 const DB_NAME = "ErikaOfflineDB";
 const STORE_NAME = "cash_transactions";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const initDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
@@ -16,6 +16,12 @@ export const initDB = (): Promise<IDBDatabase> => {
       const db = event.target.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, {
+          keyPath: "id",
+          autoIncrement: true,
+        });
+      }
+      if (!db.objectStoreNames.contains("invoice_claims")) {
+        db.createObjectStore("invoice_claims", {
           keyPath: "id",
           autoIncrement: true,
         });
@@ -78,29 +84,107 @@ export const clearOfflineTransactions = async (): Promise<void> => {
   });
 };
 
-export const syncOfflineTransactions = async (): Promise<number> => {
+export const saveInvoiceClaimOffline = async (
+  claim: any,
+): Promise<void> => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("invoice_claims", "readwrite");
+    const store = tx.objectStore("invoice_claims");
+    const request = store.add({
+      ...claim,
+      offline_created_at: new Date().toISOString(),
+    });
+
+    request.onsuccess = async () => {
+      if ("serviceWorker" in navigator && "SyncManager" in window) {
+        try {
+          const swRegistration = await navigator.serviceWorker.ready;
+          // @ts-expect-error sync is not standard yet
+          await swRegistration.sync.register("sync-offline-claims");
+        } catch (err) {
+          console.error("Background Sync falló:", err);
+        }
+      }
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const getOfflineInvoiceClaims = async (): Promise<any[]> => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("invoice_claims", "readonly");
+    const store = tx.objectStore("invoice_claims");
+    const request = store.getAll();
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const clearOfflineInvoiceClaims = async (): Promise<void> => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("invoice_claims", "readwrite");
+    const store = tx.objectStore("invoice_claims");
+    const request = store.clear();
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const syncOfflineInvoiceClaims = async (): Promise<number> => {
   if (!navigator.onLine) return 0;
 
-  const pending = await getOfflineTransactions();
+  const pending = await getOfflineInvoiceClaims();
   if (pending.length === 0) return 0;
 
   let synced = 0;
-  for (const t of pending) {
+  for (const c of pending) {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { id, offline_created_at, ...data } = t;
-    const { error } = await supabase.from("cash_transactions").insert(data);
+    const { id, offline_created_at, ...data } = c;
+    const { error } = await supabase.from("invoice_claims").insert(data);
     if (!error) {
-      // In a real app we'd delete them one by one. Here we clear all at the end for simplicity.
       synced++;
     } else {
-      console.error("Error syncing transaction", error);
+      console.error("Error syncing invoice claim", error);
     }
   }
 
-  // Si logramos sincronizar todas, limpiamos la base de datos local
   if (synced === pending.length) {
-    await clearOfflineTransactions();
+    await clearOfflineInvoiceClaims();
   }
+
+  return synced;
+};
+
+export const syncOfflineTransactions = async (): Promise<number> => {
+  if (!navigator.onLine) return 0;
+
+  // 1. Sincronizar transacciones de caja
+  const pending = await getOfflineTransactions();
+  let synced = 0;
+  if (pending.length > 0) {
+    for (const t of pending) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { id, offline_created_at, ...data } = t;
+      const { error } = await supabase.from("cash_transactions").insert(data);
+      if (!error) {
+        synced++;
+      } else {
+        console.error("Error syncing transaction", error);
+      }
+    }
+    if (synced === pending.length) {
+      await clearOfflineTransactions();
+    }
+  }
+
+  // 2. Sincronizar reclamos de factura
+  await syncOfflineInvoiceClaims();
 
   return synced;
 };
