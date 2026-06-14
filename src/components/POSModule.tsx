@@ -247,7 +247,7 @@ export default function POSModule() {
   const searchNormalized = normalizeString(searchInput);
   const queryWords = searchNormalized.split(/\s+/).filter(w => w.length > 0);
   
-  let expandedQueryWords = [...queryWords];
+  const expandedQueryWords = [...queryWords];
   queryWords.forEach(qw => {
     if (SYNONYMS[qw]) expandedQueryWords.push(...SYNONYMS[qw]);
   });
