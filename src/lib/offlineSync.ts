@@ -4,13 +4,20 @@ const DB_NAME = "ErikaOfflineDB";
 const STORE_NAME = "cash_transactions";
 const DB_VERSION = 2;
 
+let dbInstance: IDBDatabase | null = null;
+
 export const initDB = (): Promise<IDBDatabase> => {
+  if (dbInstance) return Promise.resolve(dbInstance);
+
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onerror = () => reject(request.error);
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      dbInstance = request.result;
+      resolve(dbInstance);
+    };
 
     request.onupgradeneeded = (event: any) => {
       const db = event.target.result;

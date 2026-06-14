@@ -88,17 +88,24 @@ export default function FacturacionExpress() {
       // Intentar usar la funcion RPC claim_invoice para transaccionalidad atomica
       let rpcSuccess = false;
       try {
-         const { error: rpcError } = await supabase.rpc("claim_invoice", {
+         const { data: success, error: rpcError } = await supabase.rpc("claim_invoice", {
             p_token: ticketId,
             p_ticket_id: ticketData.id
          });
          if (!rpcError) {
-            rpcSuccess = true;
+            if (success) {
+               rpcSuccess = true;
+            } else {
+               throw new Error("Este ticket ya ha sido facturado o el token es invalido.");
+            }
          } else {
             console.warn("Fallo el RPC claim_invoice, usando fallback secuencial:", rpcError);
          }
-      } catch (err) {
-         console.warn("Error invocando RPC, usando fallback secuencial:", err);
+      } catch (err: any) {
+         console.warn("Error invocando RPC:", err);
+         if (err.message && err.message.includes("ya ha sido facturado")) {
+            throw err;
+         }
       }
 
       if (!rpcSuccess) {

@@ -34,11 +34,18 @@ export default function CustomersModule() {
   const [limit, setLimit] = useState(20);
   const [hasMore, setHasMore] = useState(true);
 
-  const fetchCustomers = async (currentLimit = limit) => {
-    let { data, error } = await supabase
+  const fetchCustomers = async (currentLimit = limit, searchVal = searchQuery) => {
+    let query = supabase
       .from("customers")
       .select("*")
-      .not("deleted", "eq", true)
+      .not("deleted", "eq", true);
+
+    const cleanSearch = (searchVal || "").trim();
+    if (cleanSearch !== "") {
+      query = query.or(`name.ilike.%${cleanSearch}%,phone.ilike.%${cleanSearch}%,rfc.ilike.%${cleanSearch}%`);
+    }
+
+    let { data, error } = await query
       .order("name", { ascending: true })
       .limit(currentLimit + 1);
 
@@ -49,7 +56,16 @@ export default function CustomersModule() {
         console.error("Error al cargar clientes (fallback):", fallback.error);
         toast.error(`Error de Base de Datos al cargar clientes: ${fallback.error.message}`);
       } else if (fallback.data) {
-        data = fallback.data.filter((c: any) => c.deleted !== true);
+        let filtered = fallback.data.filter((c: any) => c.deleted !== true);
+        if (cleanSearch !== "") {
+          const lower = cleanSearch.toLowerCase();
+          filtered = filtered.filter((c: any) => 
+            c.name.toLowerCase().includes(lower) ||
+            (c.phone && c.phone.includes(lower)) ||
+            (c.rfc && c.rfc.toLowerCase().includes(lower))
+          );
+        }
+        data = filtered;
         error = null;
       }
     }
@@ -133,8 +149,8 @@ export default function CustomersModule() {
   };
 
   useEffect(() => {
-    fetchCustomers();
-  }, []);
+    fetchCustomers(limit, searchQuery);
+  }, [limit, searchQuery]);
 
   useEffect(() => {
     setTxLimit(10);
@@ -525,11 +541,7 @@ export default function CustomersModule() {
             />
           </div>
           <ul style={{ listStyle: "none", padding: 0, marginTop: "10px" }}>
-            {customers.filter(c => 
-              c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              (c.phone && c.phone.includes(searchQuery)) ||
-              (c.rfc && c.rfc.toLowerCase().includes(searchQuery.toLowerCase()))
-            ).map((c) => (
+            {customers.map((c) => (
               <li
                 key={c.id}
                 onClick={() => setSelectedCustomerId(c.id)}
