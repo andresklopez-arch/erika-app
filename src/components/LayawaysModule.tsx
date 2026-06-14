@@ -7,11 +7,19 @@ export default function LayawaysModule() {
   const [layaways, setLayaways] = useState<any[]>([]);
   const [limit, setLimit] = useState(20);
   const [hasMore, setHasMore] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const fetchLayaways = async (currentLimit = limit) => {
-    const { data } = await supabase
+  const fetchLayaways = async (currentLimit = limit, searchVal = searchQuery) => {
+    let query = supabase
       .from("layaways")
-      .select("*")
+      .select("*");
+
+    const cleanSearch = (searchVal || "").trim();
+    if (cleanSearch !== "") {
+      query = query.ilike("customer_name", `%${cleanSearch}%`);
+    }
+
+    const { data } = await query
       .order("created_at", { ascending: false })
       .limit(currentLimit + 1);
     
@@ -45,12 +53,12 @@ export default function LayawaysModule() {
   const handleLoadMore = () => {
     const newLimit = limit + 20;
     setLimit(newLimit);
-    fetchLayaways(newLimit);
+    fetchLayaways(newLimit, searchQuery);
   };
 
   useEffect(() => {
-    fetchLayaways();
-  }, []);
+    fetchLayaways(limit, searchQuery);
+  }, [limit, searchQuery]);
 
   const handlePay = async (layaway: any) => {
     const payment = parseFloat(
@@ -174,6 +182,25 @@ export default function LayawaysModule() {
         <h2 style={{ color: "var(--color-primary)", margin: 0 }}>
           📦 Gestión de Apartados (Layaways)
         </h2>
+      </div>
+
+      <div style={{ maxWidth: "400px" }}>
+        <input 
+          type="text" 
+          placeholder="🔍 Buscar por nombre de cliente..." 
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{
+            width: "100%",
+            padding: "8px 12px",
+            borderRadius: "6px",
+            border: "1px solid var(--glass-border)",
+            background: "rgba(0,0,0,0.3)",
+            color: "white",
+            fontSize: "0.85rem",
+            outline: "none"
+          }}
+        />
       </div>
 
       <div className="glass-panel" style={{ background: "rgba(0,0,0,0.3)", borderRadius: "8px", overflow: "hidden" }}>

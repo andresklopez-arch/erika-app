@@ -16,6 +16,22 @@ export const initDB = (): Promise<IDBDatabase> => {
 
     request.onsuccess = () => {
       dbInstance = request.result;
+      
+      // Cerrar conexion si hay actualizacion de version
+      dbInstance.onversionchange = () => {
+        if (dbInstance) {
+          dbInstance.close();
+          dbInstance = null;
+        }
+        console.warn("Conexion a IndexedDB cerrada por cambio de version.");
+      };
+
+      // Resetear cache en caso de error critico
+      dbInstance.onerror = () => {
+        dbInstance = null;
+        console.error("Error critico detectado en IndexedDB. Reseteando conexion cacheada.");
+      };
+
       resolve(dbInstance);
     };
 
