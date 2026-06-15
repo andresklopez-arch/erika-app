@@ -16,6 +16,12 @@ export const BusinessConfigSchema = z.object({
   business_logo: z.string().default(""),
   printer_connected: z.boolean().default(true),
   printer_type: z.string().default("system"),
+  printer_name: z.string().default(""),
+  printer_paper_size: z.string().default("80mm"),
+  printer_font_size: z.string().default("normal"),
+  printer_font_family: z.string().default("monospace"),
+  printer_fields: z.array(z.string()).default(["name", "rfc", "phone", "address", "logo", "footer"]),
+  printer_footer_msg: z.string().default("¡Gracias por su compra!"),
 });
 
 export const BusinessSettingsSchema = z.object({
@@ -37,6 +43,12 @@ export const BusinessSettingsSchema = z.object({
     business_logo: "",
     printer_connected: true,
     printer_type: "system",
+    printer_name: "",
+    printer_paper_size: "80mm",
+    printer_font_size: "normal",
+    printer_font_family: "monospace",
+    printer_fields: ["name", "rfc", "phone", "address", "logo", "footer"],
+    printer_footer_msg: "¡Gracias por su compra!",
   }),
 });
 

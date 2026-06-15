@@ -116,6 +116,12 @@ export default function AuthProvider({
         business_logo: localStorage.getItem("ERIKA_BIZ_LOGO") || "",
         printer_connected: localStorage.getItem("ERIKA_PRINTER_CONNECTED") !== "false",
         printer_type: localStorage.getItem("ERIKA_PRINTER_TYPE") || "system",
+        printer_name: localStorage.getItem("ERIKA_PRINTER_NAME") || "",
+        printer_paper_size: localStorage.getItem("ERIKA_PRINTER_PAPER_SIZE") || "80mm",
+        printer_font_size: localStorage.getItem("ERIKA_PRINTER_FONT_SIZE") || "normal",
+        printer_font_family: localStorage.getItem("ERIKA_PRINTER_FONT_FAMILY") || "monospace",
+        printer_fields: localStorage.getItem("ERIKA_PRINTER_FIELDS") ? JSON.parse(localStorage.getItem("ERIKA_PRINTER_FIELDS")!) : ["name", "rfc", "phone", "address", "logo", "footer"],
+        printer_footer_msg: localStorage.getItem("ERIKA_PRINTER_FOOTER_MSG") || "¡Gracias por su compra!",
       };
 
       return {
@@ -143,6 +149,12 @@ export default function AuthProvider({
         business_logo: "",
         printer_connected: true,
         printer_type: "system",
+        printer_name: "",
+        printer_paper_size: "80mm",
+        printer_font_size: "normal",
+        printer_font_family: "monospace",
+        printer_fields: ["name", "rfc", "phone", "address", "logo", "footer"],
+        printer_footer_msg: "¡Gracias por su compra!",
       },
     };
   });
@@ -181,6 +193,12 @@ export default function AuthProvider({
         localStorage.setItem("ERIKA_BIZ_LOGO", parsed.config.business_logo);
         localStorage.setItem("ERIKA_PRINTER_CONNECTED", String(parsed.config.printer_connected));
         localStorage.setItem("ERIKA_PRINTER_TYPE", parsed.config.printer_type);
+        localStorage.setItem("ERIKA_PRINTER_NAME", parsed.config.printer_name || "");
+        localStorage.setItem("ERIKA_PRINTER_PAPER_SIZE", parsed.config.printer_paper_size || "80mm");
+        localStorage.setItem("ERIKA_PRINTER_FONT_SIZE", parsed.config.printer_font_size || "normal");
+        localStorage.setItem("ERIKA_PRINTER_FONT_FAMILY", parsed.config.printer_font_family || "monospace");
+        localStorage.setItem("ERIKA_PRINTER_FIELDS", JSON.stringify(parsed.config.printer_fields));
+        localStorage.setItem("ERIKA_PRINTER_FOOTER_MSG", parsed.config.printer_footer_msg || "¡Gracias por su compra!");
         localStorage.setItem("ERIKA_THEME", parsed.config.theme);
       }
     } catch (e) {
@@ -195,13 +213,25 @@ export default function AuthProvider({
     }
 
     try {
+      const updatedConfig = {
+        ...businessSettings.config,
+        ...(newSettings.config || {}),
+      };
+
+      // Cast strings to numbers where required
+      const numKeys = ["earn_rate", "earn_points", "redeem_rate", "wholesale_min_qty", "wholesale_discount"];
+      numKeys.forEach((key) => {
+        if (key in updatedConfig) {
+          updatedConfig[key as keyof BusinessConfig] = Number(updatedConfig[key as keyof BusinessConfig]) as any;
+        }
+      });
+
       const updated = {
         ...businessSettings,
         ...newSettings,
-        config: {
-          ...businessSettings.config,
-          ...(newSettings.config || {}),
-        }
+        target_utility: newSettings.target_utility !== undefined ? Number(newSettings.target_utility) : businessSettings.target_utility,
+        monthly_goals: newSettings.monthly_goals !== undefined ? Number(newSettings.monthly_goals) : businessSettings.monthly_goals,
+        config: updatedConfig
       };
 
       const response = await fetch("/api/admin/settings", {
@@ -237,6 +267,12 @@ export default function AuthProvider({
         localStorage.setItem("ERIKA_BIZ_LOGO", result.settings.config.business_logo);
         localStorage.setItem("ERIKA_PRINTER_CONNECTED", String(result.settings.config.printer_connected));
         localStorage.setItem("ERIKA_PRINTER_TYPE", result.settings.config.printer_type);
+        localStorage.setItem("ERIKA_PRINTER_NAME", result.settings.config.printer_name || "");
+        localStorage.setItem("ERIKA_PRINTER_PAPER_SIZE", result.settings.config.printer_paper_size || "80mm");
+        localStorage.setItem("ERIKA_PRINTER_FONT_SIZE", result.settings.config.printer_font_size || "normal");
+        localStorage.setItem("ERIKA_PRINTER_FONT_FAMILY", result.settings.config.printer_font_family || "monospace");
+        localStorage.setItem("ERIKA_PRINTER_FIELDS", JSON.stringify(result.settings.config.printer_fields));
+        localStorage.setItem("ERIKA_PRINTER_FOOTER_MSG", result.settings.config.printer_footer_msg || "¡Gracias por su compra!");
         localStorage.setItem("ERIKA_THEME", result.settings.config.theme);
         
         return true;
