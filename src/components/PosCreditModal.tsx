@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 interface Props {
@@ -22,6 +22,21 @@ export default function PosCreditModal({
   reloadCustomers,
 }: Props) {
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    if (show) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [show, onClose]);
 
   if (!show) return null;
 

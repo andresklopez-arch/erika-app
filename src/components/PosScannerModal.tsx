@@ -33,6 +33,21 @@ export default function PosScannerModal({ show, onClose, onScan }: Props) {
     };
   }, [show, onScan, onClose]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    if (show) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [show, onClose]);
+
   if (!show) return null;
 
   return (

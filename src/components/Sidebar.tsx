@@ -12,6 +12,8 @@ export default function Sidebar() {
 
   const [pendingLayawaysCount, setPendingLayawaysCount] = useState(0);
   const [pendingQuotesCount, setPendingQuotesCount] = useState(0);
+  const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
+  const [escHiddenGroup, setEscHiddenGroup] = useState<string | null>(null);
   const [isPinned, setIsPinned] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("erika_sidebar_pinned") === "true";
@@ -76,6 +78,13 @@ export default function Sidebar() {
     ];
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (hoveredGroup) {
+          setEscHiddenGroup(hoveredGroup);
+          return;
+        }
+      }
+
       const activeEl = document.activeElement;
       if (activeEl) {
         const tagName = activeEl.tagName.toLowerCase();
@@ -120,7 +129,7 @@ export default function Sidebar() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentUser, router, pathname]);
+  }, [currentUser, router, pathname, hoveredGroup]);
 
   if (!currentUser) return null;
 
@@ -212,7 +221,15 @@ export default function Sidebar() {
           </Link>
         )}
         {(isAdmin || p.pos || p.inventario || p.servicios) && (
-          <div className="nav-item-group" style={{ position: "relative" }}>
+          <div 
+            className="nav-item-group" 
+            style={{ position: "relative" }}
+            onMouseEnter={() => setHoveredGroup("clientes")}
+            onMouseLeave={() => {
+              setHoveredGroup(null);
+              setEscHiddenGroup(null);
+            }}
+          >
             <Link
               href="/clientes"
               className={isActive("/clientes") ? "active" : ""}
@@ -223,7 +240,7 @@ export default function Sidebar() {
               <span className="nav-text">Clientes y Agenda</span>
               <span className="shortcut-badge">Alt + 7</span>
             </Link>
-            <div className="submenu-container">
+            <div className={`submenu-container ${escHiddenGroup === "clientes" ? "force-hidden" : ""}`}>
               <Link href="/clientes" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
                 <span>👥</span><span>Clientes y Crédito</span>
               </Link>
@@ -273,7 +290,15 @@ export default function Sidebar() {
         )}
 
         {(isAdmin || p.inventario) && (
-          <div className="nav-item-group" style={{ position: "relative" }}>
+          <div 
+            className="nav-item-group" 
+            style={{ position: "relative" }}
+            onMouseEnter={() => setHoveredGroup("inventario")}
+            onMouseLeave={() => {
+              setHoveredGroup(null);
+              setEscHiddenGroup(null);
+            }}
+          >
             <Link
               href="/inventario"
               className={isActive("/inventario") ? "active" : ""}
@@ -284,7 +309,7 @@ export default function Sidebar() {
               <span className="nav-text">Almacén e Inventario</span>
               <span className="shortcut-badge">Alt + 5</span>
             </Link>
-            <div className="submenu-container">
+            <div className={`submenu-container ${escHiddenGroup === "inventario" ? "force-hidden" : ""}`}>
               <Link href="/inventario" style={{ color: "var(--color-text-muted)", display: "flex", gap: "6px", padding: "4px" }}>
                 <span>📂</span><span>General</span>
               </Link>

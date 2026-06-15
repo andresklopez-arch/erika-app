@@ -450,6 +450,24 @@ export default function InventoryModule() {
     };
   }, [tab]);
 
+  // Cerrar ventanas emergentes al presionar la tecla ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (showCreateModal) {
+          e.preventDefault();
+          setShowCreateModal(false);
+          router.push("/inventario");
+        } else if (tab) {
+          e.preventDefault();
+          clearTabParam();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [tab, showCreateModal, router]);
+
   // Reset de scroll y paginación de duplicados al cambiar de tab
   useEffect(() => {
     if (panelRef.current) {

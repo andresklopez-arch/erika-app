@@ -674,4 +674,12 @@ body {
   color: var(--color-primary) !important;
 }
 
+/* Force hide submenus when Escape key is pressed */
+.sidebar-container .submenu-container.force-hidden {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transform: translateX(10px) !important;
+  pointer-events: none !important;
+}
+
 
