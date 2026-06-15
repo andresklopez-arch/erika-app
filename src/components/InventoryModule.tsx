@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams, useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
@@ -53,6 +53,10 @@ export default function InventoryModule() {
   const [allItems, setAllItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
+  const [visibleDuplicates, setVisibleDuplicates] = useState(15);
+  const [showScrollIndicator, setShowScrollIndicator] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  
   const [undoStack, setUndoStack] = useState<any[][]>(() => {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("erika_undo_stack");
@@ -335,6 +339,35 @@ export default function InventoryModule() {
     };
   }, [tab]);
 
+  // Reset de scroll y paginación de duplicados al cambiar de tab
+  useEffect(() => {
+    if (panelRef.current) {
+      panelRef.current.scrollTop = 0;
+    }
+    setVisibleDuplicates(15);
+  }, [tab]);
+
+  // Verificación dinámica del indicador de scroll vertical
+  useEffect(() => {
+    const checkScroll = () => {
+      if (panelRef.current) {
+        const target = panelRef.current;
+        const canScroll = target.scrollHeight > target.clientHeight;
+        const isAtBottom = target.scrollTop >= target.scrollHeight - target.clientHeight - 20;
+        setShowScrollIndicator(canScroll && !isAtBottom);
+      }
+    };
+    const timer = setTimeout(checkScroll, 500);
+    return () => clearTimeout(timer);
+  }, [tab, items]);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    const canScroll = target.scrollHeight > target.clientHeight;
+    const isAtBottom = target.scrollTop >= target.scrollHeight - target.clientHeight - 20;
+    setShowScrollIndicator(canScroll && !isAtBottom);
+  };
+
   const avgMargin =
     items.length > 0
       ? items.reduce((acc, i) => {
@@ -516,6 +549,7 @@ export default function InventoryModule() {
         flexDirection: "column",
         gap: "20px",
         height: "100%",
+        position: "relative",
       }}
     >
       <div
@@ -700,6 +734,8 @@ export default function InventoryModule() {
       </div>
 
       <div
+        ref={panelRef}
+        onScroll={handleScroll}
         className="glass-panel"
         style={{ flex: 1, overflowY: "auto", overflowX: "auto", padding: "0", maxHeight: "calc(100vh - 240px)" }}
       >
@@ -835,7 +871,7 @@ export default function InventoryModule() {
 
               return (
                 <div style={{ display: "flex", flexDirection: "column", gap: "25px" }}>
-                  {groups.map((group, gIdx) => (
+                  {groups.slice(0, visibleDuplicates).map((group, gIdx) => (
                     <div 
                       key={gIdx} 
                       className="glass-panel" 
@@ -907,6 +943,23 @@ export default function InventoryModule() {
                       </table>
                     </div>
                   ))}
+
+                  {groups.length > visibleDuplicates && (
+                    <button
+                      onClick={() => setVisibleDuplicates((prev) => prev + 15)}
+                      className="btn-primary"
+                      style={{
+                        margin: "10px auto 30px auto",
+                        display: "block",
+                        background: "rgba(234, 179, 8, 0.15)",
+                        border: "1px solid #eab308",
+                        color: "#eab308",
+                        padding: "10px 20px"
+                      }}
+                    >
+                      👇 Cargar más posibles duplicados ({groups.length - visibleDuplicates} restantes)
+                    </button>
+                  )}
                 </div>
               );
             })()}
@@ -1335,6 +1388,47 @@ export default function InventoryModule() {
           }} 
         />,
         document.body
+      )}
+      {mounted && showScrollIndicator && (
+        <>
+          <style>{`
+            @keyframes bounceScroll {
+              0%, 100% { transform: translateY(0); }
+              50% { transform: translateY(-6px); }
+            }
+          `}</style>
+          <div 
+            onClick={() => {
+              if (panelRef.current) {
+                panelRef.current.scrollTo({
+                  top: panelRef.current.scrollTop + 250,
+                  behavior: "smooth"
+                });
+              }
+            }}
+            style={{
+              position: "absolute",
+              bottom: "20px",
+              right: "20px",
+              background: "rgba(234, 179, 8, 0.95)",
+              color: "black",
+              padding: "10px 16px",
+              borderRadius: "50px",
+              fontSize: "0.85rem",
+              fontWeight: "bold",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              cursor: "pointer",
+              boxShadow: "0 4px 15px rgba(0,0,0,0.5)",
+              animation: "bounceScroll 2s infinite",
+              zIndex: 9999,
+              transition: "opacity 0.3s, background 0.2s"
+            }}
+          >
+            <span>👇 Desplazar hacia abajo</span>
+          </div>
+        </>
       )}
     </div>
   );
