@@ -25,6 +25,18 @@ export default function SettingsModule() {
   const [targetUtility, setTargetUtility] = useState("30");
   const [monthlyGoals, setMonthlyGoals] = useState("0");
 
+  // Print Config States
+  const [printerName, setPrinterName] = useState("");
+  const [printerPaperSize, setPrinterPaperSize] = useState("80mm");
+  const [printerFontSize, setPrinterFontSize] = useState("normal");
+  const [printerFontFamily, setPrinterFontFamily] = useState("monospace");
+  const [printerFields, setPrinterFields] = useState<string[]>(["name", "rfc", "phone", "address", "logo", "footer"]);
+  const [printerFooterMsg, setPrinterFooterMsg] = useState("¡Gracias por su compra!");
+  
+  // Printer scan simulation states
+  const [isScanning, setIsScanning] = useState(false);
+  const [scannedPrinters, setScannedPrinters] = useState<string[]>([]);
+
   const [businessName, setBusinessName] = useState("Ferretería ERIKA");
   const [businessRfc, setBusinessRfc] = useState("");
   const [businessPhone, setBusinessPhone] = useState("");
@@ -302,6 +314,12 @@ export default function SettingsModule() {
       setBusinessLogo(businessSettings.config.business_logo);
       setIsConnected(businessSettings.config.printer_connected);
       setConnectionType(businessSettings.config.printer_type);
+      setPrinterName(businessSettings.config.printer_name || "");
+      setPrinterPaperSize(businessSettings.config.printer_paper_size || "80mm");
+      setPrinterFontSize(businessSettings.config.printer_font_size || "normal");
+      setPrinterFontFamily(businessSettings.config.printer_font_family || "monospace");
+      setPrinterFields(businessSettings.config.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"]);
+      setPrinterFooterMsg(businessSettings.config.printer_footer_msg || "¡Gracias por su compra!");
       /* eslint-enable react-hooks/set-state-in-effect */
     }
     fetchUsers();
@@ -395,6 +413,53 @@ export default function SettingsModule() {
     if (success) {
       alert("✅ Perfil del Negocio guardado exitosamente.");
     }
+  };
+
+  const savePrintSettings = async () => {
+    if (!checkAdmin()) return;
+    const success = await updateBusinessSettings({
+      config: {
+        printer_connected: isConnected,
+        printer_type: connectionType,
+        printer_name: printerName,
+        printer_paper_size: printerPaperSize,
+        printer_font_size: printerFontSize,
+        printer_font_family: printerFontFamily,
+        printer_fields: printerFields,
+        printer_footer_msg: printerFooterMsg,
+      }
+    });
+    if (success) {
+      alert("✅ Configuración de Impresión guardada exitosamente.");
+    }
+  };
+
+  const handleScanPrinters = () => {
+    if (!checkAdmin()) return;
+    setIsScanning(true);
+    setScannedPrinters([]);
+    setTimeout(() => {
+      setIsScanning(false);
+      if (connectionType === "bluetooth") {
+        setScannedPrinters([
+          "🛜 Impresora Térmica Portátil BT-58",
+          "🛜 EC Line Printer BT-80",
+          "🛜 Star Micronics SM-T300i"
+        ]);
+      } else if (connectionType === "wifi") {
+        setScannedPrinters([
+          "📶 EPSON TM-T88VI (192.168.1.150)",
+          "📶 Bixolon SRP-350plusIII (192.168.1.155)",
+          "📶 Impresora Cocina (192.168.1.200)"
+        ]);
+      } else {
+        setScannedPrinters([
+          "💻 Impresora de Sistema (PDF Writer)",
+          "💻 POS-58 USB Printer",
+          "💻 EPSON TM-T20II USB"
+        ]);
+      }
+    }, 2500);
   };
 
   const handleRoleTypeChange = (val: string) => {
@@ -571,21 +636,54 @@ export default function SettingsModule() {
       alert("❌ Error: La impresora está desconectada. No se puede realizar la prueba.");
       return;
     }
-    const printWindow = window.open("", "_blank", "width=300,height=400");
+    const widthCss = printerPaperSize === "58mm" ? "58mm" : "80mm";
+    const fontSizeCss = printerFontSize === "small" ? "10px" : printerFontSize === "large" ? "14px" : "12px";
+    let fontFamilyCss = "monospace";
+    if (printerFontFamily === "sans-serif") fontFamilyCss = "sans-serif";
+    else if (printerFontFamily === "serif") fontFamilyCss = "serif";
+
+    const printWindow = window.open("", "_blank", `width=${printerPaperSize === "58mm" ? 300 : 400},height=500`);
     if (!printWindow) {
       alert("❌ Error: Bloqueador de ventanas emergentes activado.");
       return;
     }
+
+    const showLogo = printerFields.includes("logo") && businessLogo;
+    const showName = printerFields.includes("name");
+    const showRfc = printerFields.includes("rfc") && businessRfc;
+    const showPhone = printerFields.includes("phone") && businessPhone;
+    const showAddress = printerFields.includes("address") && businessAddress;
+    const showFooter = printerFields.includes("footer");
+
     const html = `
-      <html><head><style>body { font-family: 'Courier New', monospace; font-size: 12px; margin: 0; padding: 10px; width: 58mm; color: #000; }</style></head>
-      <body>
-        <h3 style="text-align:center; margin:0 0 5px 0;">${businessName.toUpperCase()}</h3>
-        <p style="text-align:center; margin:0 0 10px 0;">TICKET DE PRUEBA</p>
-        <div style="border-bottom: 1px dashed #000; margin-bottom: 5px;"></div>
-        <p style="text-align:center;">¡Impresora térmica configurada correctamente!</p>
-        <p style="font-size:10px; text-align:center;">Fecha: ${new Date().toLocaleString()}</p>
-        <div style="border-bottom: 1px dashed #000; margin-top: 5px;"></div>
-      </body></html>
+      <html>
+        <head>
+          <style>
+            body { font-family: ${fontFamilyCss}; font-size: ${fontSizeCss}; margin: 0; padding: 10px; width: ${widthCss}; color: #000; background: #fff; }
+            .center { text-align: center; }
+            .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
+            .bold { font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          ${showLogo ? `<div class="center"><img src="${businessLogo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
+          ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessName}</div>` : ""}
+          ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessRfc}</div>` : ""}
+          ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessAddress}</div>` : ""}
+          ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessPhone}</div>` : ""}
+          
+          <div class="divider"></div>
+          <p class="center bold">TICKET DE PRUEBA POS</p>
+          <p class="center">¡Impresora configurada correctamente!</p>
+          <div style="font-size: 0.9em; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
+          <div style="font-size: 0.9em; margin-bottom: 5px;">Impresora: ${printerName || "Por defecto del sistema"}</div>
+          <div style="font-size: 0.9em; margin-bottom: 5px;">Papel: ${printerPaperSize}</div>
+          <div style="font-size: 0.9em; margin-bottom: 5px;">Letra: ${printerFontFamily} (${printerFontSize})</div>
+          <div class="divider"></div>
+          
+          ${showFooter ? `<div class="center bold" style="margin-top: 10px;">${printerFooterMsg}</div>` : ""}
+        </body>
+      </html>
     `;
     printWindow.document.write(html);
     printWindow.document.close();
@@ -961,57 +1059,186 @@ export default function SettingsModule() {
             </button>
           </div>
 
-          <div className="glass-panel" style={{ border: "1px solid var(--color-secondary)" }}>
-            <h3 style={{ margin: "0 0 20px 0", color: "var(--color-secondary)", display: "flex", alignItems: "center", gap: "10px" }}>
-              🖨️ Estado de Impresora Térmica
+          <div className="glass-panel" style={{ border: "1px solid var(--color-primary)", display: "flex", flexDirection: "column", gap: "15px" }}>
+            <h3 style={{ margin: "0 0 10px 0", color: "var(--color-primary)", display: "flex", alignItems: "center", gap: "10px" }}>
+              🖨️ Menú de Impresión Profesional
             </h3>
-            <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", marginBottom: "15px" }}>
-              Configura y realiza pruebas de impresión con el controlador térmico del POS.
+            <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", margin: 0 }}>
+              Configure la impresora física o inalámbrica (Bluetooth/WiFi) y los parámetros del ticket de compra.
             </p>
-            
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.05)", padding: "10px", borderRadius: "8px" }}>
-                <span style={{ fontSize: "0.9rem" }}>Conexión Física:</span>
-                <span style={{ fontWeight: "bold", color: isConnected ? "var(--color-secondary)" : "#ef4444" }}>
-                  {isConnected ? "🟢 Impresora Lista" : "🔴 Desconectada"}
-                </span>
+
+            <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: "200px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Conexión:</label>
+                <select
+                  value={connectionType}
+                  onChange={(e) => setConnectionType(e.target.value)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
+                >
+                  <option value="system">Sistema / Navegador (USB/Red)</option>
+                  <option value="bluetooth">Bluetooth (Simulado)</option>
+                  <option value="wifi">WiFi (Simulado)</option>
+                </select>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.05)", padding: "10px", borderRadius: "8px" }}>
-                <span style={{ fontSize: "0.9rem" }}>Canal de Conexión:</span>
-                <span style={{ fontWeight: "bold", textTransform: "uppercase", color: "white" }}>
-                  {connectionType}
-                </span>
+              <div style={{ flex: 1, minWidth: "200px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Tamaño del Papel:</label>
+                <select
+                  value={printerPaperSize}
+                  onChange={(e) => setPrinterPaperSize(e.target.value)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
+                >
+                  <option value="58mm">58mm (Estándar Angosto)</option>
+                  <option value="80mm">80mm (Ancho POS Profesional)</option>
+                </select>
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <button
-                onClick={togglePrinterConnection}
-                className="btn-primary"
-                style={{
-                  flex: 1,
-                  background: isConnected ? "rgba(239, 68, 68, 0.15)" : "rgba(16, 185, 129, 0.15)",
-                  border: isConnected ? "1px solid rgba(239, 68, 68, 0.3)" : "1px solid rgba(16, 185, 129, 0.3)",
-                  fontSize: "0.85rem",
-                  padding: "10px",
-                }}
-              >
-                {isConnected ? "🔌 Simular Desconexión" : "🔌 Conectar Impresora"}
-              </button>
+            {/* Bluetooth/WiFi Scan block */}
+            {(connectionType === "bluetooth" || connectionType === "wifi") && (
+              <div style={{ background: "rgba(0,0,0,0.2)", padding: "12px", borderRadius: "8px", border: "1px dashed var(--color-secondary)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                  <span style={{ fontSize: "0.85rem", fontWeight: "bold" }}>
+                    Búsqueda de Dispositivos ({connectionType.toUpperCase()}):
+                  </span>
+                  <button
+                    onClick={handleScanPrinters}
+                    disabled={isScanning}
+                    className="btn-primary"
+                    style={{ padding: "6px 12px", fontSize: "0.8rem", background: "var(--color-secondary)", border: "none", color: "black" }}
+                  >
+                    {isScanning ? "⏳ Buscando..." : "🔍 Buscar Impresoras"}
+                  </button>
+                </div>
 
+                {isScanning && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", justifyContent: "center" }}>
+                    <div className="spinner" style={{ width: "20px", height: "20px", border: "2px solid rgba(255,255,255,0.1)", borderTop: "2px solid var(--color-secondary)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                    <span style={{ fontSize: "0.85rem", color: "var(--color-secondary)" }}>Escaneando redes cercanas...</span>
+                  </div>
+                )}
+
+                {!isScanning && scannedPrinters.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "5px", marginTop: "10px" }}>
+                    {scannedPrinters.map((printer, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => {
+                          setPrinterName(printer);
+                          alert(`✅ Conectado a la impresora: ${printer}`);
+                        }}
+                        style={{
+                          padding: "8px 12px",
+                          background: printerName === printer ? "rgba(16, 185, 129, 0.15)" : "rgba(255,255,255,0.05)",
+                          border: printerName === printer ? "1px solid var(--color-primary)" : "1px solid transparent",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontSize: "0.85rem",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center"
+                        }}
+                      >
+                        <span>{printer}</span>
+                        {printerName === printer && <span style={{ color: "var(--color-primary)", fontWeight: "bold" }}>Conectado 🟢</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Format Parameters */}
+            <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: "200px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Tipo de Letra:</label>
+                <select
+                  value={printerFontFamily}
+                  onChange={(e) => setPrinterFontFamily(e.target.value)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
+                >
+                  <option value="monospace">Monospace (Limpia y Alineada)</option>
+                  <option value="sans-serif">Sans-serif (Moderna y Redondeada)</option>
+                  <option value="serif">Serif (Clásica Elegante)</option>
+                </select>
+              </div>
+
+              <div style={{ flex: 1, minWidth: "200px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Tamaño de Letra:</label>
+                <select
+                  value={printerFontSize}
+                  onChange={(e) => setPrinterFontSize(e.target.value)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
+                >
+                  <option value="small">Pequeña (10px)</option>
+                  <option value="normal">Normal (12px)</option>
+                  <option value="large">Grande (14px)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Fields to Print */}
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--color-secondary)" }}>
+                Campos a Imprimir en el Ticket:
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "8px", background: "rgba(0,0,0,0.15)", padding: "10px", borderRadius: "6px" }}>
+                {[
+                  { key: "logo", label: "🖼️ Logotipo" },
+                  { key: "name", label: "🏢 Nombre Negocio" },
+                  { key: "rfc", label: "🧾 RFC Fiscal" },
+                  { key: "phone", label: "📱 Teléfono" },
+                  { key: "address", label: "📍 Dirección" },
+                  { key: "footer", label: "💬 Mensaje de Pie" },
+                ].map((field) => {
+                  const isChecked = printerFields.includes(field.key);
+                  return (
+                    <label key={field.key} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.85rem", color: "white" }}>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setPrinterFields([...printerFields, field.key]);
+                          } else {
+                            setPrinterFields(printerFields.filter(f => f !== field.key));
+                          }
+                        }}
+                      />
+                      {field.label}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Footer Message */}
+            {printerFields.includes("footer") && (
+              <div>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Mensaje del Pie de Ticket:</label>
+                <input
+                  type="text"
+                  value={printerFooterMsg}
+                  onChange={(e) => setPrinterFooterMsg(e.target.value)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
+                />
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "10px" }}>
+              <button
+                onClick={savePrintSettings}
+                className="btn-primary"
+                style={{ flex: 2, background: "var(--color-primary)", color: "#000", fontWeight: "bold" }}
+              >
+                💾 Guardar Configuración de Impresión
+              </button>
               <button
                 onClick={testPrint}
                 className="btn-primary"
-                style={{
-                  flex: 1,
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  fontSize: "0.85rem",
-                  padding: "10px",
-                }}
+                style={{ flex: 1, background: "transparent", border: "1px solid var(--color-secondary)", color: "var(--color-secondary)" }}
               >
-                📄 Imprimir Prueba
+                📄 Prueba
               </button>
             </div>
           </div>
