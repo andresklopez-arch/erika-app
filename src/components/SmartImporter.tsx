@@ -8,7 +8,7 @@ interface SmartImporterProps {
   avgMargin: number;
   existingItems: any[];
   onClose: () => void;
-  onImport: (products: any[], isRestockMode: boolean) => void;
+  onImport: (products: any[], importOption: "sustituir" | "complementar" | "nuevo") => void;
 }
 
 export default function SmartImporter({
@@ -19,7 +19,7 @@ export default function SmartImporter({
 }: SmartImporterProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState("");
-  const [isRestockMode, setIsRestockMode] = useState(true);
+  const [importOption, setImportOption] = useState<"sustituir" | "complementar" | "nuevo" | "">("");
   const [previewData, setPreviewData] = useState<any[] | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
@@ -509,7 +509,7 @@ export default function SmartImporter({
       return { ...p, supplier: finalSupplier, location: assignedLocation };
     });
 
-    onImport(finalProducts, isRestockMode);
+    onImport(finalProducts, importOption as any);
     onClose();
   };
 
@@ -884,12 +884,76 @@ export default function SmartImporter({
               </div>
             </div>
 
+            <div style={{
+              background: "rgba(255, 255, 255, 0.05)",
+              border: "1px solid var(--glass-border)",
+              borderRadius: "12px",
+              padding: "20px",
+              marginTop: "15px",
+              textAlign: "left"
+            }}>
+              <h4 style={{ color: "var(--color-primary)", margin: "0 0 15px 0", fontSize: "1rem" }}>
+                ⚙️ Seleccione el Método de Importación (Obligatorio)
+              </h4>
+              <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
+                {[
+                  {
+                    value: "sustituir",
+                    title: "Sustituir piezas",
+                    desc: "Reemplazar existencias e información de los productos existentes.",
+                    icon: "🔄"
+                  },
+                  {
+                    value: "complementar",
+                    title: "Complementar inventario",
+                    desc: "Solo agregar información de nuevos productos; omitir existentes.",
+                    icon: "➕"
+                  },
+                  {
+                    value: "nuevo",
+                    title: "Agregar como producto nuevo",
+                    desc: "Insertar todo como producto nuevo con su propio stock (evita duplicidad).",
+                    icon: "🆕"
+                  }
+                ].map((opt) => {
+                  const isSelected = importOption === opt.value;
+                  return (
+                    <div
+                      key={opt.value}
+                      onClick={() => setImportOption(opt.value as any)}
+                      style={{
+                        flex: 1,
+                        minWidth: "220px",
+                        padding: "15px",
+                        borderRadius: "10px",
+                        border: isSelected ? "2px solid var(--color-primary)" : "1px solid var(--glass-border)",
+                        background: isSelected ? "rgba(16, 185, 129, 0.15)" : "rgba(0,0,0,0.3)",
+                        cursor: "pointer",
+                        transition: "all 0.2s ease",
+                        boxShadow: isSelected ? "0 0 10px rgba(16, 185, 129, 0.2)" : "none"
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                        <span style={{ fontSize: "1.5rem" }}>{opt.icon}</span>
+                        <strong style={{ color: isSelected ? "var(--color-primary)" : "white", fontSize: "0.95rem" }}>
+                          {opt.title}
+                        </strong>
+                      </div>
+                      <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.7)", margin: 0, lineHeight: 1.3 }}>
+                        {opt.desc}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div
-              style={{ display: "flex", gap: "15px", justifyContent: "center", marginTop: "15px" }}
+              style={{ display: "flex", gap: "15px", justifyContent: "center", marginTop: "20px" }}
             >
               <button
                 className="btn-primary"
-                onClick={() => { setPreviewData(null); setUploadedFile(null); setFilePreviewUrl(null); }}
+                onClick={() => { setPreviewData(null); setUploadedFile(null); setFilePreviewUrl(null); setImportOption(""); }}
                 style={{
                   background: "transparent",
                   border: "1px solid var(--color-primary)",
@@ -897,21 +961,18 @@ export default function SmartImporter({
               >
                 Cancelar
               </button>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", background: "rgba(255,255,255,0.1)", padding: "8px 12px", borderRadius: "8px", border: isRestockMode ? "1px solid #10b981" : "1px solid transparent" }}>
-                  <input type="checkbox" checked={isRestockMode} onChange={(e) => setIsRestockMode(e.target.checked)} style={{ transform: "scale(1.2)" }} />
-                  <span style={{ fontSize: "0.9rem", color: isRestockMode ? "#10b981" : "white", fontWeight: isRestockMode ? "bold" : "normal" }}>
-                    {isRestockMode ? "📦 Modo Re-abastecimiento (+ Sumar Stock)" : "🔄 Modo Reemplazo Absoluto"}
-                  </span>
-                </label>
-                <button
-                  className="btn-primary"
-                  onClick={confirmImport}
-                  style={{ background: "var(--color-primary)" }}
-                >
-                  ✅ Confirmar e Importar
-                </button>
-              </div>
+              <button
+                className="btn-primary"
+                onClick={confirmImport}
+                disabled={importOption === ""}
+                style={{
+                  background: "var(--color-primary)",
+                  opacity: importOption === "" ? 0.5 : 1,
+                  cursor: importOption === "" ? "not-allowed" : "pointer"
+                }}
+              >
+                {importOption === "" ? "⏳ Elija un método" : "✅ Confirmar e Importar"}
+              </button>
             </div>
           </div>
         ) : (

@@ -714,7 +714,7 @@ export default function InventoryModule() {
             ☁️ Sincronizando datos con Supabase...
           </div>
         ) : showCritical ? (
-          <div style={{ padding: "20px" }}>
+          <div style={{ padding: "20px", maxHeight: "calc(100vh - 280px)", overflowY: "auto" }}>
             <div className="flex-between" style={{ marginBottom: "20px" }}>
               <h2 style={{ color: "#ef4444" }}>
                 Alertas de Reabastecimiento (Stock Crítico)
@@ -814,7 +814,7 @@ export default function InventoryModule() {
             </table>
           </div>
         ) : showDuplicates ? (
-          <div style={{ padding: "20px" }}>
+          <div style={{ padding: "20px", maxHeight: "calc(100vh - 280px)", overflowY: "auto" }}>
             <h2 style={{ color: "#eab308", marginBottom: "10px" }}>
               👯 Posibles Productos Duplicados
             </h2>
@@ -1099,88 +1099,138 @@ export default function InventoryModule() {
           avgMargin={avgMargin}
           existingItems={allItems}
           onClose={clearTabParam}
-          onImport={async (newProducts, isRestockMode) => {
+          onImport={async (newProducts, importOption) => {
             setIsLoading(true);
             try {
               let updatedCount = 0;
               let newCount = 0;
+              let skippedCount = 0;
               let rescuedCount = 0;
               const undoLog: any[] = [];
+              const processedCodes = new Set(allItems.map(i => (i.code || "").trim().toUpperCase()));
 
               for (const p of newProducts) {
-                 const existing = allItems.find(
-                   (i) =>
-                     (i.code && p.code && i.code.trim().toUpperCase() === p.code.trim().toUpperCase() && p.code !== "") ||
-                     (normalizeString(i.name) === normalizeString(p.name))
-                 );
-                if (existing) {
-                  undoLog.push({ 
-                    id: existing.id, 
-                    cost: existing.cost, 
-                    price: existing.price, 
-                    stock: existing.stock, 
-                    supplier: existing.supplier, 
-                    location: existing.location, 
-                    priceChanged: existing.priceChanged,
-                    deleted: existing.deleted || false,
-                    deleted_at: existing.deleted_at || null
-                  });
-                  
-                  const inflationFlag = p.cost > existing.cost ? "up" : null;
-                  const currentStock = existing.deleted ? 0 : existing.stock;
-                  const newStock = isRestockMode ? currentStock + p.stock : p.stock;
-                  
-                  if (currentStock <= existing.minStock && newStock > existing.minStock) {
-                    rescuedCount++;
+                if (importOption === "nuevo") {
+                  let uniqueCode = p.code || `SKU-${Date.now()}`;
+                  let suffix = 1;
+                  const baseCodeUpper = (p.code || "").trim().toUpperCase();
+                  if (baseCodeUpper && processedCodes.has(baseCodeUpper)) {
+                    let candidate = `${p.code}-${suffix}`;
+                    while (processedCodes.has(candidate.toUpperCase())) {
+                      suffix++;
+                      candidate = `${p.code}-${suffix}`;
+                    }
+                    uniqueCode = candidate;
                   }
+                  processedCodes.add(uniqueCode.toUpperCase());
 
-                  const { error: updateError } = await supabase
-                    .from("inventory")
-                    .update({
-                      cost: p.cost,
-                      price: p.price,
-                      stock: newStock,
-                      supplier: p.supplier || existing.supplier,
-                      location: p.location || existing.location,
-                      priceChanged: inflationFlag,
-                      deleted: false,
-                      deleted_at: null,
-                    })
-                    .eq("id", existing.id);
-                  if (updateError) throw updateError;
-                  updatedCount++;
-                } else {
-                  undoLog.push({ isNew: true, code: p.code });
+                  undoLog.push({ isNew: true, code: uniqueCode });
                   const { error: insertError } = await supabase.from("inventory").insert({
-                    code: p.code,
+                    code: uniqueCode,
                     name: p.name,
                     cost: p.cost,
                     price: p.price,
                     stock: p.stock,
-                    minStock: p.minStock,
-                    location: p.location,
-                    supplier: p.supplier,
+                    minStock: p.minStock || 5,
+                    location: p.location || "Pendiente",
+                    supplier: p.supplier || "Pendiente",
                     autoPriced: true,
                   });
                   if (insertError) throw insertError;
                   newCount++;
+                } else {
+                  const existing = allItems.find(
+                    (i) =>
+                      (i.code && p.code && i.code.trim().toUpperCase() === p.code.trim().toUpperCase() && p.code !== "") ||
+                      (normalizeString(i.name) === normalizeString(p.name))
+                  );
+
+                  if (existing) {
+                    if (importOption === "complementar") {
+                      skippedCount++;
+                      continue;
+                    }
+
+                    // Option: sustituir
+                    undoLog.push({ 
+                      id: existing.id, 
+                      cost: existing.cost, 
+                      price: existing.price, 
+                      stock: existing.stock, 
+                      supplier: existing.supplier, 
+                      location: existing.location, 
+                      priceChanged: existing.priceChanged,
+                      deleted: existing.deleted || false,
+                      deleted_at: existing.deleted_at || null
+                    });
+                    
+                    const inflationFlag = p.cost > existing.cost ? "up" : null;
+                    const newStock = p.stock;
+                    
+                    if ((existing.stock || 0) <= existing.minStock && newStock > existing.minStock) {
+                      rescuedCount++;
+                    }
+
+                    const { error: updateError } = await supabase
+                      .from("inventory")
+                      .update({
+                        cost: p.cost,
+                        price: p.price,
+                        stock: newStock,
+                        supplier: p.supplier || existing.supplier,
+                        location: p.location || existing.location,
+                        priceChanged: inflationFlag,
+                        deleted: false,
+                        deleted_at: null,
+                      })
+                      .eq("id", existing.id);
+                    if (updateError) throw updateError;
+                    updatedCount++;
+                  } else {
+                    let uniqueCode = p.code || `SKU-${Date.now()}`;
+                    processedCodes.add(uniqueCode.toUpperCase());
+                    
+                    undoLog.push({ isNew: true, code: uniqueCode });
+                    const { error: insertError } = await supabase.from("inventory").insert({
+                      code: uniqueCode,
+                      name: p.name,
+                      cost: p.cost,
+                      price: p.price,
+                      stock: p.stock,
+                      minStock: p.minStock || 5,
+                      location: p.location || "Pendiente",
+                      supplier: p.supplier || "Pendiente",
+                      autoPriced: true,
+                    });
+                    if (insertError) throw insertError;
+                    newCount++;
+                  }
                 }
               }
-              setUndoStack(prev => {
-                const newStack = [...(prev || []), undoLog].slice(-5); // Mantener máximo 5
-                if (typeof window !== "undefined") {
-                  localStorage.setItem("erika_undo_stack", JSON.stringify(newStack));
-                }
-                return newStack;
-              });
+
+              if (undoLog.length > 0) {
+                setUndoStack(prev => {
+                  const newStack = [...(prev || []), undoLog].slice(-5);
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("erika_undo_stack", JSON.stringify(newStack));
+                  }
+                  return newStack;
+                });
+              }
               await fetchInventory(true);
               
               let rescueMsg = "";
               if (rescuedCount > 0) rescueMsg = `\n🎉 ¡Excelente! Se han rescatado ${rescuedCount} productos de su estado CRÍTICO.`;
               
-              alert(
-                `✅ ERIKA Procesó la Importación en la NUBE.\n\n📊 Actualizados: ${updatedCount} productos.\n🆕 Nuevos: ${newCount} productos.${rescueMsg}`,
-              );
+              let alertMsg = `✅ ERIKA Procesó la Importación en la NUBE.\n\n`;
+              if (importOption === "nuevo") {
+                alertMsg += `🆕 Nuevos: ${newCount} productos agregados.`;
+              } else if (importOption === "complementar") {
+                alertMsg += `🆕 Nuevos: ${newCount} productos agregados.\n⏭️ Omitidos por ya existir: ${skippedCount} productos.`;
+              } else {
+                alertMsg += `📊 Actualizados: ${updatedCount} productos.\n🆕 Nuevos: ${newCount} productos.${rescueMsg}`;
+              }
+              alert(alertMsg);
             } catch (err: any) {
               console.error("Error en importación:", err);
               alert(`❌ Error al importar artículos: ${err.message || err}`);
