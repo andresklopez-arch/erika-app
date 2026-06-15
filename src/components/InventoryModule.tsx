@@ -55,6 +55,7 @@ export default function InventoryModule() {
   const [mounted, setMounted] = useState(false);
   const [visibleDuplicates, setVisibleDuplicates] = useState(15);
   const [showScrollIndicator, setShowScrollIndicator] = useState(false);
+  const [mergedItemId, setMergedItemId] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   
   const [undoStack, setUndoStack] = useState<any[][]>(() => {
@@ -208,6 +209,25 @@ export default function InventoryModule() {
     }
   };
 
+  const levenshteinDistance = (s1: string, s2: string): number => {
+    const len1 = s1.length;
+    const len2 = s2.length;
+    const matrix: number[][] = [];
+    for (let i = 0; i <= len1; i++) matrix[i] = [i];
+    for (let j = 0; j <= len2; j++) matrix[0][j] = j;
+    for (let i = 1; i <= len1; i++) {
+      for (let j = 1; j <= len2; j++) {
+        const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j - 1] + cost
+        );
+      }
+    }
+    return matrix[len1][len2];
+  };
+
   const getDuplicateGroups = () => {
     const codeGroups: { [key: string]: InventoryItem[] } = {};
     const nameGroups: { [key: string]: InventoryItem[] } = {};
@@ -221,8 +241,15 @@ export default function InventoryModule() {
 
       const cleanName = normalizeString(item.name);
       if (cleanName !== "") {
-        if (!nameGroups[cleanName]) nameGroups[cleanName] = [];
-        nameGroups[cleanName].push(item);
+        const similarKey = Object.keys(nameGroups).find((key) => {
+          if (key === cleanName) return true;
+          if (key.length < 6 || cleanName.length < 6) return false;
+          return levenshteinDistance(key, cleanName) <= 2;
+        });
+
+        const targetKey = similarKey || cleanName;
+        if (!nameGroups[targetKey]) nameGroups[targetKey] = [];
+        nameGroups[targetKey].push(item);
       }
     });
 
@@ -276,6 +303,33 @@ export default function InventoryModule() {
 
     setIsLoading(true);
     try {
+      const undoLog: any[] = [];
+      undoLog.push({
+        id: principalItem.id,
+        cost: principalItem.cost,
+        price: principalItem.price,
+        stock: principalItem.stock,
+        supplier: principalItem.supplier,
+        location: principalItem.location,
+        priceChanged: principalItem.priceChanged,
+        deleted: principalItem.deleted || false,
+        deleted_at: principalItem.deleted_at || null
+      });
+
+      for (const d of duplicates) {
+        undoLog.push({
+          id: d.id,
+          cost: d.cost,
+          price: d.price,
+          stock: d.stock,
+          supplier: d.supplier,
+          location: d.location,
+          priceChanged: d.priceChanged,
+          deleted: false,
+          deleted_at: null
+        });
+      }
+
       const { error: updateError } = await supabase
         .from("inventory")
         .update({ stock: newStock })
@@ -292,6 +346,16 @@ export default function InventoryModule() {
         
         if (deleteError) throw deleteError;
       }
+
+      setUndoStack(prev => {
+        const newStack = [...(prev || []), undoLog].slice(-5);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("erika_undo_stack", JSON.stringify(newStack));
+        }
+        return newStack;
+      });
+
+      setMergedItemId(principalItem.id);
 
       alert("✅ Productos combinados con éxito.");
       await fetchInventory(true);
@@ -367,6 +431,14 @@ export default function InventoryModule() {
     const isAtBottom = target.scrollTop >= target.scrollHeight - target.clientHeight - 20;
     setShowScrollIndicator(canScroll && !isAtBottom);
   };
+
+  // Temporizador para quitar el destello verde de producto recién combinado
+  useEffect(() => {
+    if (mergedItemId) {
+      const timer = setTimeout(() => setMergedItemId(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [mergedItemId]);
 
   const avgMargin =
     items.length > 0
@@ -991,18 +1063,22 @@ export default function InventoryModule() {
             </thead>
             <tbody>
               {items.map((item) => {
+                const isRecentlyMerged = mergedItemId === item.id;
                 const rowBg =
-                  item.priceChanged === "up"
-                    ? "rgba(239, 68, 68, 0.15)"
-                    : item.autoPriced
-                      ? "rgba(16, 185, 129, 0.1)"
-                      : "transparent";
+                  isRecentlyMerged
+                    ? "rgba(16, 185, 129, 0.35)"
+                    : item.priceChanged === "up"
+                      ? "rgba(239, 68, 68, 0.15)"
+                      : item.autoPriced
+                        ? "rgba(16, 185, 129, 0.1)"
+                        : "transparent";
                 return (
                   <tr
                     key={item.id}
                     style={{
                       borderBottom: "1px solid var(--glass-border)",
                       background: rowBg,
+                      transition: isRecentlyMerged ? "none" : "background 1s ease",
                     }}
                   >
                     <td
