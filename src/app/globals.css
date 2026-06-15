@@ -150,8 +150,7 @@ body {
   margin: 20px 0 20px 20px;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: visible;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
   white-space: nowrap;
   position: sticky;
@@ -235,7 +234,7 @@ body {
   align-items: center;
   color: var(--color-text);
   text-decoration: none;
-  padding: 8px 10px;
+  padding: 6px 10px;
   border-radius: 8px;
   transition: background 0.2s ease, color 0.2s ease;
 }
@@ -607,56 +606,72 @@ body {
   pointer-events: auto;
 }
 
-/* Sidebar Submenus Expansion */
+/* Sidebar Submenus Flyout */
 .sidebar-container .submenu-container {
-  padding-left: 20px;
+  position: absolute;
+  left: 95%;
+  top: 0;
+  width: 210px;
+  background: rgba(17, 24, 39, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 0.8rem;
-  border-left: 1px dashed var(--glass-border);
-  margin-left: 12px;
-  margin-bottom: 0;
-  margin-top: 0;
-  max-height: 0;
+  font-size: 0.85rem;
+  z-index: 9999;
   opacity: 0;
-  overflow: hidden;
-  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease, margin 0.3s ease;
+  visibility: hidden;
+  transform: translateX(10px);
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.25s;
+  pointer-events: none;
 }
 
-/* Expanded state: Only active or hovered menu sections will open their submenus, keeping the height compact */
-.sidebar-container:hover a.active + .submenu-container,
-.sidebar-container.pinned a.active + .submenu-container,
-.sidebar-container:hover a:hover + .submenu-container,
-.sidebar-container.pinned a:hover + .submenu-container,
-.sidebar-container:hover .submenu-container:hover,
-.sidebar-container.pinned .submenu-container:hover {
-  max-height: 400px;
+.nav-item-group:hover .submenu-container,
+.submenu-container:hover {
   opacity: 1;
-  margin-bottom: 6px;
-  margin-top: 4px;
+  visibility: visible;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.sidebar-container .submenu-container a {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+  text-decoration: none;
+  border-radius: 6px;
+  background: transparent !important;
+  border: none !important;
+  width: auto !important;
+  justify-content: flex-start !important;
+  margin: 0 !important;
+}
+
+.sidebar-container .submenu-container a:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--color-primary) !important;
 }
 
 /* Specific theme hover colors for submenus */
+[data-theme="light"] .sidebar-container .submenu-container {
+  background: rgba(255, 255, 255, 0.95) !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
 [data-theme="light"] .sidebar-container .submenu-container a {
-  color: rgba(15, 23, 42, 0.7) !important;
+  color: rgba(15, 23, 42, 0.8) !important;
 }
 
-[data-theme="light"] .sidebar-container .submenu-container a:not([style*="color-primary"]):hover,
-[data-theme="light"] .sidebar-container .submenu-container a:not([style*="var(--color-primary)"]):hover {
-  color: var(--color-primary) !important;
+[data-theme="light"] .sidebar-container .submenu-container a:hover {
   background: rgba(0, 0, 0, 0.05) !important;
-}
-
-/* Responsive Submenu Collapse for short screens (vertical height < 760px) */
-@media (max-height: 760px) {
-  .sidebar-container:not(:hover) a.active + .submenu-container,
-  .sidebar-container:not(:hover) .submenu-container {
-    max-height: 0 !important;
-    opacity: 0 !important;
-    margin-bottom: 0 !important;
-    margin-top: 0 !important;
-  }
+  color: var(--color-primary) !important;
 }
 
 

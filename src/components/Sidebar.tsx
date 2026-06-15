@@ -174,7 +174,7 @@ export default function Sidebar() {
           {isPinned ? "📌" : "📍"}
         </button>
       </div>
-      <nav style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
+      <nav style={{ display: "flex", flexDirection: "column", gap: "4px", width: "100%" }}>
         {(isAdmin || p.pos) && (
           <Link
             href="/"
@@ -212,7 +212,7 @@ export default function Sidebar() {
           </Link>
         )}
         {(isAdmin || p.pos || p.inventario || p.servicios) && (
-          <>
+          <div className="nav-item-group" style={{ position: "relative" }}>
             <Link
               href="/clientes"
               className={isActive("/clientes") ? "active" : ""}
@@ -269,11 +269,11 @@ export default function Sidebar() {
                 <span>📅</span><span>Agenda de Servicios</span>
               </Link>
             </div>
-          </>
+          </div>
         )}
 
         {(isAdmin || p.inventario) && (
-          <>
+          <div className="nav-item-group" style={{ position: "relative" }}>
             <Link
               href="/inventario"
               className={isActive("/inventario") ? "active" : ""}
@@ -310,7 +310,7 @@ export default function Sidebar() {
                 <span>📋</span><span>Auditoría y Arqueos</span>
               </Link>
             </div>
-          </>
+          </div>
         )}
         {(isAdmin || p.configuracion) && (
           <>

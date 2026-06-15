@@ -25,6 +25,52 @@ const normalizeString = (str: string) => {
     .trim();
 };
 
+const highlightText = (text: string | undefined, query: string) => {
+  if (!text) return "";
+  if (!query.trim()) return text;
+  
+  const tokens = query
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length === 0) return text;
+
+  const escapedTokens = tokens.map(t => t.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+  const pattern = new RegExp(`(${escapedTokens.join("|")})`, "gi");
+  
+  const parts = text.split(pattern);
+  return (
+    <>
+      {parts.map((part, index) => {
+        const isMatch = tokens.some(t => {
+          const normPart = part.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          const normT = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          return normPart === normT;
+        });
+        return isMatch ? (
+          <mark 
+            key={index} 
+            style={{ 
+              background: "rgba(244, 63, 94, 0.25)", 
+              color: "var(--color-primary)", 
+              padding: "2px 4px", 
+              borderRadius: "4px", 
+              fontWeight: "bold" 
+            }}
+          >
+            {part}
+          </mark>
+        ) : (
+          part
+        );
+      })}
+    </>
+  );
+};
+
+
 export interface InventoryItem {
   id: string;
   code?: string;
@@ -56,6 +102,7 @@ export default function InventoryModule() {
   const [visibleDuplicates, setVisibleDuplicates] = useState(15);
   const [showScrollIndicator, setShowScrollIndicator] = useState(false);
   const [mergedItemId, setMergedItemId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const panelRef = useRef<HTMLDivElement>(null);
   
   const [undoStack, setUndoStack] = useState<any[][]>(() => {
@@ -449,6 +496,26 @@ export default function InventoryModule() {
       : 0.5;
   const criticalItems = items.filter((i) => i.stock <= i.minStock);
 
+  const filteredItems = items.filter((item) => {
+    if (!searchQuery.trim()) return true;
+    const queryTokens = normalizeString(searchQuery).split(/\s+/).filter(Boolean);
+    if (queryTokens.length === 0) return true;
+
+    const nameNorm = normalizeString(item.name);
+    const codeNorm = normalizeString(item.code || "");
+    const locNorm = normalizeString(item.location || "");
+    const supNorm = normalizeString(item.supplier || "");
+
+    return queryTokens.every((token) => {
+      return (
+        nameNorm.includes(token) ||
+        codeNorm.includes(token) ||
+        locNorm.includes(token) ||
+        supNorm.includes(token)
+      );
+    });
+  });
+
   const exportPurchaseOrders = () => {
     if (criticalItems.length === 0) return alert("No hay productos críticos.");
     const wb = XLSX.utils.book_new();
@@ -805,6 +872,90 @@ export default function InventoryModule() {
         </div>
       </div>
 
+      {!showCritical && !showDuplicates && !showAudit && !showImporter && (
+        <div
+          className="glass-panel animate-fade-in"
+          style={{
+            padding: "12px 20px",
+            display: "flex",
+            alignItems: "center",
+            gap: "15px",
+            background: "var(--glass-bg)",
+            border: "1px solid var(--glass-border)",
+            borderRadius: "16px",
+            boxShadow: "var(--shadow-glow)",
+          }}
+        >
+          <div style={{ position: "relative", flex: 1 }}>
+            <span
+              style={{
+                position: "absolute",
+                left: "15px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                fontSize: "1.1rem",
+                opacity: 0.6,
+                pointerEvents: "none",
+              }}
+            >
+              🔍
+            </span>
+            <input
+              type="text"
+              placeholder="Buscar por Nombre, Código de Barras, Ubicación o Proveedor (Ej: 'tornillo truper pasillo A')..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "12px 20px 12px 45px",
+                borderRadius: "10px",
+                border: "1px solid var(--glass-border)",
+                background: "rgba(0, 0, 0, 0.25)",
+                color: "white",
+                fontSize: "0.95rem",
+                outline: "none",
+                transition: "border-color 0.2s, box-shadow 0.2s",
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = "var(--color-primary)";
+                e.currentTarget.style.boxShadow = "0 0 10px rgba(244, 63, 94, 0.15)";
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = "var(--glass-border)";
+                e.currentTarget.style.boxShadow = "none";
+              }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                style={{
+                  position: "absolute",
+                  right: "15px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "transparent",
+                  border: "none",
+                  color: "rgba(255, 255, 255, 0.5)",
+                  cursor: "pointer",
+                  fontSize: "1rem",
+                  padding: "5px",
+                  transition: "color 0.2s",
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.color = "white"}
+                onMouseLeave={(e) => e.currentTarget.style.color = "rgba(255, 255, 255, 0.5)"}
+              >
+                ✖
+              </button>
+            )}
+          </div>
+          {searchQuery && (
+            <div style={{ fontSize: "0.85rem", opacity: 0.8, minWidth: "140px", textAlign: "right" }}>
+              Encontrados: <strong style={{ color: "var(--color-secondary)" }}>{filteredItems.length}</strong>
+            </div>
+          )}
+        </div>
+      )}
+
       <div
         ref={panelRef}
         onScroll={handleScroll}
@@ -1062,7 +1213,7 @@ export default function InventoryModule() {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => {
+              {filteredItems.map((item) => {
                 const isRecentlyMerged = mergedItemId === item.id;
                 const rowBg =
                   isRecentlyMerged
@@ -1088,10 +1239,10 @@ export default function InventoryModule() {
                         color: "var(--color-primary)",
                       }}
                     >
-                      {item.code || "-"}
+                      {item.code ? highlightText(item.code, searchQuery) : "-"}
                     </td>
                     <td style={{ padding: "15px", fontWeight: "bold" }}>
-                      {item.name}
+                      {highlightText(item.name, searchQuery)}
                       {item.priceChanged === "up" && (
                         <span
                           style={{
@@ -1109,7 +1260,7 @@ export default function InventoryModule() {
                           color: "var(--color-secondary)",
                         }}
                       >
-                        Prov: {item.supplier || "N/A"}
+                        Prov: {item.supplier ? highlightText(item.supplier, searchQuery) : "N/A"}
                       </div>
                     </td>
                     <td style={{ padding: "15px" }}>
@@ -1128,7 +1279,7 @@ export default function InventoryModule() {
                             border: "1px solid var(--color-secondary)",
                           }}
                         >
-                          📍 {item.location || "PENDIENTE"}
+                          📍 {item.location ? highlightText(item.location, searchQuery) : "PENDIENTE"}
                         </span>
                         {item.location && (
                           <button
@@ -1218,6 +1369,20 @@ export default function InventoryModule() {
                   </tr>
                 );
               })}
+              {filteredItems.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={8}
+                    style={{
+                      padding: "40px",
+                      textAlign: "center",
+                      color: "rgba(255, 255, 255, 0.5)",
+                    }}
+                  >
+                    🔍 No se encontraron productos que coincidan con la búsqueda.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         )}
