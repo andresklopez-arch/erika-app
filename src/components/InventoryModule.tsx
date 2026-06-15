@@ -714,7 +714,7 @@ export default function InventoryModule() {
             ☁️ Sincronizando datos con Supabase...
           </div>
         ) : showCritical ? (
-          <div style={{ padding: "20px", maxHeight: "calc(100vh - 280px)", overflowY: "auto" }}>
+          <div style={{ padding: "20px" }}>
             <div className="flex-between" style={{ marginBottom: "20px" }}>
               <h2 style={{ color: "#ef4444" }}>
                 Alertas de Reabastecimiento (Stock Crítico)
@@ -814,7 +814,7 @@ export default function InventoryModule() {
             </table>
           </div>
         ) : showDuplicates ? (
-          <div style={{ padding: "20px", maxHeight: "calc(100vh - 280px)", overflowY: "auto" }}>
+          <div style={{ padding: "20px" }}>
             <h2 style={{ color: "#eab308", marginBottom: "10px" }}>
               👯 Posibles Productos Duplicados
             </h2>
