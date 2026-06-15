@@ -79,10 +79,12 @@ export default function ClientCaptureModal({ onClose, onSuccess }: ClientCapture
         bottom: 0,
         backgroundColor: "rgba(0,0,0,0.8)",
         display: "flex",
-        alignItems: "center",
+        alignItems: "flex-start",
         justifyContent: "center",
         zIndex: 10000,
         backdropFilter: "blur(5px)",
+        overflowY: "auto",
+        padding: "40px 20px",
       }}
     >
       <div
