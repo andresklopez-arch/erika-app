@@ -124,7 +124,7 @@ const renderHighlightedName = (name: string, query: string) => {
 };
 
 export default function POSModule() {
-  const { currentUser } = useAuth();
+  const { currentUser, businessSettings } = useAuth();
   const businessProfile = useBusinessProfile();
   const [globalCatalog, setGlobalCatalog] = useState<any[]>([]);
   const [offlinePendingCount, setOfflinePendingCount] = useState(0);
@@ -957,34 +957,75 @@ export default function POSModule() {
   const subtotal = subtotalNeto;
 
   const executePrintWindow = (job: any) => {
-    const printWindow = window.open("", "_blank", "width=300,height=500");
+    const config = businessSettings?.config || {};
+    const paperSize = config.printer_paper_size || "80mm";
+    const fontSize = config.printer_font_size || "normal";
+    const fontFamily = config.printer_font_family || "monospace";
+    const fields = config.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"];
+    const footerMsg = config.printer_footer_msg || "¡Gracias por su compra!";
+
+    const widthCss = paperSize === "58mm" ? "58mm" : "80mm";
+    const fontSizeCss = fontSize === "small" ? "10px" : fontSize === "large" ? "14px" : "12px";
+    let fontFamilyCss = "monospace";
+    if (fontFamily === "sans-serif") fontFamilyCss = "sans-serif";
+    else if (fontFamily === "serif") fontFamilyCss = "serif";
+
+    const showLogo = fields.includes("logo") && (businessProfile.logo || config.business_logo);
+    const showName = fields.includes("name");
+    const showRfc = fields.includes("rfc") && (businessProfile.rfc || config.business_rfc);
+    const showPhone = fields.includes("phone") && (businessProfile.phone || config.business_phone);
+    const showAddress = fields.includes("address") && (businessProfile.address || config.business_address);
+    const showFooter = fields.includes("footer");
+
+    const printWindow = window.open("", "_blank", `width=${paperSize === "58mm" ? 300 : 400},height=500`);
     if (!printWindow) return;
+
     if (job.type === "ticket") {
       const { realTicketId, items, finalTotal } = job.data;
       const itemsHtml = items.map((i: any) => `
-        <div style="display:flex; justify-content:space-between; font-size:12px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
           <span>${i.qty}x ${i.name}</span>
           <span>$${(i.price * i.qty).toFixed(2)}</span>
         </div>
       `).join("");
+      
       const html = `
-        <html><head><style>body{font-family: monospace;}</style></head><body>
-          <h3 style="text-align:center; margin:0 0 5px 0;">${businessProfile.name || "FERRETERÍA ERIKA"}</h3>
-          <p style="text-align:center; margin:0 0 10px 0;">Ticket: #${realTicketId}</p>
-          <div style="border-bottom: 1px dashed #000; margin-bottom: 5px;"></div>
-          ${itemsHtml}
-          <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
-          ${applyIva ? `<div style="display:flex; justify-content:space-between; font-size: 12px;"><span>Subtotal:</span><span>$${subtotalNeto.toFixed(2)}</span></div>
-          <div style="display:flex; justify-content:space-between; font-size: 12px;"><span>IVA (16%):</span><span>$${iva.toFixed(2)}</span></div>
-          <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>` : ''}
-          <div style="display:flex; justify-content:space-between;"><strong>TOTAL:</strong><strong>$${finalTotal.toFixed(2)}</strong></div>
-          <div style="border-bottom: 1px dashed #000; margin: 5px 0;"></div>
-          <div style="text-align:center; margin-top: 15px;">
-            <strong>Auto-Facturación Express</strong><br>
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=http://localhost:3000/facturacion/${realTicketId}" style="width:100px; height:100px; margin: 10px 0;" /><br>
-            <span>Escanea el QR o entra a localhost:3000/facturacion/${realTicketId} para facturar.</span>
-          </div>
-        </body></html>
+        <html>
+          <head>
+            <style>
+              body { font-family: ${fontFamilyCss}; font-size: ${fontSizeCss}; margin: 0; padding: 10px; width: ${widthCss}; color: #000; background: #fff; }
+              .center { text-align: center; }
+              .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
+              .bold { font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            ${showLogo ? `<div class="center"><img src="${businessProfile.logo || config.business_logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
+            ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name || config.business_name || "FERRETERÍA ERIKA"}</div>` : ""}
+            ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc || config.business_rfc}</div>` : ""}
+            ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address || config.business_address}</div>` : ""}
+            ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessProfile.phone || config.business_phone}</div>` : ""}
+            
+            <div class="divider"></div>
+            <div class="center bold" style="margin-bottom: 5px;">Ticket: #${realTicketId}</div>
+            <div style="font-size: 0.9em; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
+            <div class="divider"></div>
+            ${itemsHtml}
+            <div class="divider"></div>
+            ${applyIva ? `
+            <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span>$${subtotalNeto.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>IVA (16%):</span><span>$${iva.toFixed(2)}</span></div>
+            <div class="divider"></div>` : ''}
+            <div style="display:flex; justify-content:space-between; font-size: 1.1em;"><strong>TOTAL:</strong><strong>$${finalTotal.toFixed(2)}</strong></div>
+            <div class="divider"></div>
+            <div class="center" style="margin-top: 15px; font-size: 0.9em;">
+              <strong>Auto-Facturación Express</strong><br>
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${window.location.origin}/facturacion/${realTicketId}" style="width:100px; height:100px; margin: 10px 0;" /><br>
+              <span>Escanea el QR o entra a ${window.location.origin}/facturacion/${realTicketId} para facturar.</span>
+            </div>
+            ${showFooter ? `<div class="center bold" style="margin-top: 15px;">${footerMsg}</div>` : ""}
+          </body>
+        </html>
       `;
       printWindow.document.write(html);
       printWindow.document.close();
@@ -992,54 +1033,63 @@ export default function POSModule() {
     } else if (job.type === "layaway") {
       const { customer, items, finalTotal, downPayment } = job.data;
       const itemsHtml = items.map((item: any) => `
-        <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
           <div style="flex: 2;">${item.qty}x ${item.name}</div>
           <div style="flex: 1; text-align: right;">$${(item.price * item.qty).toFixed(2)}</div>
         </div>
       `).join("");
+      
       const ticketHtml = `
         <html>
           <head>
             <style>
-              body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; width: 58mm; color: #000; background: #fff; }
+              body { font-family: ${fontFamilyCss}; font-size: ${fontSizeCss}; margin: 0; padding: 10px; width: ${widthCss}; color: #000; background: #fff; }
               .center { text-align: center; }
               .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
               .bold { font-weight: bold; }
             </style>
           </head>
           <body>
-            <div class="center bold" style="font-size: 16px; margin-bottom: 5px;">${businessProfile.name || "FERRETERÍA ERIKA"}</div>
-            <div class="center" style="font-size: 12px;">Comprobante de Apartado</div>
+            ${showLogo ? `<div class="center"><img src="${businessProfile.logo || config.business_logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
+            ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name || config.business_name || "FERRETERÍA ERIKA"}</div>` : ""}
+            ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc || config.business_rfc}</div>` : ""}
+            ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address || config.business_address}</div>` : ""}
+            ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessProfile.phone || config.business_phone}</div>` : ""}
+            
             <div class="divider"></div>
-            <div style="font-size: 12px; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
-            <div style="font-size: 12px; margin-bottom: 5px;">Cliente: ${customer?.name || "Desconocido"}</div>
+            <div class="center bold" style="font-size: 1.1em;">Comprobante de Apartado</div>
+            <div class="divider"></div>
+            <div style="margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
+            <div style="margin-bottom: 5px;">Cliente: ${customer?.name || "Desconocido"}</div>
             <div class="divider"></div>
             ${itemsHtml}
             <div class="divider"></div>
-            ${applyIva ? `<div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+            ${applyIva ? `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <div>Subtotal:</div>
               <div>$${subtotalNeto.toFixed(2)}</div>
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <div>IVA (16%):</div>
               <div>$${iva.toFixed(2)}</div>
             </div>` : ''}
-            <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <div>Total Mercancía:</div>
               <div class="bold">$${finalTotal.toFixed(2)}</div>
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <div>Enganche Dado:</div>
               <div class="bold">$${downPayment.toFixed(2)}</div>
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <div>Saldo Pendiente:</div>
               <div class="bold">$${(finalTotal - downPayment).toFixed(2)}</div>
             </div>
             <div class="divider"></div>
-            <div class="center bold" style="font-size: 12px; margin-bottom: 5px; color: red;">¡ATENCIÓN!</div>
-            <div class="center" style="font-size: 10px;">Vence: ${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
-            <div class="center" style="font-size: 10px; margin-top: 5px;">Pasando esta fecha, la mercancía regresará a piso de ventas.</div>
+            <div class="center bold" style="margin-bottom: 5px; color: red;">¡ATENCIÓN!</div>
+            <div class="center">Vence: ${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
+            <div class="center" style="margin-top: 5px; font-size: 0.85em;">Pasando esta fecha, la mercancía regresará a piso de ventas.</div>
+            ${showFooter ? `<div class="center bold" style="margin-top: 15px;">${footerMsg}</div>` : ""}
           </body>
         </html>
       `;

@@ -49,24 +49,24 @@ export default function ReportsModule() {
         let sales = 0;
         let costs = 0;
         if (txs) {
-           txs.forEach(t => {
-              sales += t.amount;
-              const costMatch = t.description?.match(/\[COSTO:\s*([\d.]+)\]/);
-              if (costMatch && costMatch[1]) {
-                 costs += parseFloat(costMatch[1]);
-              } else {
-                 costs += t.amount * 0.70; // fallback para ventas antiguas sin costo registrado
-              }
-           });
+           txs.forEach((t: any) => {
+            sales += t.amount;
+            const costMatch = t.description?.match(/\[COSTO:\s*([\d.]+)\]/);
+            if (costMatch && costMatch[1]) {
+               costs += parseFloat(costMatch[1]);
+            } else {
+               costs += t.amount * 0.70; // fallback para ventas antiguas sin costo registrado
+            }
+         });
         }
 
         // Gastos y Mermas
         const { data: losses } = await supabase.from("business_losses").select("amount").gte("created_at", firstDayOfMonth);
-        const totalLosses = losses ? losses.reduce((s, l) => s + l.amount, 0) : 0;
+         const totalLosses = losses ? losses.reduce((s: number, l: any) => s + l.amount, 0) : 0;
 
-        // Abonos a Proveedores
-        const { data: payments } = await supabase.from("supplier_payments").select("amount").gte("created_at", firstDayOfMonth);
-        const totalPayments = payments ? payments.reduce((s, p) => s + p.amount, 0) : 0;
+         // Abonos a Proveedores
+         const { data: payments } = await supabase.from("supplier_payments").select("amount").gte("created_at", firstDayOfMonth);
+         const totalPayments = payments ? payments.reduce((s: number, p: any) => s + p.amount, 0) : 0;
 
         setNetProfit({
            sales,
@@ -77,22 +77,22 @@ export default function ReportsModule() {
         });
 
         const { data: sessions } = await supabase.from("cash_sessions").select("*").order("closed_at", { ascending: false }).limit(50);
-        if (sessions && sessions.length > 0) {
-           const sessionIds = sessions.map(s => s.id);
-           const { data: txs } = await supabase
-              .from("cash_transactions")
-              .select("session_id, type, amount, description, payment_method, cash_amount, card_amount, transfer_amount")
-              .in("session_id", sessionIds);
-           
-           const sessionsWithSales = sessions.map(session => {
-              const sessionTxs = txs ? txs.filter(t => t.session_id === session.id) : [];
-              
-              let cashSales = 0;
-              let cardSales = 0;
-              let transferSales = 0;
-              let totalSales = 0;
+         if (sessions && sessions.length > 0) {
+            const sessionIds = sessions.map((s: any) => s.id);
+            const { data: txs } = await supabase
+               .from("cash_transactions")
+               .select("session_id, type, amount, description, payment_method, cash_amount, card_amount, transfer_amount")
+               .in("session_id", sessionIds);
+            
+            const sessionsWithSales = sessions.map((session: any) => {
+               const sessionTxs = txs ? txs.filter((t: any) => t.session_id === session.id) : [];
+               
+               let cashSales = 0;
+               let cardSales = 0;
+               let transferSales = 0;
+               let totalSales = 0;
 
-              sessionTxs.filter(t => t.type === 'sale').forEach(t => {
+               sessionTxs.filter((t: any) => t.type === 'sale').forEach((t: any) => {
                  totalSales += t.amount;
                  
                  // Cash

@@ -29,7 +29,7 @@ export default function IntelligenceNotifications() {
         .select("id, name, stock, minStock");
       
       if (stockData) {
-        const criticalCount = stockData.filter(i => i.stock <= i.minStock).length;
+        const criticalCount = stockData.filter((i: any) => i.stock <= i.minStock).length;
         if (criticalCount > 0) {
           activeAlerts.push({
             id: "stock-critical",

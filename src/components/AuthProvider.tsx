@@ -41,6 +41,12 @@ const AuthContext = createContext<AuthContextType>({
       business_logo: "",
       printer_connected: true,
       printer_type: "system",
+      printer_name: "",
+      printer_paper_size: "80mm",
+      printer_font_size: "normal",
+      printer_font_family: "monospace",
+      printer_fields: ["name", "rfc", "phone", "address", "logo", "footer"],
+      printer_footer_msg: "¡Gracias por su compra!",
     },
   },
   updateBusinessSettings: async () => false,
@@ -222,7 +228,7 @@ export default function AuthProvider({
       const numKeys = ["earn_rate", "earn_points", "redeem_rate", "wholesale_min_qty", "wholesale_discount"];
       numKeys.forEach((key) => {
         if (key in updatedConfig) {
-          updatedConfig[key as keyof BusinessConfig] = Number(updatedConfig[key as keyof BusinessConfig]) as any;
+          (updatedConfig as any)[key] = Number((updatedConfig as any)[key]);
         }
       });
 

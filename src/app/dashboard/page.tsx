@@ -324,7 +324,7 @@ export default function Dashboard() {
            }
            return result.data;
          });
-         setOverdueCustomers(parsedCusts.filter((c) => c.credit_limit > 0 && c.balance >= c.credit_limit));
+         setOverdueCustomers(parsedCusts.filter((c: CustomerItem) => c.credit_limit > 0 && c.balance >= c.credit_limit));
       }
 
       // 2. Ventas de Hoy
@@ -334,7 +334,7 @@ export default function Dashboard() {
         .eq("type", "sale")
         .gte("created_at", todayIso);
       if (txs) {
-        setSalesToday(txs.reduce((sum, t) => sum + t.amount, 0));
+        setSalesToday(txs.reduce((sum: number, t: any) => sum + t.amount, 0));
       }
 
       // 3. Mermas / Descuadres de Caja
@@ -410,7 +410,7 @@ export default function Dashboard() {
       const { data: inv } = await supabase.from("inventory").select("*");
       if (inv) {
         // Validacion en tiempo de ejecucion con Zod
-        const parsedInv = inv.map((item) => {
+        const parsedInv = inv.map((item: any) => {
           const result = InventoryItemSchema.safeParse(item);
           if (!result.success) {
             console.error("Error validando producto con Zod:", result.error);
@@ -470,13 +470,13 @@ export default function Dashboard() {
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
       
       const { data: monthSales } = await supabase.from("cash_transactions").select("amount").eq("type", "sale").gte("created_at", firstDayOfMonth);
-      const totalSalesMonth = monthSales ? monthSales.reduce((sum, s) => sum + s.amount, 0) : 0;
+      const totalSalesMonth = monthSales ? monthSales.reduce((sum: number, s: any) => sum + s.amount, 0) : 0;
 
       const { data: monthPayments } = await supabase.from("supplier_payments").select("amount").gte("created_at", firstDayOfMonth);
-      const totalPaymentsMonth = monthPayments ? monthPayments.reduce((sum, p) => sum + p.amount, 0) : 0;
+      const totalPaymentsMonth = monthPayments ? monthPayments.reduce((sum: number, p: any) => sum + p.amount, 0) : 0;
 
       const { data: monthLosses } = await supabase.from("business_losses").select("amount").gte("created_at", firstDayOfMonth);
-      const totalLossesMonth = monthLosses ? monthLosses.reduce((sum, l) => sum + l.amount, 0) : 0;
+      const totalLossesMonth = monthLosses ? monthLosses.reduce((sum: number, l: any) => sum + l.amount, 0) : 0;
 
       setIncomeVsExpenses([
           { name: "Ingresos (Ventas)", Total: totalSalesMonth, fill: "#10b981" },
@@ -500,7 +500,7 @@ export default function Dashboard() {
       return alert("No hay ventas hoy para exportar.");
 
     let csvContent = "data:text/csv;charset=utf-8,ID,Fecha,Monto,Descripcion\n";
-    txs.forEach((t) => {
+    txs.forEach((t: any) => {
       csvContent += `${t.id},${new Date(t.created_at).toLocaleString()},${t.amount},"${t.description}"\n`;
     });
 
