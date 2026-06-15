@@ -1109,6 +1109,9 @@ export default function InventoryModule() {
               const undoLog: any[] = [];
               const processedCodes = new Set(allItems.map(i => (i.code || "").trim().toUpperCase()));
 
+              const inserts: any[] = [];
+              const updates: any[] = [];
+
               for (const p of newProducts) {
                 if (importOption === "nuevo") {
                   let uniqueCode = p.code || `SKU-${Date.now()}`;
@@ -1125,7 +1128,7 @@ export default function InventoryModule() {
                   processedCodes.add(uniqueCode.toUpperCase());
 
                   undoLog.push({ isNew: true, code: uniqueCode });
-                  const { error: insertError } = await supabase.from("inventory").insert({
+                  inserts.push({
                     code: uniqueCode,
                     name: p.name,
                     cost: p.cost,
@@ -1136,7 +1139,6 @@ export default function InventoryModule() {
                     supplier: p.supplier || "Pendiente",
                     autoPriced: true,
                   });
-                  if (insertError) throw insertError;
                   newCount++;
                 } else {
                   const existing = allItems.find(
@@ -1171,27 +1173,34 @@ export default function InventoryModule() {
                       rescuedCount++;
                     }
 
-                    const { error: updateError } = await supabase
-                      .from("inventory")
-                      .update({
-                        cost: p.cost,
-                        price: p.price,
-                        stock: newStock,
-                        supplier: p.supplier || existing.supplier,
-                        location: p.location || existing.location,
-                        priceChanged: inflationFlag,
-                        deleted: false,
-                        deleted_at: null,
-                      })
-                      .eq("id", existing.id);
-                    if (updateError) throw updateError;
+                    updates.push({
+                      id: existing.id,
+                      cost: p.cost,
+                      price: p.price,
+                      stock: newStock,
+                      supplier: p.supplier || existing.supplier,
+                      location: p.location || existing.location,
+                      priceChanged: inflationFlag,
+                      deleted: false,
+                      deleted_at: null,
+                    });
                     updatedCount++;
                   } else {
                     let uniqueCode = p.code || `SKU-${Date.now()}`;
+                    let suffix = 1;
+                    const baseCodeUpper = (p.code || "").trim().toUpperCase();
+                    if (baseCodeUpper && processedCodes.has(baseCodeUpper)) {
+                      let candidate = `${p.code}-${suffix}`;
+                      while (processedCodes.has(candidate.toUpperCase())) {
+                        suffix++;
+                        candidate = `${p.code}-${suffix}`;
+                      }
+                      uniqueCode = candidate;
+                    }
                     processedCodes.add(uniqueCode.toUpperCase());
                     
                     undoLog.push({ isNew: true, code: uniqueCode });
-                    const { error: insertError } = await supabase.from("inventory").insert({
+                    inserts.push({
                       code: uniqueCode,
                       name: p.name,
                       cost: p.cost,
@@ -1202,10 +1211,21 @@ export default function InventoryModule() {
                       supplier: p.supplier || "Pendiente",
                       autoPriced: true,
                     });
-                    if (insertError) throw insertError;
                     newCount++;
                   }
                 }
+              }
+
+              // Ejecutar inserciones en lote
+              if (inserts.length > 0) {
+                const { error: insertError } = await supabase.from("inventory").insert(inserts);
+                if (insertError) throw insertError;
+              }
+
+              // Ejecutar actualizaciones en lote
+              if (updates.length > 0) {
+                const { error: updateError } = await supabase.from("inventory").upsert(updates);
+                if (updateError) throw updateError;
               }
 
               if (undoLog.length > 0) {

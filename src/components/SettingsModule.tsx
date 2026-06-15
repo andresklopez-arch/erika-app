@@ -321,6 +321,19 @@ export default function SettingsModule() {
       setPrinterFields(businessSettings.config.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"]);
       setPrinterFooterMsg(businessSettings.config.printer_footer_msg || "¡Gracias por su compra!");
       /* eslint-enable react-hooks/set-state-in-effect */
+
+      // Pre-cargar lista de impresoras escaneadas si ya hay una guardada
+      const savedPrinter = businessSettings.config.printer_name;
+      const type = businessSettings.config.printer_type;
+      if (savedPrinter && (type === "bluetooth" || type === "wifi")) {
+        const defaultList = type === "bluetooth"
+          ? ["🛜 Impresora Térmica Portátil BT-58", "🛜 EC Line Printer BT-80", "🛜 Star Micronics SM-T300i"]
+          : ["📶 EPSON TM-T88VI (192.168.1.150)", "📶 Bixolon SRP-350plusIII (192.168.1.155)", "📶 Impresora Cocina (192.168.1.200)"];
+        if (!defaultList.includes(savedPrinter)) {
+          defaultList.unshift(savedPrinter);
+        }
+        setScannedPrinters(defaultList);
+      }
     }
     fetchUsers();
     fetchErrorLogs();

@@ -269,6 +269,33 @@ export default function SmartImporter({
     }
   }, [minBatchMargin]);
 
+  const isUTF8 = (bytes: Uint8Array): boolean => {
+    let i = 0;
+    while (i < bytes.length) {
+      if (bytes[i] <= 0x7f) {
+        i += 1;
+      } else if (bytes[i] >= 0xc2 && bytes[i] <= 0xdf) {
+        if (i + 1 >= bytes.length) return false;
+        if (bytes[i + 1] < 0x80 || bytes[i + 1] > 0xbf) return false;
+        i += 2;
+      } else if (bytes[i] >= 0xe0 && bytes[i] <= 0xef) {
+        if (i + 2 >= bytes.length) return false;
+        if (bytes[i + 1] < 0x80 || bytes[i + 1] > 0xbf) return false;
+        if (bytes[i + 2] < 0x80 || bytes[i + 2] > 0xbf) return false;
+        i += 3;
+      } else if (bytes[i] >= 0xf0 && bytes[i] <= 0xf4) {
+        if (i + 3 >= bytes.length) return false;
+        if (bytes[i + 1] < 0x80 || bytes[i + 1] > 0xbf) return false;
+        if (bytes[i + 2] < 0x80 || bytes[i + 2] > 0xbf) return false;
+        if (bytes[i + 3] < 0x80 || bytes[i + 3] > 0xbf) return false;
+        i += 4;
+      } else {
+        return false;
+      }
+    }
+    return true;
+  };
+
   const processExcel = async (file: File) => {
     setIsProcessing(true);
     setProgress("🧠 Analizando archivo y calculando márgenes...");
@@ -290,7 +317,20 @@ export default function SmartImporter({
           }
         }
 
-        const workbook = XLSX.read(data, { type: "array" });
+        let workbook;
+        if (ext === "csv") {
+          const isUtf = isUTF8(data);
+          if (!isUtf) {
+            const decoder = new TextDecoder("windows-1252");
+            const decodedText = decoder.decode(data);
+            workbook = XLSX.read(decodedText, { type: "string" });
+          } else {
+            workbook = XLSX.read(data, { type: "array" });
+          }
+        } else {
+          workbook = XLSX.read(data, { type: "array" });
+        }
+
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         const rawDataRaw = XLSX.utils.sheet_to_json(worksheet, {
