@@ -595,6 +595,11 @@ export default function SmartImporter({
     setProgress(`✅ ${rawProducts.length} productos detectados por IA. Calculando precios...`);
     await new Promise(resolve => setTimeout(resolve, 400));
 
+    const processed = rawProducts.map((p: any, i: number) => {
+      let code = p.code ? String(p.code).trim() : `FER-AI-${now}-${i}`;
+      let name = p.name ? String(p.name).trim() : "Producto sin nombre";
+      const cost = parseFloat(String(p.cost).replace(/[^0-9.-]+/g, "")) || 0;
+      const stockVal = parseInt(String(p.stock)) || 1;
       const costIsEmpty = p.cost === undefined || p.cost === null || String(p.cost).trim() === "";
       const stockIsEmpty = p.stock === undefined || p.stock === null || String(p.stock).trim() === "";
 
