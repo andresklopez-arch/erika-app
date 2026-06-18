@@ -191,7 +191,7 @@ export default function SmartImporter({
       }
 
       let rawCode = row[mapping.code] ? String(row[mapping.code]).trim() : `SKU-${Date.now()}-${i}`;
-      const cleanName = cleanAndCapitalize(String(row[mapping.name]));
+      let cleanName = cleanAndCapitalize(String(row[mapping.name]));
 
       // 🔍 Detección Anti-Duplicados usando findExistingItem (difusa)
       let { item: existing, isFuzzy } = findExistingItem(rawCode, cleanName);
