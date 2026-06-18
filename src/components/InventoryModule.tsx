@@ -1487,6 +1487,8 @@ export default function InventoryModule() {
 
                     updates.push({
                       id: existing.id,
+                      code: p.code || existing.code,
+                      name: p.name,
                       cost: p.cost,
                       price: p.price,
                       stock: newStock,

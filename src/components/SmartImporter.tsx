@@ -494,8 +494,8 @@ export default function SmartImporter({
     await new Promise(resolve => setTimeout(resolve, 400));
 
     const processed = rawProducts.map((p: any, i: number) => {
-      const code = p.code ? String(p.code).trim() : `FER-AI-${now}-${i}`;
-      const name = p.name ? String(p.name).trim() : "Producto sin nombre";
+      let code = p.code ? String(p.code).trim() : `FER-AI-${now}-${i}`;
+      let name = p.name ? String(p.name).trim() : "Producto sin nombre";
       const cost = parseFloat(String(p.cost).replace(/[^0-9.-]+/g, "")) || 0;
       const stockVal = parseInt(String(p.stock)) || 1;
 
@@ -505,8 +505,9 @@ export default function SmartImporter({
           (item.code && code && item.code.trim().toUpperCase() === code.trim().toUpperCase()) ||
           normalizeString(item.name) === normalizeString(name)
       );
-      if (existing && existing.code) {
-        // Usar el código ya existente para que el match sea correcto
+      if (existing) {
+        if (existing.code) code = existing.code;
+        if (existing.name) name = existing.name;
       }
 
       const smart = getSmartPriceSuggestion(name, cost, code, minBatchMargin);
