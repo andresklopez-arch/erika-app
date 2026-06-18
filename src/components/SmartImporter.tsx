@@ -241,6 +241,9 @@ export default function SmartImporter({
       const allKnownLocations = Array.from(new Set(existingItems.map(i => i.location).filter(l => l && l !== "Pendiente" && l !== ""))).map(l => String(l).trim().toLowerCase());
       const isUnknownLocation = rawLocation !== "" && !allKnownLocations.includes(rawLocation.toLowerCase());
 
+      const isIllegible = !cleanName || cleanName.trim() === "" || cleanName.trim().toLowerCase() === "producto sin nombre";
+      const hasLoss = rawCost > 0 && finalPrice <= rawCost;
+
       importedProducts.push({
         id: `imp-${Date.now()}-${i}`,
         code: rawCode,
@@ -265,7 +268,9 @@ export default function SmartImporter({
         costIsEmpty,
         stockIsEmpty,
         isDuplicateInFile,
-        isUnknownLocation
+        isUnknownLocation,
+        isIllegible,
+        hasLoss
       });
     }
     setPreviewData(importedProducts);
@@ -287,6 +292,16 @@ export default function SmartImporter({
   const handleEditRow = (index: number, updates: Partial<any>) => {
     if (!previewData) return;
     const newData = [...previewData];
+    
+    if (updates.name !== undefined) {
+      const nameVal = updates.name || "";
+      updates.isIllegible = !nameVal || nameVal.trim() === "" || nameVal.trim().toLowerCase() === "producto sin nombre";
+    }
+
+    const costVal = updates.cost !== undefined ? updates.cost : newData[index].cost;
+    const priceVal = updates.price !== undefined ? updates.price : newData[index].price;
+    updates.hasLoss = costVal > 0 && priceVal <= costVal;
+
     newData[index] = { ...newData[index], ...updates };
     setPreviewData(newData);
   };
@@ -620,6 +635,9 @@ export default function SmartImporter({
         autoPriced = false;
       }
 
+      const isIllegible = !p.name || String(p.name).trim() === "" || String(p.name).trim().toLowerCase() === "producto sin nombre";
+      const hasLoss = cost > 0 && finalPrice <= cost;
+
       const allKnownLocations = Array.from(new Set(existingItems.map(i => i.location).filter(l => l && l !== "Pendiente" && l !== ""))).map(l => String(l).trim().toLowerCase());
 
       return {
@@ -646,7 +664,9 @@ export default function SmartImporter({
         costIsEmpty,
         stockIsEmpty,
         isDuplicateInFile: false,
-        isUnknownLocation: false
+        isUnknownLocation: false,
+        isIllegible,
+        hasLoss
       };
     });
 
@@ -670,6 +690,11 @@ export default function SmartImporter({
 
   const confirmImport = () => {
     if (previewData) {
+      const hasIllegible = previewData.some(p => p.isIllegible);
+      if (hasIllegible) {
+        alert("⚠️ Hay productos con nombres vacíos o no legibles. Edítalos en la tabla antes de continuar.");
+        return;
+      }
       setShowSupplierModal(true);
     }
   };
@@ -929,16 +954,21 @@ export default function SmartImporter({
                                 disabled={!p.isNew}
                                 style={{ 
                                   width: "100%", 
-                                  background: !p.isNew ? "rgba(255,255,255,0.05)" : "transparent", 
-                                  border: !p.isNew ? "1px dashed rgba(255,255,255,0.2)" : "1px dashed var(--glass-border)", 
-                                  color: !p.isNew ? "rgba(255,255,255,0.5)" : "white", 
+                                  background: p.isIllegible ? "rgba(239, 68, 68, 0.2)" : (!p.isNew ? "rgba(255,255,255,0.05)" : "transparent"), 
+                                  border: p.isIllegible ? "2px solid #ef4444" : (!p.isNew ? "1px dashed rgba(255,255,255,0.2)" : "1px dashed var(--glass-border)"), 
+                                  color: p.isIllegible ? "#ef4444" : (!p.isNew ? "rgba(255,255,255,0.5)" : "white"), 
                                   padding: "2px 4px", 
                                   borderRadius: "4px", 
                                   fontWeight: "bold",
                                   cursor: !p.isNew ? "not-allowed" : "text"
                                 }}
-                                title={!p.isNew ? "Bloqueado para proteger identidad del producto" : ""}
+                                title={p.isIllegible ? "Error: Renglón no legible por la IA o sin nombre. Escribe un nombre válido para corregirlo." : (!p.isNew ? "Bloqueado para proteger identidad del producto" : "")}
                               />
+                              {p.isIllegible && (
+                                <span style={{ fontSize: "0.65rem", background: "rgba(239, 68, 68, 0.2)", color: "#ef4444", border: "1px solid rgba(239, 68, 68, 0.4)", padding: "2px 6px", borderRadius: "4px", whiteSpace: "nowrap" }}>
+                                  ⚠️ Fila ilegible por IA
+                                </span>
+                              )}
                               {activeSuggestRow === i && p.name.length > 1 && existingItems.filter(item => item.name.toLowerCase().includes(p.name.toLowerCase()) && item.name.toLowerCase() !== p.name.toLowerCase()).length > 0 && (
                                 <div style={{ position: "absolute", top: "100%", left: 0, minWidth: "200px", background: "#1a1a1a", border: "1px solid var(--color-primary)", borderRadius: "4px", zIndex: 100, maxHeight: "150px", overflowY: "auto", boxShadow: "0 4px 10px rgba(0,0,0,0.5)" }}>
                                   {existingItems.filter(item => item.name.toLowerCase().includes(p.name.toLowerCase()) && item.name.toLowerCase() !== p.name.toLowerCase()).slice(0, 10).map((item, idx) => (
@@ -1045,22 +1075,37 @@ export default function SmartImporter({
                         <td
                           style={{
                             padding: "8px",
-                            background: "rgba(16, 185, 129, 0.1)",
+                            background: p.hasLoss ? "rgba(239, 68, 68, 0.15)" : "rgba(16, 185, 129, 0.1)",
                             fontWeight: "bold",
-                            color: "var(--color-secondary)"
+                            color: p.hasLoss ? "#ef4444" : "var(--color-secondary)",
+                            border: p.hasLoss ? "1px solid #ef4444" : "none"
                           }}
                         >
-                          <div style={{ display: "flex", alignItems: "center" }}>
-                            $<input 
-                              id={`input-${i}-price`}
-                              type="number" 
-                              value={p.price} 
-                              onChange={(e) => {
-                                handleEditRow(i, { price: Number(e.target.value), autoPriced: false });
-                              }}
-                              onKeyDown={(e) => handleKeyDown(e, i, 'price')}
-                              style={{ width: "70px", background: "transparent", border: "1px dashed var(--color-primary)", color: "var(--color-secondary)", padding: "2px 4px", borderRadius: "4px", fontWeight: "bold" }}
-                            />
+                          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                            <div style={{ display: "flex", alignItems: "center" }}>
+                              $<input 
+                                id={`input-${i}-price`}
+                                type="number" 
+                                value={p.price} 
+                                onChange={(e) => {
+                                  handleEditRow(i, { price: Number(e.target.value), autoPriced: false });
+                                }}
+                                onKeyDown={(e) => handleKeyDown(e, i, 'price')}
+                                style={{ 
+                                  width: "70px", 
+                                  background: "transparent", 
+                                  border: p.hasLoss ? "1px solid #ef4444" : "1px dashed var(--color-primary)", 
+                                  color: p.hasLoss ? "#ef4444" : "var(--color-secondary)", 
+                                  padding: "2px 4px", 
+                                  borderRadius: "4px", 
+                                  fontWeight: "bold" 
+                                }}
+                                title={p.hasLoss ? "¡Alerta de Pérdida! El precio de venta sugerido es menor o igual al costo." : ""}
+                              />
+                            </div>
+                            {p.hasLoss && (
+                              <span style={{ fontSize: "0.55rem", color: "#ef4444", fontWeight: "bold" }}>⚠️ Sin Margen / Pérdida</span>
+                            )}
                           </div>
                         </td>
                         <td style={{ padding: "8px" }}>
@@ -1231,6 +1276,27 @@ export default function SmartImporter({
               </div>
             )}
 
+            {previewData && previewData.some(p => p.isIllegible) && (
+              <div style={{
+                marginTop: "15px",
+                padding: "10px 15px",
+                borderRadius: "8px",
+                background: "rgba(239, 68, 68, 0.15)",
+                border: "1px solid #ef4444",
+                textAlign: "center",
+                color: "#ef4444",
+                fontSize: "0.85rem",
+                fontWeight: "bold",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px"
+              }}>
+                <span>⚠️</span>
+                <span>Hay productos con nombres vacíos o no legibles. Edítalos en la tabla para poder continuar.</span>
+              </div>
+            )}
+
             <div
               style={{ display: "flex", gap: "15px", justifyContent: "center", marginTop: "20px" }}
             >
@@ -1247,14 +1313,17 @@ export default function SmartImporter({
               <button
                 className="btn-primary"
                 onClick={confirmImport}
-                disabled={importOption === ""}
+                disabled={importOption === "" || (previewData ? previewData.some(p => p.isIllegible) : false)}
                 style={{
                   background: "var(--color-primary)",
-                  opacity: importOption === "" ? 0.5 : 1,
-                  cursor: importOption === "" ? "not-allowed" : "pointer"
+                  opacity: (importOption === "" || (previewData ? previewData.some(p => p.isIllegible) : false)) ? 0.5 : 1,
+                  cursor: (importOption === "" || (previewData ? previewData.some(p => p.isIllegible) : false)) ? "not-allowed" : "pointer"
                 }}
               >
-                {importOption === "" ? "⏳ Elija un método" : "✅ Confirmar e Importar"}
+                {previewData && previewData.some(p => p.isIllegible)
+                  ? "⚠️ Corrija nombres ilegibles"
+                  : (importOption === "" ? "⏳ Elija un método" : "✅ Confirmar e Importar")
+                }
               </button>
             </div>
           </div>
