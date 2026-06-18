@@ -180,10 +180,14 @@ export default function SmartImporter({
         }
       }
 
-      let rawCost = Number(row[mapping.cost]);
+      const rawCostVal = row[mapping.cost];
+      let rawCost = Number(rawCostVal);
       let costHasError = false;
-      if (isNaN(rawCost) && typeof row[mapping.cost] === "string") {
-        rawCost = Number(String(row[mapping.cost]).replace(/[^0-9.-]+/g, ""));
+      const costIsEmpty = rawCostVal === undefined || rawCostVal === null || String(rawCostVal).trim() === "";
+      if (costIsEmpty) {
+        rawCost = 0;
+      } else if (isNaN(rawCost) && typeof rawCostVal === "string") {
+        rawCost = Number(String(rawCostVal).replace(/[^0-9.-]+/g, ""));
       }
       if (isNaN(rawCost)) {
         rawCost = 0;
@@ -203,9 +207,13 @@ export default function SmartImporter({
 
       const smartPrices = getSmartPriceSuggestion(cleanName, rawCost, rawCode, minBatchMargin);
       
-      let rawStock = Number(row[mapping.stock]);
+      const rawStockVal = row[mapping.stock];
+      let rawStock = Number(rawStockVal);
       let stockHasError = false;
-      if (isNaN(rawStock)) {
+      const stockIsEmpty = rawStockVal === undefined || rawStockVal === null || String(rawStockVal).trim() === "";
+      if (stockIsEmpty) {
+         rawStock = 0;
+      } else if (isNaN(rawStock)) {
          rawStock = 0;
          stockHasError = true;
       }
@@ -254,6 +262,8 @@ export default function SmartImporter({
         originalExistingName: smartPrices.originalExistingName || (existing ? existing.name : undefined),
         costHasError,
         stockHasError,
+        costIsEmpty,
+        stockIsEmpty,
         isDuplicateInFile,
         isUnknownLocation
       });
@@ -264,7 +274,13 @@ export default function SmartImporter({
   const handleMappingChange = (field: string, newIdx: number) => {
     const newMapping = { ...columnMapping, [field]: newIdx };
     setColumnMapping(newMapping);
-    setDetectionSource({ ...detectionSource, [field]: "👤 Manual" });
+    const newDetection = { ...detectionSource, [field]: "👤 Manual" };
+    setDetectionSource(newDetection);
+
+    // Guardar plantilla de mapeo manual en localStorage
+    localStorage.setItem("erika_excel_mapping", JSON.stringify(newMapping));
+    localStorage.setItem("erika_excel_detection", JSON.stringify(newDetection));
+
     generatePreview(newMapping, processedRawData);
   };
 
@@ -462,9 +478,39 @@ export default function SmartImporter({
           location: "📋 Plantilla Oficial",
         };
 
-        const mapping = { name: finalNameIdx, cost: finalCostIdx, stock: finalStockIdx, code: finalCodeIdx, price: finalPriceIdx, supplier: finalSupplierIdx, location: finalLocationIdx };
+        let mapping = { name: finalNameIdx, cost: finalCostIdx, stock: finalStockIdx, code: finalCodeIdx, price: finalPriceIdx, supplier: finalSupplierIdx, location: finalLocationIdx };
+        let finalSource = source;
+
+        // 🧠 Cargar plantilla de mapeo guardada si es compatible con el archivo actual
+        try {
+          const savedMappingStr = localStorage.getItem("erika_excel_mapping");
+          const savedSourceStr = localStorage.getItem("erika_excel_detection");
+          if (savedMappingStr) {
+            const savedMapping = JSON.parse(savedMappingStr);
+            const isValid = Object.values(savedMapping).every(idx => typeof idx === "number" && idx < maxCols);
+            if (isValid) {
+              mapping = savedMapping;
+              if (savedSourceStr) {
+                finalSource = JSON.parse(savedSourceStr);
+              } else {
+                finalSource = {
+                  code: "👤 Manual (Guardado)",
+                  name: "👤 Manual (Guardado)",
+                  stock: "👤 Manual (Guardado)",
+                  cost: "👤 Manual (Guardado)",
+                  price: "👤 Manual (Guardado)",
+                  supplier: "👤 Manual (Guardado)",
+                  location: "👤 Manual (Guardado)",
+                };
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Error al cargar plantilla de mapeo guardada:", err);
+        }
+
         setColumnMapping(mapping);
-        setDetectionSource(source);
+        setDetectionSource(finalSource);
         setRawHeaders(headersForSelect);
         setProcessedRawData(rawData);
 
@@ -549,11 +595,8 @@ export default function SmartImporter({
     setProgress(`✅ ${rawProducts.length} productos detectados por IA. Calculando precios...`);
     await new Promise(resolve => setTimeout(resolve, 400));
 
-    const processed = rawProducts.map((p: any, i: number) => {
-      let code = p.code ? String(p.code).trim() : `FER-AI-${now}-${i}`;
-      let name = p.name ? String(p.name).trim() : "Producto sin nombre";
-      const cost = parseFloat(String(p.cost).replace(/[^0-9.-]+/g, "")) || 0;
-      const stockVal = parseInt(String(p.stock)) || 1;
+      const costIsEmpty = p.cost === undefined || p.cost === null || String(p.cost).trim() === "";
+      const stockIsEmpty = p.stock === undefined || p.stock === null || String(p.stock).trim() === "";
 
       // Detectar si ya existe en inventario (con coincidencia difusa)
       let { item: existing, isFuzzy } = findExistingItem(code, name);
@@ -595,6 +638,8 @@ export default function SmartImporter({
         originalExistingName: smart.originalExistingName || (existing ? existing.name : undefined),
         costHasError: cost === 0,
         stockHasError: false,
+        costIsEmpty,
+        stockIsEmpty,
         isDuplicateInFile: false,
         isUnknownLocation: false
       };
@@ -627,11 +672,12 @@ export default function SmartImporter({
   const executeImport = async (globalSupplier: string) => {
     if (!previewData || !globalSupplier) return;
 
-    const cleanSupplier = globalSupplier.trim();
+    const cleanSupplier = cleanAndCapitalize(globalSupplier);
     const exists = dbSuppliers.some(s => s.toLowerCase() === cleanSupplier.toLowerCase());
     if (!exists && cleanSupplier !== "") {
       try {
         await supabase.from("suppliers").insert({ name: cleanSupplier });
+        setDbSuppliers(prev => [...prev, cleanSupplier]);
       } catch (err) {
         console.error("Error al registrar proveedor automático:", err);
       }
@@ -650,7 +696,9 @@ export default function SmartImporter({
           areaChar = String.fromCharCode(areaChar.charCodeAt(0) + 1);
         }
       }
-      const finalSupplier = (p.supplier && p.supplier !== "Pendiente" && p.supplier !== "") ? p.supplier : cleanSupplier;
+      const finalSupplier = (p.supplier && p.supplier !== "Pendiente" && p.supplier !== "") 
+        ? cleanAndCapitalize(p.supplier) 
+        : cleanSupplier;
       return { ...p, supplier: finalSupplier, location: assignedLocation };
     });
 
@@ -929,53 +977,64 @@ export default function SmartImporter({
                           </div>
                         </td>
                         <td style={{ padding: "8px" }}>
-                          <input 
-                            id={`input-${i}-stock`}
-                            type="number" 
-                            value={p.stock} 
-                            onChange={(e) => {
-                              handleEditRow(i, { stock: Number(e.target.value), stockHasError: false });
-                            }}
-                            onKeyDown={(e) => handleKeyDown(e, i, 'stock')}
-                            style={{ 
-                              width: "60px", 
-                              background: p.stockHasError ? "rgba(239, 68, 68, 0.2)" : "transparent", 
-                              border: p.stockHasError ? "2px solid #ef4444" : "1px dashed var(--glass-border)", 
-                              color: p.stockHasError ? "#ef4444" : "white", 
-                              padding: "2px 4px", 
-                              borderRadius: "4px" 
-                            }}
-                            title={p.stockHasError ? "Error: Valor no numérico detectado" : ""}
-                          />
-                        </td>
-                        <td style={{ padding: "8px" }}>
-                          <div style={{ display: "flex", alignItems: "center" }}>
-                            $<input 
-                              id={`input-${i}-cost`}
+                          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                            <input 
+                              id={`input-${i}-stock`}
                               type="number" 
-                              value={p.cost} 
+                              value={p.stock} 
                               onChange={(e) => {
-                                const newCost = Number(e.target.value);
-                                const smart = getSmartPriceSuggestion(p.name, newCost, p.code, minBatchMargin);
-                                handleEditRow(i, {
-                                  cost: newCost,
-                                  costHasError: false,
-                                  price: p.autoPriced ? smart.price : p.price,
-                                  alertText: p.autoPriced ? smart.alertText : p.alertText,
-                                  isInflation: p.autoPriced ? smart.isInflation : p.isInflation
-                                });
+                                handleEditRow(i, { stock: Number(e.target.value), stockHasError: false, stockIsEmpty: false });
                               }}
-                              onKeyDown={(e) => handleKeyDown(e, i, 'cost')}
+                              onKeyDown={(e) => handleKeyDown(e, i, 'stock')}
                               style={{ 
-                                width: "70px", 
-                                background: p.costHasError ? "rgba(239, 68, 68, 0.2)" : "transparent", 
-                                border: p.costHasError ? "2px solid #ef4444" : "1px dashed var(--glass-border)", 
-                                color: p.costHasError ? "#ef4444" : "white", 
+                                width: "60px", 
+                                background: p.stockHasError ? "rgba(239, 68, 68, 0.2)" : (p.stockIsEmpty ? "rgba(234, 179, 8, 0.15)" : "transparent"), 
+                                border: p.stockHasError ? "2px solid #ef4444" : (p.stockIsEmpty ? "1px solid #eab308" : "1px dashed var(--glass-border)"), 
+                                color: p.stockHasError ? "#ef4444" : (p.stockIsEmpty ? "#facc15" : "white"), 
                                 padding: "2px 4px", 
                                 borderRadius: "4px" 
                               }}
-                              title={p.costHasError ? "Error: Valor no numérico detectado" : ""}
+                              title={p.stockHasError ? "Error: Valor no numérico detectado" : (p.stockIsEmpty ? "Aviso: Celda vacía en el archivo, se registrará como 0" : "")}
                             />
+                            {p.stockIsEmpty && (
+                              <span style={{ fontSize: "0.55rem", color: "#facc15", fontWeight: "bold" }}>⚠️ Vacío</span>
+                            )}
+                          </div>
+                        </td>
+                        <td style={{ padding: "8px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                            <div style={{ display: "flex", alignItems: "center" }}>
+                              $<input 
+                                id={`input-${i}-cost`}
+                                type="number" 
+                                value={p.cost} 
+                                onChange={(e) => {
+                                  const newCost = Number(e.target.value);
+                                  const smart = getSmartPriceSuggestion(p.name, newCost, p.code, minBatchMargin);
+                                  handleEditRow(i, {
+                                    cost: newCost,
+                                    costHasError: false,
+                                    costIsEmpty: false,
+                                    price: p.autoPriced ? smart.price : p.price,
+                                    alertText: p.autoPriced ? smart.alertText : p.alertText,
+                                    isInflation: p.autoPriced ? smart.isInflation : p.isInflation
+                                  });
+                                }}
+                                onKeyDown={(e) => handleKeyDown(e, i, 'cost')}
+                                style={{ 
+                                  width: "70px", 
+                                  background: p.costHasError ? "rgba(239, 68, 68, 0.2)" : (p.costIsEmpty ? "rgba(234, 179, 8, 0.15)" : "transparent"), 
+                                  border: p.costHasError ? "2px solid #ef4444" : (p.costIsEmpty ? "1px solid #eab308" : "1px dashed var(--glass-border)"), 
+                                  color: p.costHasError ? "#ef4444" : (p.costIsEmpty ? "#facc15" : "white"), 
+                                  padding: "2px 4px", 
+                                  borderRadius: "4px" 
+                                }}
+                                title={p.costHasError ? "Error: Valor no numérico detectado" : (p.costIsEmpty ? "Aviso: Celda vacía en el archivo, se registrará como 0" : "")}
+                              />
+                            </div>
+                            {p.costIsEmpty && (
+                              <span style={{ fontSize: "0.55rem", color: "#facc15", fontWeight: "bold" }}>⚠️ Vacío</span>
+                            )}
                           </div>
                         </td>
                         <td
