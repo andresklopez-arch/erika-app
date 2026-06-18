@@ -1055,25 +1055,65 @@ export default function SmartImporter({
                     <div
                       key={opt.value}
                       onClick={() => setImportOption(opt.value as any)}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.border = "1px solid var(--color-primary)";
+                          e.currentTarget.style.background = "rgba(16, 185, 129, 0.05)";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.border = "1px solid var(--glass-border)";
+                          e.currentTarget.style.background = "rgba(0,0,0,0.3)";
+                        }
+                      }}
                       style={{
                         flex: 1,
                         minWidth: "220px",
-                        padding: "15px",
-                        borderRadius: "10px",
+                        padding: "18px 15px",
+                        borderRadius: "12px",
                         border: isSelected ? "2px solid var(--color-primary)" : "1px solid var(--glass-border)",
-                        background: isSelected ? "rgba(16, 185, 129, 0.15)" : "rgba(0,0,0,0.3)",
+                        background: isSelected ? "rgba(16, 185, 129, 0.18)" : "rgba(0,0,0,0.3)",
                         cursor: "pointer",
-                        transition: "all 0.2s ease",
-                        boxShadow: isSelected ? "0 0 10px rgba(16, 185, 129, 0.2)" : "none"
+                        transition: "all 0.25s ease",
+                        boxShadow: isSelected ? "0 0 15px rgba(16, 185, 129, 0.3)" : "none",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px",
+                        position: "relative"
                       }}
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-                        <span style={{ fontSize: "1.5rem" }}>{opt.icon}</span>
-                        <strong style={{ color: isSelected ? "var(--color-primary)" : "white", fontSize: "0.95rem" }}>
+                      {/* Círculo selector visual */}
+                      <div style={{
+                        position: "absolute",
+                        top: "12px",
+                        right: "12px",
+                        width: "18px",
+                        height: "18px",
+                        borderRadius: "50%",
+                        border: isSelected ? "2px solid var(--color-primary)" : "2px solid rgba(255,255,255,0.3)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        transition: "all 0.2s ease"
+                      }}>
+                        {isSelected && (
+                          <div style={{
+                            width: "8px",
+                            height: "8px",
+                            borderRadius: "50%",
+                            background: "var(--color-primary)"
+                          }} />
+                        )}
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", paddingRight: "20px" }}>
+                        <span style={{ fontSize: "1.6rem" }}>{opt.icon}</span>
+                        <strong style={{ color: isSelected ? "var(--color-primary)" : "white", fontSize: "1rem" }}>
                           {opt.title}
                         </strong>
                       </div>
-                      <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.7)", margin: 0, lineHeight: 1.3 }}>
+                      <p style={{ fontSize: "0.8rem", color: isSelected ? "white" : "rgba(255,255,255,0.6)", margin: 0, lineHeight: 1.35 }}>
                         {opt.desc}
                       </p>
                     </div>
@@ -1105,6 +1145,27 @@ export default function SmartImporter({
                 </div>
               )}
             </div>
+
+            {importOption === "" && (
+              <div style={{
+                marginTop: "15px",
+                padding: "10px 15px",
+                borderRadius: "8px",
+                background: "rgba(234, 179, 8, 0.08)",
+                border: "1px solid rgba(234, 179, 8, 0.2)",
+                textAlign: "center",
+                color: "#facc15",
+                fontSize: "0.85rem",
+                fontWeight: "bold",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px"
+              }}>
+                <span>💡</span>
+                <span>Por favor, haz clic en una de las 3 tarjetas de arriba para elegir el método y poder importar.</span>
+              </div>
+            )}
 
             <div
               style={{ display: "flex", gap: "15px", justifyContent: "center", marginTop: "20px" }}
