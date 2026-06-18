@@ -8,7 +8,7 @@ interface SmartImporterProps {
   avgMargin: number;
   existingItems: any[];
   onClose: () => void;
-  onImport: (products: any[], importOption: "sustituir" | "complementar" | "nuevo") => void;
+  onImport: (products: any[], importOption: "sustituir" | "complementar" | "nuevo", accumulateStock?: boolean) => void;
 }
 
 export default function SmartImporter({
@@ -20,6 +20,7 @@ export default function SmartImporter({
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState("");
   const [importOption, setImportOption] = useState<"sustituir" | "complementar" | "nuevo" | "">("");
+  const [accumulateStock, setAccumulateStock] = useState<boolean>(true);
   const [previewData, setPreviewData] = useState<any[] | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
@@ -66,6 +67,66 @@ export default function SmartImporter({
       .trim();
   };
 
+  const getLevenshteinDistance = (a: string, b: string) => {
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    const arr = [];
+    for (let i = 0; i <= b.length; i++) { arr[i] = [i]; }
+    for (let j = 0; j <= a.length; j++) { arr[0][j] = j; }
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b.charAt(i - 1) == a.charAt(j - 1)) {
+          arr[i][j] = arr[i - 1][j - 1];
+        } else {
+          arr[i][j] = Math.min(arr[i - 1][j - 1] + 1, Math.min(arr[i][j - 1] + 1, arr[i - 1][j] + 1));
+        }
+      }
+    }
+    return arr[b.length][a.length];
+  };
+
+  const findExistingItem = (code: string, name: string) => {
+    const cleanCode = code ? code.trim().toUpperCase() : "";
+    const cleanName = name ? normalizeString(name) : "";
+
+    // 1. Coincidencia exacta por código
+    if (cleanCode) {
+      const matchByCode = existingItems.find(item => item.code && item.code.trim().toUpperCase() === cleanCode);
+      if (matchByCode) return { item: matchByCode, isFuzzy: false };
+    }
+
+    // 2. Coincidencia exacta por nombre normalizado
+    if (cleanName) {
+      const matchByName = existingItems.find(item => normalizeString(item.name) === cleanName);
+      if (matchByName) return { item: matchByName, isFuzzy: false };
+    }
+
+    // 3. Coincidencia difusa (Fuzzy Matching) usando Levenshtein
+    if (cleanName && cleanName.length > 5) {
+      let bestMatch: any = null;
+      let minDistance = 999;
+      
+      for (const item of existingItems) {
+        const normItemName = normalizeString(item.name);
+        
+        if (Math.abs(normItemName.length - cleanName.length) <= 5) {
+          const dist = getLevenshteinDistance(cleanName, normItemName);
+          const threshold = Math.max(3, Math.floor(cleanName.length * 0.15));
+          if (dist <= threshold && dist < minDistance) {
+            minDistance = dist;
+            bestMatch = item;
+          }
+        }
+      }
+      
+      if (bestMatch) {
+        return { item: bestMatch, isFuzzy: true };
+      }
+    }
+
+    return { item: null, isFuzzy: false };
+  };
+
   const [minBatchMargin, setMinBatchMargin] = useState<number>(() => {
     return parseFloat(localStorage.getItem("ERIKA_TARGET_UTILITY") || "50");
   });
@@ -74,12 +135,8 @@ export default function SmartImporter({
   const getSmartPriceSuggestion = (name: string, cost: number, code: string, currentMinMargin: number) => {
     const margin = currentMinMargin / 100;
 
-    // Buscar coincidencia en el catálogo existente
-    const existing = existingItems.find(
-      (item) =>
-        (item.code && item.code.trim().toUpperCase() === code.trim().toUpperCase()) ||
-        item.name.toLowerCase().trim() === name.toLowerCase().trim()
-    );
+    // Buscar coincidencia en el catálogo existente usando la lógica mejorada (difusa)
+    const { item: existing, isFuzzy } = findExistingItem(code, name);
 
     let price = cost * (1 + margin);
     let alertText = "Precio Sugerido (Meta)";
@@ -107,7 +164,7 @@ export default function SmartImporter({
       }
     }
 
-    return { price, alertText, isInflation, isNew, prevPrice, prevCost };
+    return { price, alertText, isInflation, isNew, prevPrice, prevCost, isFuzzy, originalExistingName: existing ? existing.name : undefined };
   };
 
   const generatePreview = (mapping: { name: number, cost: number, stock: number, code: number, price: number, supplier?: number, location?: number }, data: any[][]) => {
@@ -136,15 +193,12 @@ export default function SmartImporter({
       let rawCode = row[mapping.code] ? String(row[mapping.code]).trim() : `SKU-${Date.now()}-${i}`;
       const cleanName = cleanAndCapitalize(String(row[mapping.name]));
 
-      // 🔍 Detección Anti-Duplicados usando normalizeString
-      const existing = existingItems.find(
-        (item) =>
-          (item.code && item.code.trim().toUpperCase() === rawCode.trim().toUpperCase() && rawCode !== "") ||
-          normalizeString(item.name) === normalizeString(cleanName)
-      );
+      // 🔍 Detección Anti-Duplicados usando findExistingItem (difusa)
+      let { item: existing, isFuzzy } = findExistingItem(rawCode, cleanName);
 
-      if (existing && existing.code) {
-        rawCode = existing.code;
+      if (existing) {
+        if (existing.code) rawCode = existing.code;
+        if (existing.name) cleanName = existing.name;
       }
 
       const smartPrices = getSmartPriceSuggestion(cleanName, rawCost, rawCode, minBatchMargin);
@@ -196,6 +250,8 @@ export default function SmartImporter({
         isNew: smartPrices.isNew,
         prevPrice: smartPrices.prevPrice,
         prevCost: smartPrices.prevCost,
+        isFuzzy: smartPrices.isFuzzy || isFuzzy,
+        originalExistingName: smartPrices.originalExistingName || (existing ? existing.name : undefined),
         costHasError,
         stockHasError,
         isDuplicateInFile,
@@ -499,12 +555,8 @@ export default function SmartImporter({
       const cost = parseFloat(String(p.cost).replace(/[^0-9.-]+/g, "")) || 0;
       const stockVal = parseInt(String(p.stock)) || 1;
 
-      // Detectar si ya existe en inventario
-      const existing = existingItems.find(
-        (item) =>
-          (item.code && code && item.code.trim().toUpperCase() === code.trim().toUpperCase()) ||
-          normalizeString(item.name) === normalizeString(name)
-      );
+      // Detectar si ya existe en inventario (con coincidencia difusa)
+      let { item: existing, isFuzzy } = findExistingItem(code, name);
       if (existing) {
         if (existing.code) code = existing.code;
         if (existing.name) name = existing.name;
@@ -539,6 +591,8 @@ export default function SmartImporter({
         isNew: smart.isNew,
         prevPrice: smart.prevPrice,
         prevCost: smart.prevCost,
+        isFuzzy: smart.isFuzzy || isFuzzy,
+        originalExistingName: smart.originalExistingName || (existing ? existing.name : undefined),
         costHasError: cost === 0,
         stockHasError: false,
         isDuplicateInFile: false,
@@ -590,27 +644,11 @@ export default function SmartImporter({
       return { ...p, supplier: finalSupplier, location: assignedLocation };
     });
 
-    onImport(finalProducts, importOption as any);
+    onImport(finalProducts, importOption as any, accumulateStock);
     onClose();
   };
 
-  const getLevenshteinDistance = (a: string, b: string) => {
-    if (!a.length) return b.length;
-    if (!b.length) return a.length;
-    const arr = [];
-    for (let i = 0; i <= b.length; i++) { arr[i] = [i]; }
-    for (let j = 0; j <= a.length; j++) { arr[0][j] = j; }
-    for (let i = 1; i <= b.length; i++) {
-      for (let j = 1; j <= a.length; j++) {
-        if (b.charAt(i - 1) == a.charAt(j - 1)) {
-          arr[i][j] = arr[i - 1][j - 1];
-        } else {
-          arr[i][j] = Math.min(arr[i - 1][j - 1] + 1, Math.min(arr[i][j - 1] + 1, arr[i - 1][j] + 1));
-        }
-      }
-    }
-    return arr[b.length][a.length];
-  };
+  // getLevenshteinDistance y findExistingItem se movieron al inicio del componente para poder ser usados en cascada.
 
   const handleLocationFix = (oldLocation: string) => {
     const knownLocations = Array.from(new Set(existingItems.map(i => i.location).filter(l => l && l !== "Pendiente" && l !== ""))).map(l => String(l));
@@ -853,9 +891,14 @@ export default function SmartImporter({
                                   ))}
                                 </div>
                               )}
-                              {!p.isNew && (
-                                <span style={{ fontSize: "0.6rem", background: "rgba(59, 130, 246, 0.2)", color: "#3b82f6", padding: "2px 4px", borderRadius: "4px", whiteSpace: "nowrap" }}>
-                                  🔄 Actualización
+                              {!p.isNew && p.isFuzzy && (
+                                <span style={{ fontSize: "0.65rem", background: "rgba(245, 158, 11, 0.2)", color: "#f59e0b", border: "1px solid rgba(245, 158, 11, 0.4)", padding: "2px 6px", borderRadius: "4px", whiteSpace: "nowrap" }} title={`Coincidencia difusa con "${p.originalExistingName}" en base de datos.`}>
+                                  ⚠️ Coincidencia Difusa
+                                </span>
+                              )}
+                              {!p.isNew && !p.isFuzzy && (
+                                <span style={{ fontSize: "0.65rem", background: "rgba(59, 130, 246, 0.2)", color: "#3b82f6", padding: "2px 6px", borderRadius: "4px", whiteSpace: "nowrap" }}>
+                                  🔄 Match Exacto
                                 </span>
                               )}
                               {p.isUnknownLocation && (
@@ -1027,6 +1070,30 @@ export default function SmartImporter({
                   );
                 })}
               </div>
+
+              {importOption === "sustituir" && (
+                <div style={{
+                  marginTop: "15px",
+                  padding: "12px 18px",
+                  borderRadius: "8px",
+                  background: "rgba(59, 130, 246, 0.1)",
+                  border: "1px solid rgba(59, 130, 246, 0.3)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px"
+                }}>
+                  <input
+                    type="checkbox"
+                    id="accumulate-stock-chk"
+                    checked={accumulateStock}
+                    onChange={(e) => setAccumulateStock(e.target.checked)}
+                    style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                  />
+                  <label htmlFor="accumulate-stock-chk" style={{ fontSize: "0.85rem", color: "#60a5fa", cursor: "pointer", fontWeight: "500", userSelect: "none" }}>
+                    📦 Sumar piezas nuevas a existencias actuales (Recomendado para ferretería)
+                  </label>
+                </div>
+              )}
             </div>
 
             <div

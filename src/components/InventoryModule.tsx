@@ -1411,7 +1411,7 @@ export default function InventoryModule() {
           avgMargin={avgMargin}
           existingItems={allItems}
           onClose={clearTabParam}
-          onImport={async (newProducts, importOption) => {
+          onImport={async (newProducts, importOption, accumulateStock) => {
             setIsLoading(true);
             try {
               let updatedCount = 0;
@@ -1479,7 +1479,7 @@ export default function InventoryModule() {
                     });
                     
                     const inflationFlag = p.cost > existing.cost ? "up" : null;
-                    const newStock = p.stock;
+                    const newStock = accumulateStock ? (existing.stock || 0) + p.stock : p.stock;
                     
                     if ((existing.stock || 0) <= existing.minStock && newStock > existing.minStock) {
                       rescuedCount++;
