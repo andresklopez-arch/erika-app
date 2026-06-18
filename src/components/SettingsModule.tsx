@@ -76,6 +76,12 @@ export default function SettingsModule() {
 
   const [isConnected, setIsConnected] = useState<boolean>(true);
   const [connectionType, setConnectionType] = useState<string>("system");
+  const [silentKiosk, setSilentKiosk] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("ERIKA_PRINTER_SILENT_KIOSK") === "true";
+    }
+    return false;
+  });
 
   interface ErrorLogItem {
     id: string;
@@ -443,6 +449,7 @@ export default function SettingsModule() {
       }
     });
     if (success) {
+      localStorage.setItem("ERIKA_PRINTER_SILENT_KIOSK", silentKiosk ? "true" : "false");
       alert("✅ Configuración de Impresión guardada exitosamente.");
     }
   };
@@ -1106,6 +1113,21 @@ export default function SettingsModule() {
                 </select>
               </div>
             </div>
+
+            {connectionType === "system" && (
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "5px", background: "rgba(255,255,255,0.05)", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)" }}>
+                <input
+                  type="checkbox"
+                  id="silent-kiosk-checkbox"
+                  checked={silentKiosk}
+                  onChange={(e) => setSilentKiosk(e.target.checked)}
+                  style={{ width: "18px", height: "18px", cursor: "pointer" }}
+                />
+                <label htmlFor="silent-kiosk-checkbox" style={{ fontSize: "0.9rem", cursor: "pointer", userSelect: "none", color: "white" }}>
+                  <strong>Modo Kiosco / Impresión Silenciosa</strong> (Requiere iniciar Google Chrome con la opción <code>--kiosk-printing</code> para saltar la ventana de confirmación).
+                </label>
+              </div>
+            )}
 
             {/* Bluetooth/WiFi Scan block */}
             {(connectionType === "bluetooth" || connectionType === "wifi") && (

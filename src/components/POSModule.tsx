@@ -221,6 +221,12 @@ export default function POSModule() {
     }
     return "system";
   });
+  const [silentKiosk, setSilentKiosk] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("ERIKA_PRINTER_SILENT_KIOSK") === "true";
+    }
+    return false;
+  });
   const [pendingPrintJob, setPendingPrintJob] = useState<any>(null);
   const [showPrinterModal, setShowPrinterModal] = useState<boolean>(false);
   const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
@@ -1372,7 +1378,7 @@ export default function POSModule() {
                 }}
               >
                 <span>{isPrinterConnected ? "🟢" : "🔴"}</span>
-                <span>{isPrinterConnected ? "Impresora Lista" : "Impresora Off"}</span>
+                <span>{isPrinterConnected ? `Impresora Lista${silentKiosk ? " (Kiosco ⚡)" : ""}` : "Impresora Off"}</span>
               </button>
               <button
                 onClick={() => setShowScanner(true)}
