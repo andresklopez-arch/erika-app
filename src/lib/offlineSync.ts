@@ -2,7 +2,7 @@ import { supabase } from "./supabaseClient";
 
 const DB_NAME = "ErikaOfflineDB";
 const STORE_NAME = "cash_transactions";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -58,52 +58,64 @@ export const saveTransactionOffline = async (
 ): Promise<void> => {
   const db = await initDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.add({
-      ...transaction,
-      offline_created_at: new Date().toISOString(),
-    });
+    try {
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.add({
+        ...transaction,
+        offline_created_at: new Date().toISOString(),
+      });
 
-    request.onsuccess = async () => {
-      // Registrar Background Sync
-      if ("serviceWorker" in navigator && "SyncManager" in window) {
-        try {
-          const swRegistration = await navigator.serviceWorker.ready;
-          // @ts-expect-error sync is not standard yet
-          await swRegistration.sync.register("sync-offline-sales");
-          console.log("Background Sync registrado para 'sync-offline-sales'");
-        } catch (err) {
-          console.error("Background Sync falló:", err);
+      request.onsuccess = async () => {
+        // Registrar Background Sync
+        if ("serviceWorker" in navigator && "SyncManager" in window) {
+          try {
+            const swRegistration = await navigator.serviceWorker.ready;
+            // @ts-expect-error sync is not standard yet
+            await swRegistration.sync.register("sync-offline-sales");
+            console.log("Background Sync registrado para 'sync-offline-sales'");
+          } catch (err) {
+            console.error("Background Sync falló:", err);
+          }
         }
-      }
-      resolve();
-    };
-    request.onerror = () => reject(request.error);
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    } catch (err) {
+      reject(err);
+    }
   });
 };
 
 export const getOfflineTransactions = async (): Promise<any[]> => {
   const db = await initDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.getAll();
+    try {
+      const tx = db.transaction(STORE_NAME, "readonly");
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.getAll();
 
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    } catch (err) {
+      reject(err);
+    }
   });
 };
 
 export const clearOfflineTransactions = async (): Promise<void> => {
   const db = await initDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.clear();
+    try {
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.clear();
 
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    } catch (err) {
+      reject(err);
+    }
   });
 };
 
@@ -112,50 +124,62 @@ export const saveInvoiceClaimOffline = async (
 ): Promise<void> => {
   const db = await initDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction("invoice_claims", "readwrite");
-    const store = tx.objectStore("invoice_claims");
-    const request = store.add({
-      ...claim,
-      offline_created_at: new Date().toISOString(),
-    });
+    try {
+      const tx = db.transaction("invoice_claims", "readwrite");
+      const store = tx.objectStore("invoice_claims");
+      const request = store.add({
+        ...claim,
+        offline_created_at: new Date().toISOString(),
+      });
 
-    request.onsuccess = async () => {
-      if ("serviceWorker" in navigator && "SyncManager" in window) {
-        try {
-          const swRegistration = await navigator.serviceWorker.ready;
-          // @ts-expect-error sync is not standard yet
-          await swRegistration.sync.register("sync-offline-claims");
-        } catch (err) {
-          console.error("Background Sync falló:", err);
+      request.onsuccess = async () => {
+        if ("serviceWorker" in navigator && "SyncManager" in window) {
+          try {
+            const swRegistration = await navigator.serviceWorker.ready;
+            // @ts-expect-error sync is not standard yet
+            await swRegistration.sync.register("sync-offline-claims");
+          } catch (err) {
+            console.error("Background Sync falló:", err);
+          }
         }
-      }
-      resolve();
-    };
-    request.onerror = () => reject(request.error);
+        resolve();
+      };
+      request.onerror = () => reject(request.error);
+    } catch (err) {
+      reject(err);
+    }
   });
 };
 
 export const getOfflineInvoiceClaims = async (): Promise<any[]> => {
   const db = await initDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction("invoice_claims", "readonly");
-    const store = tx.objectStore("invoice_claims");
-    const request = store.getAll();
+    try {
+      const tx = db.transaction("invoice_claims", "readonly");
+      const store = tx.objectStore("invoice_claims");
+      const request = store.getAll();
 
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    } catch (err) {
+      reject(err);
+    }
   });
 };
 
 export const clearOfflineInvoiceClaims = async (): Promise<void> => {
   const db = await initDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction("invoice_claims", "readwrite");
-    const store = tx.objectStore("invoice_claims");
-    const request = store.clear();
+    try {
+      const tx = db.transaction("invoice_claims", "readwrite");
+      const store = tx.objectStore("invoice_claims");
+      const request = store.clear();
 
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    } catch (err) {
+      reject(err);
+    }
   });
 };
 

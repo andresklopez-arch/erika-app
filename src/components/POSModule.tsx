@@ -207,6 +207,7 @@ export default function POSModule() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [receiptToPrint, setReceiptToPrint] = useState<any>(null);
   const [pendingOfflineCount, setPendingOfflineCount] = useState(0);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   // Printer Connection States
   const [isPrinterConnected, setIsPrinterConnected] = useState<boolean>(() => {
@@ -290,7 +291,10 @@ export default function POSModule() {
   const [invoiceToken, setInvoiceToken] = useState("");
 
   useEffect(() => {
-    setInvoiceToken(`FAC-${activeTicketId}-${crypto.randomUUID()}`);
+    const uuid = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    setInvoiceToken(`FAC-${activeTicketId}-${uuid}`);
   }, [activeTicketId, activeTicket.items.length === 0]);
 
   const updateOfflineStatus = async () => {
@@ -815,146 +819,180 @@ export default function POSModule() {
       return alert("El ticket está vacío.");
 
     const totalAmt = finalTotal;
+    setIsProcessingPayment(true);
 
-    if (isOffline) {
-      await saveTransactionOffline({
-        session_id: 0,
-        type: "sale",
-        amount: totalAmt,
-        description: `Venta Offline Ticket #${activeTicket.id} [Método: ${selectedMethod}]`,
-        device_info: navigator.userAgent,
-      });
-      alert(
-        `⚠️ ¡Cobro Exitoso en ${selectedMethod.toUpperCase()} (Modo Offline)!\nSe sincronizará con la nube cuando regrese el Internet.`,
-      );
-      updateOfflineStatus();
-    } else {
-      const { data: rawSession } = await supabase
-        .from("cash_sessions")
-        .select("*")
-        .eq("status", "open")
-        .order("opened_at", { ascending: false })
-        .limit(1)
-        .single();
-      
-      let session = null;
-      if (rawSession) {
-        const result = CashSessionSchema.safeParse(rawSession);
-        if (!result.success) {
-          console.error("Error validando sesion de caja con Zod:", result.error);
-          session = rawSession; // Fallback
-        } else {
-          session = result.data;
-        }
-      }
-
-      if (!session)
-        return alert(
-          "❌ LA CAJA ESTÁ CERRADA. Ve al menú 'Arqueo de Caja' para iniciar tu turno y declarar el fondo inicial.",
-        );
-
-      const descriptionText = `Venta Ticket #${activeTicket.id}${selectedCustomerId ? ` (Cliente ID: ${selectedCustomerId})` : ""} [METODO:${selectedMethod}] [CASH:${cashAmt}] [CARD:${cardAmt}] [TRANS:${transferAmt}] [COSTO:${totalCost.toFixed(2)}]`;
-
-      const { error } = await supabase
-        .from("cash_transactions")
-        .insert({
-          session_id: session.id,
+    try {
+      if (isOffline) {
+        await saveTransactionOffline({
+          session_id: 0,
           type: "sale",
           amount: totalAmt,
-          description: descriptionText,
+          description: `Venta Offline Ticket #${activeTicket.id} [Método: ${selectedMethod}]`,
           device_info: navigator.userAgent,
-          payment_method: selectedMethod,
-          cash_amount: cashAmt,
-          card_amount: cardAmt,
-          transfer_amount: transferAmt
         });
+        alert(
+          `⚠️ ¡Cobro Exitoso en ${selectedMethod.toUpperCase()} (Modo Offline)!\nSe sincronizará con la nube cuando regrese el Internet.`,
+        );
+        updateOfflineStatus();
+      } else {
+        const { data: rawSession } = await supabase
+          .from("cash_sessions")
+          .select("*")
+          .eq("status", "open")
+          .order("opened_at", { ascending: false })
+          .limit(1)
+          .single();
+        
+        let session = null;
+        if (rawSession) {
+          const result = CashSessionSchema.safeParse(rawSession);
+          if (!result.success) {
+            console.error("Error validando sesion de caja con Zod:", result.error);
+            session = rawSession; // Fallback
+          } else {
+            session = result.data;
+          }
+        }
 
-      if (error) {
-        console.warn("Falla al insertar nuevas columnas de método de pago, reintentando con fallback...");
-        const { error: fallbackError } = await supabase
+        if (!session) {
+          setIsProcessingPayment(false);
+          return alert(
+            "❌ LA CAJA ESTÁ CERRADA. Ve al menú 'Arqueo de Caja' para iniciar tu turno y declarar el fondo inicial.",
+          );
+        }
+
+        const descriptionText = `Venta Ticket #${activeTicket.id}${selectedCustomerId ? ` (Cliente ID: ${selectedCustomerId})` : ""} [METODO:${selectedMethod}] [CASH:${cashAmt}] [CARD:${cardAmt}] [TRANS:${transferAmt}] [COSTO:${totalCost.toFixed(2)}]`;
+
+        const { error } = await supabase
           .from("cash_transactions")
           .insert({
             session_id: session.id,
             type: "sale",
             amount: totalAmt,
             description: descriptionText,
-            device_info: navigator.userAgent
+            device_info: navigator.userAgent,
+            payment_method: selectedMethod,
+            cash_amount: cashAmt,
+            card_amount: cardAmt,
+            transfer_amount: transferAmt
           });
-        
-        if (fallbackError) return alert("Error al cobrar: " + fallbackError.message);
-      }
 
-      let realTicketId = Date.now();
-      const { data: quoteData } = await supabase.from("quotes").insert({
-         customer_name: selectedCustomerId ? (customers.find(c => c.id === selectedCustomerId)?.name || "Venta Registrada") : "Venta Mostrador",
-         customer_id: selectedCustomerId || null,
-         items: activeTicket.items,
-         total: totalAmt,
-         status: "ticket"
-      }).select("id").single();
-      if (quoteData) {
-         realTicketId = quoteData.id;
-         try {
-            const { error: insertErr } = await supabase.from("invoice_claims").insert({
-               ticket_id: realTicketId,
-               token: invoiceToken,
-               claimed: false
+        if (error) {
+          console.warn("Falla al insertar nuevas columnas de método de pago, reintentando con fallback...");
+          const { error: fallbackError } = await supabase
+            .from("cash_transactions")
+            .insert({
+              session_id: session.id,
+              type: "sale",
+              amount: totalAmt,
+              description: descriptionText,
+              device_info: navigator.userAgent
             });
-            if (insertErr) {
-               console.warn("Error insertando claim en la nube, guardando offline:", insertErr);
-               await saveInvoiceClaimOffline({
-                  ticket_id: realTicketId,
-                  token: invoiceToken,
-                  claimed: false
-               });
-            }
-         } catch (err) {
-            console.warn("No se pudo registrar token de facturacion en invoice_claims, guardando offline:", err);
-            try {
-               await saveInvoiceClaimOffline({
-                  ticket_id: realTicketId,
-                  token: invoiceToken,
-                  claimed: false
-               });
-            } catch (idbErr) {
-               console.error("Fallo al guardar reclamo offline en IndexedDB:", idbErr);
-            }
-         }
-      }
-
-      let puntosGanados = 0;
-      if (selectedCustomerId) {
-         const customer = customers.find(c => c.id === selectedCustomerId);
-         if (customer) {
-            puntosGanados = Math.floor(totalAmt / loyaltyRates.earnRate) * loyaltyRates.earnPoints;
-            if (puntosGanados > 0) {
-               await supabase.from("customers").update({ points: (customer.points || 0) + puntosGanados }).eq("id", selectedCustomerId);
-               alert(`⭐ El cliente ganó ${puntosGanados} Erika Puntos.`);
-            }
-         }
-      }
-      alert(
-        `✅ ¡Cobro Exitoso por $${totalAmt.toFixed(2)} [Método: ${selectedMethod.toUpperCase()}]!\nEl dinero ha sido ingresado a la Caja.`,
-      );
-
-      triggerPrint({
-        type: "ticket",
-        data: {
-          realTicketId,
-          items: [...activeTicket.items],
-          finalTotal: totalAmt
+          
+          if (fallbackError) {
+            setIsProcessingPayment(false);
+            return alert("Error al cobrar: " + fallbackError.message);
+          }
         }
-      });
-    }
 
-    setTickets(
-      tickets.map((t) =>
-        t.id === activeTicketId
-          ? { ...t, items: [], discountPct: 0 }
-          : t
-      )
-    );
-    setShowCheckoutModal(false);
+        let realTicketId = Date.now();
+        
+        // Registrar en quotes (completamente aislado)
+        try {
+          const { data: quoteData } = await supabase.from("quotes").insert({
+             customer_name: selectedCustomerId ? (customers.find(c => c.id === selectedCustomerId)?.name || "Venta Registrada") : "Venta Mostrador",
+             customer_id: selectedCustomerId || null,
+             items: activeTicket.items,
+             total: totalAmt,
+             status: "ticket"
+          }).select("id").single();
+
+          if (quoteData) {
+             realTicketId = quoteData.id;
+             
+             // Registrar en invoice_claims (completamente aislado)
+             try {
+                const { error: insertErr } = await supabase.from("invoice_claims").insert({
+                   ticket_id: realTicketId,
+                   token: invoiceToken,
+                   claimed: false
+                });
+                if (insertErr) {
+                   console.warn("Error insertando claim en la nube, guardando offline:", insertErr);
+                   await saveInvoiceClaimOffline({
+                      ticket_id: realTicketId,
+                      token: invoiceToken,
+                      claimed: false
+                   });
+                }
+             } catch (err) {
+                console.warn("No se pudo registrar token de facturacion en invoice_claims, guardando offline:", err);
+                try {
+                   await saveInvoiceClaimOffline({
+                      ticket_id: realTicketId,
+                      token: invoiceToken,
+                      claimed: false
+                   });
+                } catch (idbErr) {
+                   console.error("Fallo al guardar reclamo offline en IndexedDB:", idbErr);
+                }
+             }
+          }
+        } catch (quoteErr) {
+          console.error("Error al registrar el ticket en quotes:", quoteErr);
+        }
+
+        // Puntos de lealtad (completamente aislado)
+        let puntosGanados = 0;
+        if (selectedCustomerId) {
+           try {
+              const customer = customers.find(c => c.id === selectedCustomerId);
+              if (customer) {
+                 puntosGanados = Math.floor(totalAmt / loyaltyRates.earnRate) * loyaltyRates.earnPoints;
+                 if (puntosGanados > 0) {
+                    await supabase.from("customers").update({ points: (customer.points || 0) + puntosGanados }).eq("id", selectedCustomerId);
+                    alert(`⭐ El cliente ganó ${puntosGanados} Erika Puntos.`);
+                 }
+              }
+           } catch (ptsErr) {
+              console.error("Error al actualizar puntos de cliente:", ptsErr);
+           }
+        }
+
+        alert(
+          `✅ ¡Cobro Exitoso por $${totalAmt.toFixed(2)} [Método: ${selectedMethod.toUpperCase()}]!\nEl dinero ha sido ingresado a la Caja.`,
+        );
+
+        // Impresión (completamente aislado)
+        try {
+          triggerPrint({
+            type: "ticket",
+            data: {
+              realTicketId,
+              items: [...activeTicket.items],
+              finalTotal: totalAmt
+            }
+          });
+        } catch (printErr) {
+          console.error("Error al disparar la impresion:", printErr);
+        }
+      }
+
+      // Proceso de éxito: limpiar tickets y cerrar modal
+      setTickets(
+        tickets.map((t) =>
+          t.id === activeTicketId
+            ? { ...t, items: [], discountPct: 0 }
+            : t
+        )
+      );
+      setShowCheckoutModal(false);
+    } catch (criticalErr: any) {
+      console.error("Error crítico inesperado en handleCheckoutSubmit:", criticalErr);
+      alert("❌ Error crítico al procesar el pago: " + (criticalErr.message || criticalErr));
+    } finally {
+      setIsProcessingPayment(false);
+    }
   };
 
   const getCrossSellSuggestions = () => {
@@ -2567,6 +2605,7 @@ export default function POSModule() {
 
             <button
               className="btn-primary"
+              disabled={isProcessingPayment}
               onClick={() => {
                 const cash = parseFloat(cashPayAmount) || 0;
                 const card = parseFloat(cardPayAmount) || 0;
@@ -2584,13 +2623,15 @@ export default function POSModule() {
               style={{
                 width: "100%",
                 padding: "12px",
-                background: "var(--color-primary)",
+                background: isProcessingPayment ? "#4b5563" : "var(--color-primary)",
+                cursor: isProcessingPayment ? "not-allowed" : "pointer",
                 border: "none",
                 fontWeight: "bold",
-                fontSize: "1.1rem"
+                fontSize: "1.1rem",
+                opacity: isProcessingPayment ? 0.7 : 1
               }}
             >
-              Confirmar Pago
+              {isProcessingPayment ? "Procesando Pago..." : "Confirmar Pago"}
             </button>
           </div>
         </div>
