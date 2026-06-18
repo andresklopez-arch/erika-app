@@ -624,8 +624,18 @@ export default function SmartImporter({
     }
   };
 
-  const executeImport = (globalSupplier: string) => {
+  const executeImport = async (globalSupplier: string) => {
     if (!previewData || !globalSupplier) return;
+
+    const cleanSupplier = globalSupplier.trim();
+    const exists = dbSuppliers.some(s => s.toLowerCase() === cleanSupplier.toLowerCase());
+    if (!exists && cleanSupplier !== "") {
+      try {
+        await supabase.from("suppliers").insert({ name: cleanSupplier });
+      } catch (err) {
+        console.error("Error al registrar proveedor automático:", err);
+      }
+    }
 
     let areaChar = "C";
     let areaNum = 1;
@@ -640,7 +650,7 @@ export default function SmartImporter({
           areaChar = String.fromCharCode(areaChar.charCodeAt(0) + 1);
         }
       }
-      const finalSupplier = (p.supplier && p.supplier !== "Pendiente" && p.supplier !== "") ? p.supplier : globalSupplier;
+      const finalSupplier = (p.supplier && p.supplier !== "Pendiente" && p.supplier !== "") ? p.supplier : cleanSupplier;
       return { ...p, supplier: finalSupplier, location: assignedLocation };
     });
 
@@ -1306,8 +1316,8 @@ export default function SmartImporter({
                       executeImport(supplierSearch);
                     }} 
                     className="btn-primary" 
-                    disabled={!dbSuppliers.includes(supplierSearch)} 
-                    style={{ background: "var(--color-primary)", opacity: dbSuppliers.includes(supplierSearch) ? 1 : 0.5 }}
+                    disabled={supplierSearch.trim() === ""} 
+                    style={{ background: "var(--color-primary)", opacity: supplierSearch.trim() !== "" ? 1 : 0.5 }}
                   >
                     Confirmar e Importar
                   </button>
