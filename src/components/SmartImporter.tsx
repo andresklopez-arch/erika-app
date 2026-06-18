@@ -440,71 +440,108 @@ export default function SmartImporter({
 
     const steps = [
       `🔍 Analizando archivo cargado: ${file.name}...`,
-      "🤖 Iniciando Erika AI Vision OCR Engine...",
-      "⚡ Detectando estructura del documento y cabeceras...",
-      "📊 Analizando coherencia de datos, utilidad objetivo y precios anteriores..."
+      "🤖 Erika AI Vision OCR — leyendo documento real...",
+      "⚡ Detectando productos, códigos y precios...",
+      "📊 Calculando márgenes y precios sugeridos..."
     ];
 
     for (let i = 0; i < steps.length; i++) {
       setProgress(steps[i]);
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 700));
     }
 
-    // Generar datos simulados de alta fidelidad basados en el tipo de archivo / nombre
-    const lowerName = file.name.toLowerCase();
-    let mockProducts: any[] = [];
     const now = Date.now();
+    let rawProducts: any[] = [];
 
-    if (lowerName.includes("pintura") || lowerName.includes("rodillo") || lowerName.includes("thinner")) {
-      mockProducts = [
-        { code: "PIN-ACR-19", name: "Pintura Acrílica Blanca 19L Sayer", cost: 890.00, stock: 5 },
-        { code: "BRO-CER-04", name: "Brocha de Cerda Natural 4 pulgadas", cost: 35.00, stock: 24 },
-        { code: "ROD-PRO-09", name: "Rodillo para Pintar Profesional 9x3/8", cost: 55.00, stock: 12 },
-        { code: "THI-EST-01", name: "Thinner Estándar 1 Litro", cost: 38.00, stock: 30 }
-      ];
-    } else if (lowerName.includes("cemento") || lowerName.includes("obra") || lowerName.includes("pala")) {
-      mockProducts = [
-        { code: "CEM-TOL-50", name: "Cemento Tolteca Gris 50kg", cost: 145.00, stock: 40 },
-        { code: "PAL-CUA-TR", name: "Pala Cuadrada Truper Mango Madera", cost: 195.00, stock: 10 },
-        { code: "YES-CON-25", name: "Yeso Construcción Pro 25kg", cost: 65.00, stock: 15 },
-        { code: "CAR-FIT-45", name: "Carretilla 4.5 pies Truper Neumática", cost: 980.00, stock: 4 }
-      ];
-    } else if (lowerName.includes("tubo") || lowerName.includes("pvc") || lowerName.includes("plomeria") || lowerName.includes("plomería")) {
-      mockProducts = [
-        { code: "TUB-PVC-12", name: "Tubo de PVC Hidráulico 1/2 pulgada 6m", cost: 68.00, stock: 20 },
-        { code: "COD-PVC-90", name: "Codo PVC 1/2 pulgada 90 grados", cost: 4.80, stock: 100 },
-        { code: "TEF-CIN-12", name: "Cinta de Teflón 1/2 pulgada 10m", cost: 7.50, stock: 150 },
-        { code: "PEG-PVC-12", name: "Pegamento para PVC Oatey 125ml", cost: 49.00, stock: 25 }
-      ];
-    } else {
-      // General hardware store mock invoice data
-      mockProducts = [
-        { code: "MAR-UNA-SA", name: "Martillo de Uña Sayer Premium", cost: 98.00, stock: 8 },
-        { code: "CIN-MET-TR", name: "Cinta Métrica 5m Truper Grip", cost: 85.00, stock: 15 },
-        { code: "PIN-CHO-08", name: "Pinzas de Chofer 8 pulgadas", cost: 115.00, stock: 10 },
-        { code: "TOR-MAD-01", name: "Tornillo Madera 1 pulgada (100 pzas)", cost: 28.00, stock: 50 },
-        { code: "LLA-AJU-10", name: "Llave Ajustable Perica 10 pulgadas", cost: 145.00, stock: 6 }
-      ];
+    try {
+      // 🤖 Llamada real a Gemini Vision via API route del servidor
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/smart-import", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        rawProducts = result.products || [];
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        // Si Gemini no está configurado, mostrar mensaje claro
+        if (errData.error === "GEMINI_API_KEY not configured") {
+          alert("⚠️ Para usar OCR con imágenes/PDF necesitas configurar GEMINI_API_KEY en .env.local\n\nAgrega: GEMINI_API_KEY=tu_clave_aqui");
+        } else {
+          alert(`❌ Error OCR: ${errData.error || "Error desconocido"}\n\nVerifica la imagen y vuelve a intentarlo.`);
+        }
+        setIsProcessing(false);
+        return;
+      }
+    } catch (fetchErr: any) {
+      console.error("Error llamando API smart-import:", fetchErr);
+      alert("❌ Error de conexión con el motor OCR. Verifica tu conexión e intenta de nuevo.");
+      setIsProcessing(false);
+      return;
     }
 
-    const processed = mockProducts.map((p, i) => {
-      const smart = getSmartPriceSuggestion(p.name, p.cost, p.code, minBatchMargin);
+    if (rawProducts.length === 0) {
+      alert("⚠️ No se detectaron productos en el archivo.\nAsegúrate de que la imagen sea clara y contenga una lista de productos con precios.");
+      setIsProcessing(false);
+      return;
+    }
+
+    setProgress(`✅ ${rawProducts.length} productos detectados por IA. Calculando precios...`);
+    await new Promise(resolve => setTimeout(resolve, 400));
+
+    const processed = rawProducts.map((p: any, i: number) => {
+      const code = p.code ? String(p.code).trim() : `FER-AI-${now}-${i}`;
+      const name = p.name ? String(p.name).trim() : "Producto sin nombre";
+      const cost = parseFloat(String(p.cost).replace(/[^0-9.-]+/g, "")) || 0;
+      const stockVal = parseInt(String(p.stock)) || 1;
+
+      // Detectar si ya existe en inventario
+      const existing = existingItems.find(
+        (item) =>
+          (item.code && code && item.code.trim().toUpperCase() === code.trim().toUpperCase()) ||
+          normalizeString(item.name) === normalizeString(name)
+      );
+      if (existing && existing.code) {
+        // Usar el código ya existente para que el match sea correcto
+      }
+
+      const smart = getSmartPriceSuggestion(name, cost, code, minBatchMargin);
+
+      // Si la IA detectó un precio de venta explícito, usarlo en lugar del calculado
+      let finalPrice = smart.price;
+      let autoPriced = true;
+      if (p.price && parseFloat(String(p.price).replace(/[^0-9.-]+/g, "")) > 0) {
+        finalPrice = parseFloat(String(p.price).replace(/[^0-9.-]+/g, ""));
+        autoPriced = false;
+      }
+
+      const allKnownLocations = Array.from(new Set(existingItems.map(i => i.location).filter(l => l && l !== "Pendiente" && l !== ""))).map(l => String(l).trim().toLowerCase());
+
       return {
         id: `ai-${now}-${i}`,
-        code: p.code,
-        name: p.name,
-        cost: p.cost,
-        price: smart.price,
-        stock: p.stock,
+        code: code,
+        name: cleanAndCapitalize(name),
+        cost: cost,
+        price: finalPrice,
+        stock: stockVal,
         supplier: "Pendiente",
+        location: "",
         minStock: 5,
         salesIndex: 50,
-        autoPriced: true,
+        autoPriced: autoPriced,
         alertText: smart.alertText,
         isInflation: smart.isInflation,
         isNew: smart.isNew,
         prevPrice: smart.prevPrice,
-        prevCost: smart.prevCost
+        prevCost: smart.prevCost,
+        costHasError: cost === 0,
+        stockHasError: false,
+        isDuplicateInFile: false,
+        isUnknownLocation: false
       };
     });
 
@@ -513,6 +550,9 @@ export default function SmartImporter({
   };
 
   const handleFileSelection = (file: File) => {
+    // 🔄 Siempre reiniciar el método de importación al cargar un nuevo archivo
+    setImportOption("");
+    setPreviewData(null);
     const ext = file.name.split(".").pop()?.toLowerCase();
     if (ext === "xlsx" || ext === "xls" || ext === "csv") {
       processExcel(file);

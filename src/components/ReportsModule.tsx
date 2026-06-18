@@ -19,6 +19,10 @@ interface CashSession {
   total_sales?: number;
 }
 
+// 🪙 Redondear al múltiplo de $0.50 más cercano (para facilitar operaciones en caja)
+const roundTo50 = (value: number): number => Math.round(value * 2) / 2;
+const formatPrice = (value: number): string => roundTo50(value).toFixed(2);
+
 export default function ReportsModule() {
   const { businessSettings } = useAuth();
   const businessProfile = useBusinessProfile();
@@ -208,18 +212,18 @@ export default function ReportsModule() {
           <p><strong>Apertura:</strong> ${new Date(session.opened_at).toLocaleString()}</p>
           <p><strong>Cierre:</strong> ${session.closed_at ? new Date(session.closed_at).toLocaleString() : 'En curso'}</p>
           <div class="divider"></div>
-          <div class="row"><span>Fondo Inicial:</span><span>$${(session.initial_balance ?? 0).toFixed(2)}</span></div>
-          <div class="row"><span>Ventas Efectivo:</span><span>$${(session.cash_sales ?? 0).toFixed(2)}</span></div>
-          <div class="row"><span>Ventas Tarjeta:</span><span>$${(session.card_sales ?? 0).toFixed(2)}</span></div>
-          <div class="row"><span>Ventas Transf.:</span><span>$${(session.transfer_sales ?? 0).toFixed(2)}</span></div>
-          <div class="row bold"><span>Total Ventas:</span><span>$${(session.total_sales ?? 0).toFixed(2)}</span></div>
+          <div class="row"><span>Fondo Inicial:</span><span>$${formatPrice(session.initial_balance ?? 0)}</span></div>
+          <div class="row"><span>Ventas Efectivo:</span><span>$${formatPrice(session.cash_sales ?? 0)}</span></div>
+          <div class="row"><span>Ventas Tarjeta:</span><span>$${formatPrice(session.card_sales ?? 0)}</span></div>
+          <div class="row"><span>Ventas Transf.:</span><span>$${formatPrice(session.transfer_sales ?? 0)}</span></div>
+          <div class="row bold"><span>Total Ventas:</span><span>$${formatPrice(session.total_sales ?? 0)}</span></div>
           <div class="divider"></div>
-          <div class="row"><span>Efectivo Declarado:</span><span>$${(session.counted_balance ?? 0).toFixed(2)}</span></div>
-          <div class="row bold"><span>Efectivo Esperado:</span><span>$${(session.expected_balance ?? 0).toFixed(2)}</span></div>
+          <div class="row"><span>Efectivo Declarado:</span><span>$${formatPrice(session.counted_balance ?? 0)}</span></div>
+          <div class="row bold"><span>Efectivo Esperado:</span><span>$${formatPrice(session.expected_balance ?? 0)}</span></div>
           <div class="divider"></div>
           <div class="row bold">
              <span>Descuadre:</span>
-             <span style="color: ${(session.discrepancy ?? 0) < 0 ? 'red' : 'inherit'}">$${(session.discrepancy ?? 0).toFixed(2)}</span>
+             <span style="color: ${(session.discrepancy ?? 0) < 0 ? 'red' : 'inherit'}">$${formatPrice(session.discrepancy ?? 0)}</span>
           </div>
           <div class="divider"></div>
           <p style="text-align: center; font-size: 10px; margin-top: 20px;">Firma del Cajero</p>
@@ -268,12 +272,12 @@ export default function ReportsModule() {
         session.opened_at ? new Date(session.opened_at).toLocaleString() : "",
         session.closed_at ? new Date(session.closed_at).toLocaleString() : "En curso",
         session.opened_by || "",
-        (session.initial_balance ?? 0).toFixed(2),
-        (session.cash_sales ?? 0).toFixed(2),
-        (session.card_sales ?? 0).toFixed(2),
-        (session.transfer_sales ?? 0).toFixed(2),
-        (session.total_sales ?? 0).toFixed(2),
-        (session.discrepancy ?? 0).toFixed(2),
+        formatPrice(session.initial_balance ?? 0),
+        formatPrice(session.cash_sales ?? 0),
+        formatPrice(session.card_sales ?? 0),
+        formatPrice(session.transfer_sales ?? 0),
+        formatPrice(session.total_sales ?? 0),
+        formatPrice(session.discrepancy ?? 0),
         session.status === 'open' ? 'Abierta' : 'Cerrada'
       ]);
 

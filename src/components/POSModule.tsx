@@ -60,6 +60,17 @@ const fuzzyMatch = (itemName: string, query: string) => {
   });
 };
 
+// 🪙 Redondear al múltiplo de $0.50 más cercano (para facilitar operaciones en caja)
+// Ejemplos: $12.10 → $12.00 | $12.30 → $12.50 | $12.80 → $13.00
+const roundTo50 = (value: number): number => {
+  return Math.round(value * 2) / 2;
+};
+
+// Formatear precio redondeado a 2 decimales en pantalla
+const formatPrice = (value: number): string => {
+  return roundTo50(value).toFixed(2);
+};
+
 const SYNONYMS: Record<string, string[]> = {
   "pegamento": ["adhesivo", "resistol", "kola loka", "silicon", "cinta"],
   "pinza": ["alicate", "tenaza"],
@@ -1013,10 +1024,10 @@ export default function POSModule() {
             ${itemsHtml}
             <div class="divider"></div>
             ${applyIva ? `
-            <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span>$${subtotalNeto.toFixed(2)}</span></div>
-            <div style="display:flex; justify-content:space-between;"><span>IVA (16%):</span><span>$${iva.toFixed(2)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span>$${formatPrice(subtotalNeto)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>IVA (16%):</span><span>$${formatPrice(iva)}</span></div>
             <div class="divider"></div>` : ''}
-            <div style="display:flex; justify-content:space-between; font-size: 1.1em;"><strong>TOTAL:</strong><strong>$${finalTotal.toFixed(2)}</strong></div>
+            <div style="display:flex; justify-content:space-between; font-size: 1.1em;"><strong>TOTAL:</strong><strong>$${formatPrice(finalTotal)}</strong></div>
             <div class="divider"></div>
             <div class="center" style="margin-top: 15px; font-size: 0.9em;">
               <strong>Auto-Facturación Express</strong><br>
@@ -1075,15 +1086,15 @@ export default function POSModule() {
             </div>` : ''}
             <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <div>Total Mercancía:</div>
-              <div class="bold">$${finalTotal.toFixed(2)}</div>
+              <div class="bold">$${formatPrice(finalTotal)}</div>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <div>Enganche Dado:</div>
-              <div class="bold">$${downPayment.toFixed(2)}</div>
+              <div class="bold">$${formatPrice(downPayment)}</div>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <div>Saldo Pendiente:</div>
-              <div class="bold">$${(finalTotal - downPayment).toFixed(2)}</div>
+              <div class="bold">$${formatPrice(finalTotal - downPayment)}</div>
             </div>
             <div class="divider"></div>
             <div class="center bold" style="margin-bottom: 5px; color: red;">¡ATENCIÓN!</div>
@@ -1803,20 +1814,20 @@ export default function POSModule() {
             style={{ marginBottom: "10px", color: "rgba(255,255,255,0.6)" }}
           >
             <span>Subtotal</span>
-            <span>${subtotal.toFixed(2)}</span>
+            <span>${formatPrice(subtotal)}</span>
           </div>
           
           {activeTicket.discountPct > 0 && (
              <div className="flex-between" style={{ marginBottom: "10px", color: "#10b981" }}>
                <span>Descuento ({activeTicket.discountPct}%):</span>
-               <span>-${discountAmount.toFixed(2)}</span>
+               <span>-${formatPrice(discountAmount)}</span>
              </div>
           )}
 
           {applyIva && (
              <div className="flex-between" style={{ marginBottom: "10px", color: "#3b82f6" }}>
                <span>IVA (16%):</span>
-               <span>+${iva.toFixed(2)}</span>
+               <span>+${formatPrice(iva)}</span>
              </div>
           )}
 
@@ -1832,7 +1843,7 @@ export default function POSModule() {
           >
             <span>TOTAL</span>
             <span style={{ color: "var(--color-secondary)" }}>
-              ${finalTotal.toFixed(2)}
+              ${formatPrice(finalTotal)}
             </span>
           </div>
 
@@ -2225,21 +2236,21 @@ export default function POSModule() {
           <div style={{ width: "250px" }}>
              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px" }}>
                <span>Subtotal:</span>
-               <span>${subtotal.toFixed(2)}</span>
+               <span>${formatPrice(subtotal)}</span>
              </div>
              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px" }}>
                <span>IVA (16%):</span>
-               <span>${iva.toFixed(2)}</span>
+               <span>${formatPrice(iva)}</span>
              </div>
              {activeTicket.discountPct > 0 && (
                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px", color: "red" }}>
                  <span>Descuento:</span>
-                 <span>-${discountAmount.toFixed(2)}</span>
+                  <span>-${formatPrice(discountAmount)}</span>
                </div>
              )}
              <div style={{ display: "flex", justifyContent: "space-between", marginTop: "10px", borderTop: "2px solid #ccc", paddingTop: "10px", fontWeight: "bold", fontSize: "18px" }}>
                <span>TOTAL:</span>
-               <span>${finalTotal.toFixed(2)}</span>
+               <span>${formatPrice(finalTotal)}</span>
              </div>
           </div>
         </div>
@@ -2311,7 +2322,7 @@ export default function POSModule() {
             <div style={{ background: "rgba(255,255,255,0.05)", padding: "15px", borderRadius: "8px", marginBottom: "20px", textAlign: "center" }}>
               <span style={{ fontSize: "0.9rem", opacity: 0.7 }}>TOTAL A COBRAR</span>
               <h1 style={{ color: "var(--color-secondary)", margin: "5px 0 0 0", fontSize: "2.5rem" }}>
-                ${finalTotal.toFixed(2)}
+                ${formatPrice(finalTotal)}
               </h1>
             </div>
 
@@ -2331,17 +2342,17 @@ export default function POSModule() {
                     onClick={() => {
                       setPaymentMethod(m.id as any);
                       if (m.id === "efectivo") {
-                        setCashPayAmount(finalTotal.toFixed(2));
+                        setCashPayAmount(formatPrice(finalTotal));
                         setCardPayAmount("");
                         setTransferPayAmount("");
                       } else if (m.id === "tarjeta") {
                         setCashPayAmount("");
-                        setCardPayAmount(finalTotal.toFixed(2));
+                        setCardPayAmount(formatPrice(finalTotal));
                         setTransferPayAmount("");
                       } else if (m.id === "transferencia") {
                         setCashPayAmount("");
                         setCardPayAmount("");
-                        setTransferPayAmount(finalTotal.toFixed(2));
+                        setTransferPayAmount(formatPrice(finalTotal));
                       } else {
                         setCashPayAmount("");
                         setCardPayAmount("");
@@ -2367,7 +2378,7 @@ export default function POSModule() {
               <div style={{ display: "flex", flexDirection: "column", gap: "12px", background: "rgba(0,0,0,0.3)", padding: "15px", borderRadius: "8px", marginBottom: "20px" }}>
                 <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "var(--color-secondary)" }}>💵 Efectivo Recibido (Calculadora de Cambio):</label>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
-                  <button onClick={() => setCashPayAmount(finalTotal.toFixed(2))} className="btn-primary" style={{ background: "rgba(16, 185, 129, 0.1)", border: "1px solid #10b981", color: "#10b981", padding: "6px" }}>Exacto</button>
+                  <button onClick={() => setCashPayAmount(formatPrice(finalTotal))} className="btn-primary" style={{ background: "rgba(16, 185, 129, 0.1)", border: "1px solid #10b981", color: "#10b981", padding: "6px" }}>Exacto</button>
                   <button onClick={() => setCashPayAmount("50")} className="btn-primary" style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", padding: "6px" }}>$50</button>
                   <button onClick={() => setCashPayAmount("100")} className="btn-primary" style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", padding: "6px" }}>$100</button>
                   <button onClick={() => setCashPayAmount("200")} className="btn-primary" style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", padding: "6px" }}>$200</button>
@@ -2384,14 +2395,14 @@ export default function POSModule() {
                 {parseFloat(cashPayAmount) > finalTotal && (
                   <div style={{ marginTop: "5px", padding: "10px", background: "rgba(16, 185, 129, 0.15)", borderRadius: "6px", textAlign: "center" }}>
                     <span style={{ color: "#10b981", fontWeight: "bold", fontSize: "1.1rem" }}>
-                      CAMBIO A ENTREGAR: ${(parseFloat(cashPayAmount) - finalTotal).toFixed(2)}
+                      CAMBIO A ENTREGAR: ${formatPrice(parseFloat(cashPayAmount) - finalTotal)}
                     </span>
                   </div>
                 )}
                 {parseFloat(cashPayAmount) < finalTotal && cashPayAmount !== "" && (
                   <div style={{ marginTop: "5px", padding: "10px", background: "rgba(239, 68, 68, 0.15)", borderRadius: "6px", textAlign: "center" }}>
                     <span style={{ color: "#ef4444", fontWeight: "bold", fontSize: "0.9rem" }}>
-                      Faltan: ${(finalTotal - parseFloat(cashPayAmount)).toFixed(2)}
+                      Faltan: ${formatPrice(finalTotal - parseFloat(cashPayAmount))}
                     </span>
                   </div>
                 )}
