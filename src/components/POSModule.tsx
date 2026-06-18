@@ -205,6 +205,7 @@ export default function POSModule() {
   const [transferPayAmount, setTransferPayAmount] = useState("");
   const [applyIva, setApplyIva] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [receiptToPrint, setReceiptToPrint] = useState<any>(null);
   const [pendingOfflineCount, setPendingOfflineCount] = useState(0);
 
   // Printer Connection States
@@ -440,6 +441,17 @@ export default function POSModule() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [tickets, activeTicketId, globalCatalog]);
+
+  // Efecto para procesar impresión del sistema en ventana principal (evita bloqueadores de popups)
+  useEffect(() => {
+    if (receiptToPrint) {
+      const timer = setTimeout(() => {
+        window.print();
+        setReceiptToPrint(null);
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [receiptToPrint]);
 
   const handleSearchSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -968,6 +980,58 @@ export default function POSModule() {
   const subtotal = subtotalNeto;
 
   const executePrintWindow = (job: any) => {
+    // Si la impresora configurada es del sistema, redireccionar al flujo nativo sin popup
+    if (printerConnectionType === "system") {
+      if (job.type === "ticket") {
+        const { realTicketId, items, finalTotal } = job.data;
+        const subtotalVal = items.reduce((sum: number, item: any) => {
+           const p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
+           return sum + (p * item.qty);
+        }, 0);
+        const discountPct = activeTicket.discountPct || 0;
+        const discountAmt = subtotalVal * (discountPct / 100);
+        const subtotalNeto = subtotalVal - discountAmt;
+        const iva = applyIva ? subtotalNeto * 0.16 : 0;
+
+        setReceiptToPrint({
+          type: "ticket",
+          ticketId: realTicketId,
+          customerName: customers.find(c => c.id === selectedCustomerId)?.name || "",
+          items: [...items],
+          subtotal: subtotalNeto,
+          iva,
+          discountPct,
+          discountAmount: discountAmt,
+          finalTotal: finalTotal,
+          invoiceToken: realTicketId
+        });
+      } else if (job.type === "layaway") {
+        const { customer, items, finalTotal, downPayment } = job.data;
+        const subtotalVal = items.reduce((sum: number, item: any) => {
+           const p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
+           return sum + (p * item.qty);
+        }, 0);
+        const discountPct = activeTicket.discountPct || 0;
+        const discountAmt = subtotalVal * (discountPct / 100);
+        const subtotalNeto = subtotalVal - discountAmt;
+        const iva = applyIva ? subtotalNeto * 0.16 : 0;
+
+        setReceiptToPrint({
+          type: "layaway",
+          customerName: customer?.name || "Desconocido",
+          items: [...items],
+          subtotal: subtotalNeto,
+          iva,
+          discountPct,
+          discountAmount: discountAmt,
+          finalTotal,
+          downPayment,
+          balance: finalTotal - downPayment
+        });
+      }
+      return;
+    }
+
     const config = businessSettings?.config || {};
     const paperSize = config.printer_paper_size || "80mm";
     const fontSize = config.printer_font_size || "normal";
@@ -996,7 +1060,7 @@ export default function POSModule() {
       const itemsHtml = items.map((i: any) => `
         <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
           <span>${i.qty}x ${i.name}</span>
-          <span>$${(i.price * i.qty).toFixed(2)}</span>
+          <span>$${Math.round(i.price * i.qty)}</span>
         </div>
       `).join("");
       
@@ -1024,10 +1088,10 @@ export default function POSModule() {
             ${itemsHtml}
             <div class="divider"></div>
             ${applyIva ? `
-            <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span>$${formatPrice(subtotalNeto)}</span></div>
-            <div style="display:flex; justify-content:space-between;"><span>IVA (16%):</span><span>$${formatPrice(iva)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span>$${Math.round(subtotalNeto)}</span></div>
+            <div style="display:flex; justify-content:space-between;"><span>IVA (16%):</span><span>$${Math.round(iva)}</span></div>
             <div class="divider"></div>` : ''}
-            <div style="display:flex; justify-content:space-between; font-size: 1.1em;"><strong>TOTAL:</strong><strong>$${formatPrice(finalTotal)}</strong></div>
+            <div style="display:flex; justify-content:space-between; font-size: 1.1em;"><strong>TOTAL:</strong><strong>$${Math.round(finalTotal)}</strong></div>
             <div class="divider"></div>
             <div class="center" style="margin-top: 15px; font-size: 0.9em;">
               <strong>Auto-Facturación Express</strong><br>
@@ -1046,7 +1110,7 @@ export default function POSModule() {
       const itemsHtml = items.map((item: any) => `
         <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
           <div style="flex: 2;">${item.qty}x ${item.name}</div>
-          <div style="flex: 1; text-align: right;">$${(item.price * item.qty).toFixed(2)}</div>
+          <div style="flex: 1; text-align: right;">$${Math.round(item.price * item.qty)}</div>
         </div>
       `).join("");
       
@@ -1078,23 +1142,23 @@ export default function POSModule() {
             ${applyIva ? `
             <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <div>Subtotal:</div>
-              <div>$${subtotalNeto.toFixed(2)}</div>
+              <div>$${Math.round(subtotalNeto)}</div>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <div>IVA (16%):</div>
-              <div>$${iva.toFixed(2)}</div>
+              <div>$${Math.round(iva)}</div>
             </div>` : ''}
             <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <div>Total Mercancía:</div>
-              <div class="bold">$${formatPrice(finalTotal)}</div>
+              <div class="bold">$${Math.round(finalTotal)}</div>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <div>Enganche Dado:</div>
-              <div class="bold">$${formatPrice(downPayment)}</div>
+              <div class="bold">$${Math.round(downPayment)}</div>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <div>Saldo Pendiente:</div>
-              <div class="bold">$${formatPrice(finalTotal - downPayment)}</div>
+              <div class="bold">$${Math.round(finalTotal - downPayment)}</div>
             </div>
             <div class="divider"></div>
             <div class="center bold" style="margin-bottom: 5px; color: red;">¡ATENCIÓN!</div>
@@ -1188,6 +1252,25 @@ export default function POSModule() {
     
     window.open(`https://wa.me/${cleanPhone}?text=${msg}`, "_blank");
   };
+
+  // Variables dinámicas para el recibo de impresión (para cotizaciones, ventas directas o apartados)
+  const isPrintingJob = receiptToPrint !== null;
+  const printType = isPrintingJob ? receiptToPrint.type : "quote";
+  const printTitle = printType === "ticket" ? "TICKET DE VENTA" : (printType === "layaway" ? "COMPROBANTE DE APARTADO" : "COTIZACIÓN");
+  
+  const printItems = isPrintingJob ? receiptToPrint.items : activeTicket.items;
+  const printSubtotal = isPrintingJob ? receiptToPrint.subtotal : subtotal;
+  const printIva = isPrintingJob ? receiptToPrint.iva : iva;
+  const printDiscountPct = isPrintingJob ? receiptToPrint.discountPct : activeTicket.discountPct;
+  const printDiscountAmount = isPrintingJob ? receiptToPrint.discountAmount : discountAmount;
+  const printFinalTotal = isPrintingJob ? receiptToPrint.finalTotal : finalTotal;
+  const printTicketId = isPrintingJob ? receiptToPrint.ticketId : "";
+  const printInvoiceToken = isPrintingJob ? receiptToPrint.invoiceToken : invoiceToken;
+  const printCustomerName = isPrintingJob 
+    ? receiptToPrint.customerName 
+    : (selectedCustomerId && customers.find(c => c.id === selectedCustomerId) ? customers.find(c => c.id === selectedCustomerId).name : "");
+  const printDownPayment = isPrintingJob ? receiptToPrint.downPayment : 0;
+  const printBalance = isPrintingJob ? receiptToPrint.balance : 0;
 
   return (
     <div
@@ -2185,81 +2268,100 @@ export default function POSModule() {
       </div>
       
       {/* Printable Receipt Area */}
-      <div id="printable-receipt" style={{ padding: "20mm", fontFamily: "sans-serif", maxWidth: "800px", margin: "0 auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "2px solid #ccc", paddingBottom: "20px", marginBottom: "20px" }}>
-          <div>
-            {businessProfile.logo && <img src={businessProfile.logo} alt="Logo" style={{ maxHeight: "80px", marginBottom: "10px" }} />}
-            <h1 style={{ margin: 0, fontSize: "24px" }}>{businessProfile.name}</h1>
-            <p style={{ margin: "5px 0", color: "#555" }}>RFC: {businessProfile.rfc}</p>
-            <p style={{ margin: "5px 0", color: "#555", whiteSpace: "pre-line" }}>{businessProfile.address}</p>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <h2 style={{ margin: 0, color: "#3b82f6" }}>COTIZACIÓN</h2>
-            <p style={{ margin: "5px 0" }}>Fecha: {new Date().toLocaleDateString()}</p>
-            <p style={{ margin: "5px 0" }}>Tel: {businessProfile.phone}</p>
-            <p style={{ margin: "5px 0" }}>Email: {businessProfile.email}</p>
-          </div>
+      <div id="printable-receipt" style={{ padding: "10mm", fontFamily: "monospace", maxWidth: "400px", margin: "0 auto" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", borderBottom: "1px dashed #000", paddingBottom: "10px", marginBottom: "15px", textAlign: "center" }}>
+          {businessProfile.logo && <img src={businessProfile.logo} alt="Logo" style={{ maxHeight: "60px", marginBottom: "10px" }} />}
+          <h2 style={{ margin: "5px 0", fontSize: "18px", fontWeight: "bold" }}>{businessProfile.name || "FERRETERÍA ERIKA"}</h2>
+          <p style={{ margin: "2px 0", fontSize: "12px" }}>RFC: {businessProfile.rfc}</p>
+          <p style={{ margin: "2px 0", fontSize: "12px", whiteSpace: "pre-line" }}>{businessProfile.address}</p>
+          <p style={{ margin: "2px 0", fontSize: "12px" }}>Tel: {businessProfile.phone}</p>
         </div>
         
-        {selectedCustomerId && customers.find(c => c.id === selectedCustomerId) && (
-          <div style={{ marginBottom: "20px", padding: "10px", background: "#f9f9f9", borderRadius: "5px" }}>
-            <strong>Cliente:</strong> {customers.find(c => c.id === selectedCustomerId).name}<br/>
-            <strong>Teléfono:</strong> {customers.find(c => c.id === selectedCustomerId).phone || "N/A"}
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px", fontSize: "14px" }}>
+          <div>
+            <h3 style={{ margin: 0, fontWeight: "bold", fontSize: "16px" }}>{printTitle}</h3>
+            {printTicketId && <p style={{ margin: "2px 0", fontWeight: "bold" }}>Ticket: #{printTicketId}</p>}
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <p style={{ margin: "2px 0" }}>{new Date().toLocaleDateString()}</p>
+            <p style={{ margin: "2px 0" }}>{new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+          </div>
+        </div>
+
+        {printCustomerName && (
+          <div style={{ marginBottom: "15px", padding: "8px", background: "#f3f4f6", borderRadius: "4px", fontSize: "12px", border: "1px solid #e5e7eb" }}>
+            <strong>Cliente:</strong> {printCustomerName}
           </div>
         )}
 
-        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "30px" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "15px", fontSize: "13px" }}>
           <thead>
-            <tr style={{ background: "#f1f5f9" }}>
-              <th style={{ padding: "10px", borderBottom: "1px solid #ccc", textAlign: "left" }}>Cant</th>
-              <th style={{ padding: "10px", borderBottom: "1px solid #ccc", textAlign: "left" }}>Concepto</th>
-              <th style={{ padding: "10px", borderBottom: "1px solid #ccc", textAlign: "right" }}>P. Unitario</th>
-              <th style={{ padding: "10px", borderBottom: "1px solid #ccc", textAlign: "right" }}>Importe</th>
+            <tr style={{ borderBottom: "1px dashed #000" }}>
+              <th style={{ padding: "5px 0", textAlign: "left" }}>Cant</th>
+              <th style={{ padding: "5px 0", textAlign: "left" }}>Concepto</th>
+              <th style={{ padding: "5px 0", textAlign: "right" }}>P. Unit</th>
+              <th style={{ padding: "5px 0", textAlign: "right" }}>Importe</th>
             </tr>
           </thead>
           <tbody>
-            {activeTicket.items.map(item => {
+            {printItems.map((item: any) => {
                const p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
                return (
-                  <tr key={item.id}>
-                    <td style={{ padding: "10px", borderBottom: "1px solid #eee" }}>{item.qty} {item.unit}</td>
-                    <td style={{ padding: "10px", borderBottom: "1px solid #eee" }}>{item.name}</td>
-                    <td style={{ padding: "10px", borderBottom: "1px solid #eee", textAlign: "right" }}>${p.toFixed(2)}</td>
-                    <td style={{ padding: "10px", borderBottom: "1px solid #eee", textAlign: "right" }}>${(p * item.qty).toFixed(2)}</td>
+                  <tr key={item.id} style={{ borderBottom: "1px solid #eee" }}>
+                    <td style={{ padding: "5px 0", verticalAlign: "top" }}>{item.qty} {item.unit}</td>
+                    <td style={{ padding: "5px 0", verticalAlign: "top" }}>{item.name}</td>
+                    <td style={{ padding: "5px 0", verticalAlign: "top", textAlign: "right" }}>${Math.round(p)}</td>
+                    <td style={{ padding: "5px 0", verticalAlign: "top", textAlign: "right" }}>${Math.round(p * item.qty)}</td>
                   </tr>
                );
             })}
           </tbody>
         </table>
 
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <div style={{ width: "250px" }}>
-             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px" }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", fontSize: "13px" }}>
+          <div style={{ width: "180px" }}>
+             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
                <span>Subtotal:</span>
-               <span>${formatPrice(subtotal)}</span>
+               <span>${Math.round(printSubtotal)}</span>
              </div>
-             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px" }}>
+             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
                <span>IVA (16%):</span>
-               <span>${formatPrice(iva)}</span>
+               <span>${Math.round(printIva)}</span>
              </div>
-             {activeTicket.discountPct > 0 && (
-               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "5px", color: "red" }}>
-                 <span>Descuento:</span>
-                  <span>-${formatPrice(discountAmount)}</span>
+             {printDiscountPct > 0 && (
+               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px", color: "red" }}>
+                 <span>Desc ({printDiscountPct}%):</span>
+                 <span>-${Math.round(printDiscountAmount)}</span>
                </div>
              )}
-             <div style={{ display: "flex", justifyContent: "space-between", marginTop: "10px", borderTop: "2px solid #ccc", paddingTop: "10px", fontWeight: "bold", fontSize: "18px" }}>
+             <div style={{ display: "flex", justifyContent: "space-between", marginTop: "5px", borderTop: "1px dashed #000", paddingTop: "5px", fontWeight: "bold", fontSize: "16px" }}>
                <span>TOTAL:</span>
-               <span>${formatPrice(finalTotal)}</span>
+               <span>${Math.round(printFinalTotal)}</span>
              </div>
+             
+             {printType === "layaway" && (
+               <div style={{ marginTop: "10px", borderTop: "1px dashed #000", paddingTop: "5px", fontSize: "12px" }}>
+                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                   <span>Enganche:</span>
+                   <span>${Math.round(printDownPayment)}</span>
+                 </div>
+                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px", fontWeight: "bold" }}>
+                   <span>Saldo Pend:</span>
+                   <span>${Math.round(printBalance)}</span>
+                 </div>
+                 <div style={{ color: "red", fontWeight: "bold", textAlign: "center", marginTop: "5px" }}>
+                   Vence: {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                 </div>
+               </div>
+             )}
           </div>
         </div>
         
-        <div style={{ marginTop: "50px", textAlign: "center", color: "#888", fontSize: "12px", borderTop: "1px solid #eee", paddingTop: "20px" }}>
-          <p style={{ color: "#000", fontWeight: "bold", marginBottom: "10px" }}>Auto-Facturación Express</p>
-          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://erika-app.vercel.app/facturacion/${invoiceToken}`} alt="QR Code" style={{ width: "100px", height: "100px" }} />
-          <p>Escanea este código o entra a erika-app.vercel.app/facturacion</p>
-          <p style={{ marginTop: "20px" }}>¡Gracias por su preferencia!</p>
+        <div style={{ marginTop: "30px", textAlign: "center", color: "#000", fontSize: "11px", borderTop: "1px dashed #000", paddingTop: "15px" }}>
+          <p style={{ fontWeight: "bold", margin: "0 0 5px 0" }}>Auto-Facturación Express</p>
+          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://erika-app.vercel.app/facturacion/${printInvoiceToken || "express"}`} alt="QR Code" style={{ width: "90px", height: "90px", margin: "5px auto", display: "block" }} />
+          <p style={{ margin: "5px 0" }}>Escanea este código para facturar o entra a: erika-app.vercel.app/facturacion</p>
+          <p style={{ marginTop: "15px", fontWeight: "bold" }}>¡Gracias por su preferencia!</p>
         </div>
       </div>
 
