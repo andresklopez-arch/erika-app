@@ -10,11 +10,21 @@ export const initDB = (): Promise<IDBDatabase> => {
   if (dbInstance) return Promise.resolve(dbInstance);
 
   return new Promise((resolve, reject) => {
+    // Timeout de 2 segundos para evitar bloqueos indefinidos
+    const timeout = setTimeout(() => {
+      console.warn("IndexedDB connection timeout.");
+      reject(new Error("IndexedDB connection timeout."));
+    }, 2000);
+
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-    request.onerror = () => reject(request.error);
+    request.onerror = () => {
+      clearTimeout(timeout);
+      reject(request.error);
+    };
 
     request.onsuccess = () => {
+      clearTimeout(timeout);
       dbInstance = request.result;
       
       // Cerrar conexion si hay actualizacion de version
@@ -33,6 +43,12 @@ export const initDB = (): Promise<IDBDatabase> => {
       };
 
       resolve(dbInstance);
+    };
+
+    request.onblocked = () => {
+      clearTimeout(timeout);
+      console.warn("Conexion a IndexedDB bloqueada por otra pestaña.");
+      reject(new Error("IndexedDB connection blocked by another tab."));
     };
 
     request.onupgradeneeded = (event: any) => {
