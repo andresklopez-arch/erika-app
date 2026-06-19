@@ -103,6 +103,11 @@ export default function InventoryModule() {
   const [showScrollIndicator, setShowScrollIndicator] = useState(false);
   const [mergedItemId, setMergedItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const [totalCount, setTotalCount] = useState<number | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   
   const [undoStack, setUndoStack] = useState<any[][]>(() => {
@@ -166,7 +171,9 @@ export default function InventoryModule() {
         localStorage.removeItem("erika_undo_stack");
       }
     }
-    await fetchInventory(true);
+    await fetchInventory(0, debouncedSearchQuery, true, true);
+    await loadAllItems();
+    setPage(0);
     alert("✅ Importación revertida con éxito.");
   };
 
@@ -217,7 +224,9 @@ export default function InventoryModule() {
     
     alert("✅ Producto creado con éxito");
     setShowCreateModal(false);
-    fetchInventory();
+    fetchInventory(0, debouncedSearchQuery, true, true);
+    loadAllItems();
+    setPage(0);
     router.push("/inventario");
   };
 
@@ -225,15 +234,14 @@ export default function InventoryModule() {
     window.location.href = "/inventario";
   };
 
-  const fetchInventory = async (showLoading = false) => {
-    if (showLoading) setIsLoading(true);
+  const loadAllItems = async () => {
     let allData: any[] = [];
     let from = 0;
     const limit = 1000;
-    let hasMore = true;
+    let hasMoreData = true;
     let lastError = null;
 
-    while (hasMore) {
+    while (hasMoreData) {
       const { data, error } = await supabase
         .from("inventory")
         .select("*")
@@ -243,24 +251,70 @@ export default function InventoryModule() {
 
       if (error) {
         lastError = error;
-        hasMore = false;
+        hasMoreData = false;
       } else if (data && data.length > 0) {
         allData = [...allData, ...data];
         if (data.length < limit) {
-          hasMore = false;
+          hasMoreData = false;
         } else {
           from += limit;
         }
       } else {
-        hasMore = false;
+        hasMoreData = false;
       }
     }
 
     if (allData.length > 0) {
-      setItems(allData);
+      setAllItems(allData);
     }
-    if (lastError) console.error("Error al cargar inventario:", lastError);
-    setIsLoading(false);
+    if (lastError) console.error("Error al cargar catálogo completo:", lastError);
+  };
+
+  const fetchInventory = async (pageNum: number, queryStr: string, isReset: boolean, showLoading = false) => {
+    if (showLoading) setIsLoading(true);
+    else if (!isReset) setIsLoadingMore(true);
+
+    try {
+      let dbQuery = supabase
+        .from("inventory")
+        .select("*", { count: "exact" })
+        .not("deleted", "eq", true)
+        .order("name", { ascending: true });
+
+      const cleanQuery = queryStr.trim();
+      if (cleanQuery) {
+        const tokens = normalizeString(cleanQuery).split(/\s+/).filter(Boolean);
+        tokens.forEach((token) => {
+          dbQuery = dbQuery.or(
+            `name.ilike.%${token}%,code.ilike.%${token}%,location.ilike.%${token}%,supplier.ilike.%${token}%`
+          );
+        });
+      }
+
+      const limit = 50;
+      const from = pageNum * limit;
+      const to = from + limit - 1;
+      dbQuery = dbQuery.range(from, to);
+
+      const { data, count, error } = await dbQuery;
+
+      if (error) {
+        console.error("Error fetching inventory:", error);
+      } else if (data) {
+        if (isReset) {
+          setItems(data);
+        } else {
+          setItems((prev) => [...prev, ...data]);
+        }
+        setTotalCount(count);
+        setHasMore(data.length === limit);
+      }
+    } catch (err) {
+      console.error("Exception in fetchInventory:", err);
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
+    }
   };
 
   const handleDeleteProduct = async (id: string, name: string) => {
@@ -275,7 +329,9 @@ export default function InventoryModule() {
       alert("Error al eliminar producto: " + error.message);
     } else {
       alert("🗑️ Producto enviado a la papelera.");
-      fetchInventory();
+      fetchInventory(0, debouncedSearchQuery, true, true);
+      loadAllItems();
+      setPage(0);
     }
   };
 
@@ -428,7 +484,9 @@ export default function InventoryModule() {
       setMergedItemId(principalItem.id);
 
       alert("✅ Productos combinados con éxito.");
-      await fetchInventory(true);
+      await fetchInventory(0, debouncedSearchQuery, true, true);
+      await loadAllItems();
+      setPage(0);
     } catch (err: any) {
       console.error("Error al combinar duplicados:", err);
       alert(`❌ Error al combinar productos: ${err.message || err}`);
@@ -440,51 +498,36 @@ export default function InventoryModule() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
-    fetchInventory(false);
+    fetchInventory(0, "", true, true);
+    loadAllItems();
   }, []);
 
-  const loadAllItemsForImport = async () => {
-    setIsLoading(true);
-    let allData: any[] = [];
-    let from = 0;
-    const limit = 1000;
-    let hasMore = true;
-    let lastError = null;
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-    while (hasMore) {
-      const { data, error } = await supabase
-        .from("inventory")
-        .select("*")
-        .order("name", { ascending: true })
-        .range(from, from + limit - 1);
-
-      if (error) {
-        lastError = error;
-        hasMore = false;
-      } else if (data && data.length > 0) {
-        allData = [...allData, ...data];
-        if (data.length < limit) {
-          hasMore = false;
-        } else {
-          from += limit;
-        }
-      } else {
-        hasMore = false;
-      }
+  useEffect(() => {
+    if (mounted) {
+      setPage(0);
+      fetchInventory(0, debouncedSearchQuery, true, true);
     }
+  }, [debouncedSearchQuery]);
 
-    if (allData.length > 0) {
-      setAllItems(allData);
-    }
-    if (lastError) console.error("Error al cargar inventario para importación:", lastError);
-    setIsLoading(false);
+  const loadNextPage = () => {
+    if (isLoadingMore || !hasMore) return;
+    const nextPage = page + 1;
+    setPage(nextPage);
+    fetchInventory(nextPage, debouncedSearchQuery, false, false);
   };
 
   useEffect(() => {
-    if (showImporter) {
-      loadAllItemsForImport();
+    if (showImporter || showDuplicates || showCritical) {
+      loadAllItems();
     }
-  }, [showImporter]);
+  }, [showImporter, showDuplicates, showCritical]);
 
   useEffect(() => {
     if (tab && tab !== "criticos") {
@@ -540,8 +583,12 @@ export default function InventoryModule() {
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
     const canScroll = target.scrollHeight > target.clientHeight;
-    const isAtBottom = target.scrollTop >= target.scrollHeight - target.clientHeight - 20;
+    const isAtBottom = target.scrollTop >= target.scrollHeight - target.clientHeight - 60;
     setShowScrollIndicator(canScroll && !isAtBottom);
+
+    if (isAtBottom && hasMore && !isLoadingMore && !showCritical && !showDuplicates && !showAudit && !showImporter) {
+      loadNextPage();
+    }
   };
 
   // Temporizador para quitar el destello verde de producto recién combinado
@@ -553,33 +600,15 @@ export default function InventoryModule() {
   }, [mergedItemId]);
 
   const avgMargin =
-    items.length > 0
-      ? items.reduce((acc, i) => {
+    allItems.length > 0
+      ? allItems.reduce((acc, i) => {
           if (!i.cost || i.cost <= 0) return acc;
           return acc + (i.price - i.cost) / i.cost;
-        }, 0) / (items.filter((i) => i.cost > 0).length || 1)
+        }, 0) / (allItems.filter((i) => i.cost > 0).length || 1)
       : 0.5;
-  const criticalItems = items.filter((i) => i.stock <= i.minStock);
+  const criticalItems = allItems.filter((i) => i.stock <= i.minStock);
 
-  const filteredItems = items.filter((item) => {
-    if (!searchQuery.trim()) return true;
-    const queryTokens = normalizeString(searchQuery).split(/\s+/).filter(Boolean);
-    if (queryTokens.length === 0) return true;
-
-    const nameNorm = normalizeString(item.name);
-    const codeNorm = normalizeString(item.code || "");
-    const locNorm = normalizeString(item.location || "");
-    const supNorm = normalizeString(item.supplier || "");
-
-    return queryTokens.every((token) => {
-      return (
-        nameNorm.includes(token) ||
-        codeNorm.includes(token) ||
-        locNorm.includes(token) ||
-        supNorm.includes(token)
-      );
-    });
-  });
+  const filteredItems = items;
 
   const exportPurchaseOrders = () => {
     if (criticalItems.length === 0) return alert("No hay productos críticos.");
@@ -1013,11 +1042,13 @@ export default function InventoryModule() {
               </button>
             )}
           </div>
-          {searchQuery && (
-            <div style={{ fontSize: "0.85rem", opacity: 0.8, minWidth: "140px", textAlign: "right" }}>
-              Encontrados: <strong style={{ color: "var(--color-secondary)" }}>{filteredItems.length}</strong>
-            </div>
-          )}
+          <div style={{ fontSize: "0.85rem", opacity: 0.8, minWidth: "180px", textAlign: "right" }}>
+            {totalCount !== null ? (
+              <>Total productos: <strong style={{ color: "var(--color-secondary)" }}>{totalCount}</strong></>
+            ) : (
+              <>Cargando...</>
+            )}
+          </div>
         </div>
       )}
 
@@ -1434,7 +1465,7 @@ export default function InventoryModule() {
                   </tr>
                 );
               })}
-              {filteredItems.length === 0 && (
+              {filteredItems.length === 0 && !isLoading && (
                 <tr>
                   <td
                     colSpan={8}
@@ -1445,6 +1476,28 @@ export default function InventoryModule() {
                     }}
                   >
                     🔍 No se encontraron productos que coincidan con la búsqueda.
+                  </td>
+                </tr>
+              )}
+              {hasMore && (
+                <tr style={{ background: "transparent" }}>
+                  <td colSpan={8} style={{ padding: "15px", textAlign: "center" }}>
+                    <button
+                      className="btn-primary"
+                      onClick={() => loadNextPage()}
+                      disabled={isLoadingMore}
+                      style={{
+                        padding: "6px 15px",
+                        fontSize: "0.85rem",
+                        background: "rgba(255,255,255,0.05)",
+                        border: "1px solid var(--glass-border)",
+                        color: "white",
+                        borderRadius: "6px",
+                        cursor: "pointer"
+                      }}
+                    >
+                      {isLoadingMore ? "⏳ Cargando..." : "Mostrar más productos ⬇️"}
+                    </button>
                   </td>
                 </tr>
               )}
@@ -1598,7 +1651,9 @@ export default function InventoryModule() {
                   return newStack;
                 });
               }
-              await fetchInventory(true);
+              await fetchInventory(0, debouncedSearchQuery, true, true);
+              await loadAllItems();
+              setPage(0);
               
               let rescueMsg = "";
               if (rescuedCount > 0) rescueMsg = `\n🎉 ¡Excelente! Se han rescatado ${rescuedCount} productos de su estado CRÍTICO.`;
@@ -1691,7 +1746,9 @@ export default function InventoryModule() {
         <InboundModal 
           onClose={clearTabParam} 
           onSuccess={async () => {
-            await fetchInventory(true);
+            await fetchInventory(0, debouncedSearchQuery, true, true);
+            await loadAllItems();
+            setPage(0);
             clearTabParam();
           }} 
         />,

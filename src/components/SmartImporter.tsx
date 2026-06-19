@@ -695,6 +695,25 @@ export default function SmartImporter({
         alert("⚠️ Hay productos con nombres vacíos o no legibles. Edítalos en la tabla antes de continuar.");
         return;
       }
+
+      // Alerta de duplicidad en base a Levenshtein si se importa como nuevo
+      if (importOption === "nuevo") {
+        const fuzzyMatches: string[] = [];
+        previewData.forEach(p => {
+          const { item: match } = findExistingItem(p.code, p.name);
+          if (match) {
+            fuzzyMatches.push(`- "${p.name}" es muy similar a "${match.name}" (código: ${match.code || 'Pendiente'})`);
+          }
+        });
+
+        if (fuzzyMatches.length > 0) {
+          const proceed = window.confirm(
+            `⚠️ ALERTA DE DUPLICADOS EN DETECTADOS:\n\nSe encontraron productos en tu archivo con nombres muy similares a los ya existentes en inventario:\n\n${fuzzyMatches.slice(0, 8).join("\n")}${fuzzyMatches.length > 8 ? `\n... y ${fuzzyMatches.length - 8} más.` : ""}\n\n¿Estás seguro de que deseas agregarlos como productos nuevos independientes (pudiendo crear duplicados visuales)?`
+          );
+          if (!proceed) return;
+        }
+      }
+
       setShowSupplierModal(true);
     }
   };
