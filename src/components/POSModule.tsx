@@ -325,13 +325,39 @@ export default function POSModule() {
     if (saved) setSecurityKeyword(saved.toLowerCase());
 
     const fetchInventoryAndCustomers = async () => {
-      const { data: invData, error: invError } = await supabase.from("inventory").select("*");
-      if (invError) {
-        console.error("Error al cargar inventario:", invError);
-        LoggerService.logError("POSModule_fetchInventory", invError);
-        toast.error(`Error al cargar catálogo de inventario: ${invError.message}`);
-      } else if (invData) {
-        setGlobalCatalog(invData);
+      let allData: any[] = [];
+      let from = 0;
+      const limit = 1000;
+      let hasMore = true;
+      let lastError = null;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("inventory")
+          .select("*")
+          .range(from, from + limit - 1);
+
+        if (error) {
+          lastError = error;
+          hasMore = false;
+        } else if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          if (data.length < limit) {
+            hasMore = false;
+          } else {
+            from += limit;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+
+      if (lastError) {
+        console.error("Error al cargar inventario:", lastError);
+        LoggerService.logError("POSModule_fetchInventory", lastError);
+        toast.error(`Error al cargar catálogo de inventario: ${lastError.message}`);
+      } else if (allData.length > 0) {
+        setGlobalCatalog(allData);
       }
 
       let { data: custData, error: custError } = await supabase.from("customers").select("*").not("deleted", "eq", true);

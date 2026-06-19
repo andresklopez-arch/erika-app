@@ -227,16 +227,39 @@ export default function InventoryModule() {
 
   const fetchInventory = async (showLoading = false) => {
     if (showLoading) setIsLoading(true);
-    let { data, error } = await supabase
-      .from("inventory")
-      .select("*")
-      .not("deleted", "eq", true)
-      .order("name", { ascending: true });
-    
-    if (data) {
-      setItems(data);
+    let allData: any[] = [];
+    let from = 0;
+    const limit = 1000;
+    let hasMore = true;
+    let lastError = null;
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from("inventory")
+        .select("*")
+        .not("deleted", "eq", true)
+        .order("name", { ascending: true })
+        .range(from, from + limit - 1);
+
+      if (error) {
+        lastError = error;
+        hasMore = false;
+      } else if (data && data.length > 0) {
+        allData = [...allData, ...data];
+        if (data.length < limit) {
+          hasMore = false;
+        } else {
+          from += limit;
+        }
+      } else {
+        hasMore = false;
+      }
     }
-    if (error) console.error(error);
+
+    if (allData.length > 0) {
+      setItems(allData);
+    }
+    if (lastError) console.error("Error al cargar inventario:", lastError);
     setIsLoading(false);
   };
 
@@ -422,14 +445,38 @@ export default function InventoryModule() {
 
   const loadAllItemsForImport = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from("inventory")
-      .select("*")
-      .order("name", { ascending: true });
-    if (data) {
-      setAllItems(data);
+    let allData: any[] = [];
+    let from = 0;
+    const limit = 1000;
+    let hasMore = true;
+    let lastError = null;
+
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from("inventory")
+        .select("*")
+        .order("name", { ascending: true })
+        .range(from, from + limit - 1);
+
+      if (error) {
+        lastError = error;
+        hasMore = false;
+      } else if (data && data.length > 0) {
+        allData = [...allData, ...data];
+        if (data.length < limit) {
+          hasMore = false;
+        } else {
+          from += limit;
+        }
+      } else {
+        hasMore = false;
+      }
     }
-    if (error) console.error(error);
+
+    if (allData.length > 0) {
+      setAllItems(allData);
+    }
+    if (lastError) console.error("Error al cargar inventario para importación:", lastError);
     setIsLoading(false);
   };
 
