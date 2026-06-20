@@ -358,7 +358,7 @@ export default function InventoryModule() {
     const codeGroups: { [key: string]: InventoryItem[] } = {};
     const nameGroups: { [key: string]: InventoryItem[] } = {};
 
-    items.forEach((item) => {
+    allItems.forEach((item) => {
       if (item.code && item.code.trim() !== "") {
         const cleanCode = item.code.trim().toUpperCase();
         if (!codeGroups[cleanCode]) codeGroups[cleanCode] = [];
@@ -1549,7 +1549,7 @@ export default function InventoryModule() {
                     minStock: p.minStock || 5,
                     location: p.location || "Pendiente",
                     supplier: p.supplier || "Pendiente",
-                    autoPriced: true,
+                    autoPriced: p.autoPriced !== undefined ? p.autoPriced : true,
                   });
                   newCount++;
                 } else {
@@ -1597,6 +1597,7 @@ export default function InventoryModule() {
                       priceChanged: inflationFlag,
                       deleted: false,
                       deleted_at: null,
+                      autoPriced: p.autoPriced !== undefined ? p.autoPriced : existing.autoPriced,
                     });
                     updatedCount++;
                   } else {
@@ -1623,7 +1624,7 @@ export default function InventoryModule() {
                       minStock: p.minStock || 5,
                       location: p.location || "Pendiente",
                       supplier: p.supplier || "Pendiente",
-                      autoPriced: true,
+                      autoPriced: p.autoPriced !== undefined ? p.autoPriced : true,
                     });
                     newCount++;
                   }

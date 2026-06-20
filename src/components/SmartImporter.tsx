@@ -149,18 +149,28 @@ export default function SmartImporter({
       isNew = false;
       prevPrice = existing.price;
       prevCost = existing.cost;
-      if (cost > existing.cost) {
-        isInflation = true;
-        // Ajuste por inflación: mantener el margen histórico que tenía el producto o el target
-        const prevMargin = existing.cost > 0 ? (existing.price - existing.cost) / existing.cost : margin;
-        price = cost * (1 + prevMargin);
-        alertText = `⚠️ INFLACIÓN (+${(((cost - existing.cost)/existing.cost)*100).toFixed(0)}% costo)`;
-      } else if (cost === existing.cost) {
-        price = existing.price;
-        alertText = "Mismo Costo (Precio Fijo)";
+      
+      if (existing.autoPriced) {
+        // Si el producto está configurado como autoPriced en la base de datos, siempre recalculamos con el margen meta actual
+        price = cost * (1 + margin);
+        alertText = "Precio Sugerido (Meta Auto)";
       } else {
-        price = existing.price; // Mantener precio anterior para maximizar ganancias
-        alertText = "Costo Menor (Precio Fijo)";
+        // Si es precio fijo/manual, preservamos el precio histórico a menos que haya inflación
+        if (cost > existing.cost) {
+          isInflation = true;
+          // Ajuste por inflación: mantener el margen histórico limitado a un valor razonable (máx 300%) o el target
+          const prevMargin = (existing.cost > 0 && (existing.price - existing.cost) / existing.cost < 3.0) 
+            ? (existing.price - existing.cost) / existing.cost 
+            : margin;
+          price = cost * (1 + prevMargin);
+          alertText = `⚠️ INFLACIÓN (+${(((cost - existing.cost)/existing.cost)*100).toFixed(0)}% costo)`;
+        } else if (cost === existing.cost) {
+          price = existing.price;
+          alertText = "Mismo Costo (Precio Fijo)";
+        } else {
+          price = existing.price; // Mantener precio anterior para maximizar ganancias
+          alertText = "Costo Menor (Precio Fijo)";
+        }
       }
     }
 
@@ -187,7 +197,12 @@ export default function SmartImporter({
       if (costIsEmpty) {
         rawCost = 0;
       } else if (isNaN(rawCost) && typeof rawCostVal === "string") {
-        rawCost = Number(String(rawCostVal).replace(/[^0-9.-]+/g, ""));
+        const cleanedStr = String(rawCostVal).replace(/[^0-9.-]+/g, "");
+        if (cleanedStr === "") {
+          rawCost = NaN;
+        } else {
+          rawCost = Number(cleanedStr);
+        }
       }
       if (isNaN(rawCost)) {
         rawCost = 0;
@@ -225,12 +240,18 @@ export default function SmartImporter({
         finalPrice = smartPrices.price;
         autoPriced = true;
       } else {
-        finalPrice = Number(String(finalPrice).replace(/[^0-9.-]+/g, ""));
-        if (isNaN(finalPrice)) {
+        const cleanedStr = String(finalPrice).replace(/[^0-9.-]+/g, "");
+        if (cleanedStr === "") {
           finalPrice = smartPrices.price;
           autoPriced = true;
         } else {
-          autoPriced = false;
+          finalPrice = Number(cleanedStr);
+          if (isNaN(finalPrice)) {
+            finalPrice = smartPrices.price;
+            autoPriced = true;
+          } else {
+            autoPriced = false;
+          }
         }
       }
 
