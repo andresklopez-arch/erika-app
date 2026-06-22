@@ -10,13 +10,13 @@ import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
-  title: "ERIKA - Inteligencia en Ferretería",
+  title: "YoY IA ERIKA - Inteligencia en Ferretería",
   description: "Sistema avanzado de administración y punto de venta con IA.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "ERIKA",
+    title: "YoY IA ERIKA",
   },
 };
 
