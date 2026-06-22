@@ -24,16 +24,17 @@ export default function SmartImporter({
   const [previewData, setPreviewData] = useState<any[] | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
-  const [columnMapping, setColumnMapping] = useState({ name: -1, cost: -1, stock: -1, code: -1, price: -1 });
-  const [detectionSource, setDetectionSource] = useState({ name: "", cost: "", stock: "", code: "", price: "" });
+  const [columnMapping, setColumnMapping] = useState({ supplier: 0, code: 1, name: 2, stock: 3, cost: 4, price: 5, location: 6 });
+  const [detectionSource, setDetectionSource] = useState({ supplier: "", name: "", cost: "", stock: "", code: "", price: "" });
+  const [aiWarnings, setAiWarnings] = useState<string[]>([]);
   const [rawHeaders, setRawHeaders] = useState<string[]>([]);
   const [processedRawData, setProcessedRawData] = useState<any[][]>([]);
-  const [showSupplierModal, setShowSupplierModal] = useState(false);
-  const [supplierSearch, setSupplierSearch] = useState("");
+  const [showSupplierModal, setShowSupplierModal] = useState(false); // conservado por compatibilidad
+  const [supplierSearch, setSupplierSearch] = useState(""); // conservado por compatibilidad
   const [dbSuppliers, setDbSuppliers] = useState<string[]>([]);
   const [activeSuggestRow, setActiveSuggestRow] = useState<number | null>(null);
   const [showNewSupplierModal, setShowNewSupplierModal] = useState(false);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false); // conservado por compatibilidad
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchSuppliers = async () => {
@@ -43,8 +44,6 @@ export default function SmartImporter({
 
   useEffect(() => {
     fetchSuppliers();
-    const lastSup = localStorage.getItem("lastErikaSupplier");
-    if (lastSup) setSupplierSearch(lastSup);
   }, []);
 
   // NLP Limpiador: Quitar dobles espacios y capitalizar "tHINNEr" -> "Thinner"
@@ -177,7 +176,7 @@ export default function SmartImporter({
     return { price, alertText, isInflation, isNew, prevPrice, prevCost, isFuzzy, originalExistingName: existing ? existing.name : undefined };
   };
 
-  const generatePreview = (mapping: { name: number, cost: number, stock: number, code: number, price: number, supplier?: number, location?: number }, data: any[][]) => {
+  const generatePreviewAndReturnWarnings = (mapping: { name: number, cost: number, stock: number, code: number, price: number, supplier?: number, location?: number }, data: any[][]) => {
     const importedProducts: any[] = [];
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
@@ -294,6 +293,20 @@ export default function SmartImporter({
         hasLoss
       });
     }
+
+    // 🤖 Generar advertencias de IA sobre datos sospechosos
+    const warnings: string[] = [];
+    const emptySup = importedProducts.filter(p => !p.supplier || p.supplier === "Pendiente" || p.supplier.trim() === "");
+    const unknownSup = importedProducts.filter(p => p.supplier && p.supplier !== "Pendiente" && p.supplier.trim() !== "");
+    const zeroCost = importedProducts.filter(p => p.cost === 0 && !p.costIsEmpty);
+    const highPrice = importedProducts.filter(p => p.cost > 0 && p.price > p.cost * 5);
+    const hasLossItems = importedProducts.filter(p => p.hasLoss);
+    if (emptySup.length > 0) warnings.push(`⚠️ ${emptySup.length} artículo(s) sin proveedor asignado en la columna PROVEEDOR. Revisa el archivo antes de importar.`);
+    if (zeroCost.length > 0) warnings.push(`💰 ${zeroCost.length} artículo(s) con costo = $0 aunque la celda no está vacía. Verifica los precios de compra.`);
+    if (highPrice.length > 0) warnings.push(`📈 ${highPrice.length} artículo(s) con precio de venta mayor a 5x el costo. Confirma que el precio es correcto.`);
+    if (hasLossItems.length > 0) warnings.push(`🔴 ${hasLossItems.length} artículo(s) se venderían a pérdida (precio ≤ costo). Revisa antes de confirmar.`);
+    setAiWarnings(warnings);
+
     setPreviewData(importedProducts);
   };
 
@@ -307,7 +320,7 @@ export default function SmartImporter({
     localStorage.setItem("erika_excel_mapping", JSON.stringify(newMapping));
     localStorage.setItem("erika_excel_detection", JSON.stringify(newDetection));
 
-    generatePreview(newMapping, processedRawData);
+    generatePreviewAndReturnWarnings(newMapping, processedRawData);
   };
 
   const handleEditRow = (index: number, updates: Partial<any>) => {
@@ -466,22 +479,25 @@ export default function SmartImporter({
            headersForSelect.push(rawData[0][c] ? String(rawData[0][c]) : `Columna ${c + 1}`);
         }
 
-        // Heurística inteligente de detección de columnas (con fallback a plantilla estricta)
-        let finalCodeIdx = 0;
-        let finalNameIdx = 1;
-        let finalStockIdx = 2;
-        let finalCostIdx = 3;
-        let finalPriceIdx = 4;
-        let finalSupplierIdx = 5;
+        // Heurística inteligente de detección de columnas (con fallback a plantilla estricta nueva: PROVEEDOR primero)
+        let finalSupplierIdx = 0;
+        let finalCodeIdx = 1;
+        let finalNameIdx = 2;
+        let finalStockIdx = 3;
+        let finalCostIdx = 4;
+        let finalPriceIdx = 5;
         let finalLocationIdx = 6;
         
-        let detectedCode = false, detectedName = false, detectedStock = false, detectedCost = false, detectedPrice = false;
+        let detectedCode = false, detectedName = false, detectedStock = false, detectedCost = false, detectedPrice = false, detectedSupplier = false;
 
         // Intentar detectar por cabeceras en la primera fila
         if (rawData.length > 0) {
           const firstRow = rawData[0].map((h: any) => String(h).toLowerCase().trim());
           firstRow.forEach((val, idx) => {
-            if (val.includes("cod") || val.includes("sku") || val.includes("barr") || val === "código") {
+            if (val.includes("prove") || val.includes("brand") || val.includes("proveedor") || val.includes("supplier")) {
+              finalSupplierIdx = idx;
+              detectedSupplier = true;
+            } else if (val.includes("cod") || val.includes("sku") || val.includes("barr") || val === "código") {
               finalCodeIdx = idx;
               detectedCode = true;
             } else if (val.includes("nom") || val.includes("prod") || val.includes("desc") || val.includes("art")) {
@@ -490,14 +506,12 @@ export default function SmartImporter({
             } else if (val.includes("cant") || val.includes("stock") || val.includes("exis") || val.includes("cantidad")) {
               finalStockIdx = idx;
               detectedStock = true;
-            } else if (val.includes("cost") || val.includes("comp") || val.includes("prov") || val.includes("costo")) {
+            } else if (val.includes("cost") || val.includes("comp") || val.includes("costo")) {
               finalCostIdx = idx;
               detectedCost = true;
             } else if (val.includes("prec") || val.includes("vent") || val.includes("precio")) {
               finalPriceIdx = idx;
               detectedPrice = true;
-            } else if (val.includes("prove") || val.includes("brand") || val.includes("proveedor")) {
-              finalSupplierIdx = idx;
             } else if (val.includes("ubica") || val.includes("pasi") || val.includes("loc") || val.includes("bod") || val.includes("bodega")) {
               finalLocationIdx = idx;
             }
@@ -505,16 +519,16 @@ export default function SmartImporter({
         }
         
         const source = {
+          supplier: detectedSupplier ? "🤖 Auto-detectado" : "📋 Plantilla Oficial",
           code: detectedCode ? "🤖 Auto-detectado" : "📋 Plantilla Oficial",
           name: detectedName ? "🤖 Auto-detectado" : "📋 Plantilla Oficial",
           stock: detectedStock ? "🤖 Auto-detectado" : "📋 Plantilla Oficial",
           cost: detectedCost ? "🤖 Auto-detectado" : "📋 Plantilla Oficial",
           price: detectedPrice ? "🤖 Auto-detectado" : "📋 Plantilla Oficial",
-          supplier: "📋 Plantilla Oficial",
           location: "📋 Plantilla Oficial",
         };
 
-        let mapping = { name: finalNameIdx, cost: finalCostIdx, stock: finalStockIdx, code: finalCodeIdx, price: finalPriceIdx, supplier: finalSupplierIdx, location: finalLocationIdx };
+        let mapping = { supplier: finalSupplierIdx, name: finalNameIdx, cost: finalCostIdx, stock: finalStockIdx, code: finalCodeIdx, price: finalPriceIdx, location: finalLocationIdx };
         let finalSource = source;
 
         // 🧠 Cargar plantilla de mapeo guardada si es compatible con el archivo actual
@@ -551,7 +565,7 @@ export default function SmartImporter({
         setProcessedRawData(rawData);
 
         setTimeout(() => {
-          generatePreview(mapping, rawData);
+          const preview = generatePreviewAndReturnWarnings(mapping, rawData);
           setIsProcessing(false);
         }, 800);
       } catch (err) {
@@ -717,6 +731,15 @@ export default function SmartImporter({
         return;
       }
 
+      // Advertir si hay artículos sin proveedor
+      const emptySup = previewData.filter(p => !p.supplier || p.supplier === "Pendiente" || p.supplier.trim() === "");
+      if (emptySup.length > 0) {
+        const proceed = window.confirm(
+          `⚠️ ERIKA IA - AVISO DE PROVEEDOR:\n\n${emptySup.length} artículo(s) no tienen proveedor asignado en la columna PROVEEDOR del archivo.\n\nEjemplos:\n${emptySup.slice(0, 5).map(p => `- "${p.name}"`).join('\n')}\n\n¿Deseas continuar de todas formas? (se registrarán como "Pendiente")`
+        );
+        if (!proceed) return;
+      }
+
       // Alerta de duplicidad en base a Levenshtein si se importa como nuevo
       if (importOption === "nuevo") {
         const fuzzyMatches: string[] = [];
@@ -735,21 +758,30 @@ export default function SmartImporter({
         }
       }
 
-      setShowSupplierModal(true);
+      // Ya no se pregunta por proveedor global — viene del Excel por fila
+      executeImport();
     }
   };
 
-  const executeImport = async (globalSupplier: string) => {
-    if (!previewData || !globalSupplier) return;
+  const executeImport = async () => {
+    if (!previewData) return;
 
-    const cleanSupplier = cleanAndCapitalize(globalSupplier);
-    const exists = dbSuppliers.some(s => s.toLowerCase() === cleanSupplier.toLowerCase());
-    if (!exists && cleanSupplier !== "") {
-      try {
-        await supabase.from("suppliers").insert({ name: cleanSupplier });
-        setDbSuppliers(prev => [...prev, cleanSupplier]);
-      } catch (err) {
-        console.error("Error al registrar proveedor automático:", err);
+    // Auto-registrar proveedores nuevos encontrados en el archivo
+    const uniqueFileSuppliers = Array.from(new Set(
+      previewData
+        .map(p => p.supplier)
+        .filter((s: string) => s && s !== "Pendiente" && s.trim() !== "")
+        .map((s: string) => cleanAndCapitalize(s))
+    ));
+    for (const sup of uniqueFileSuppliers) {
+      const exists = dbSuppliers.some(s => s.toLowerCase() === sup.toLowerCase());
+      if (!exists) {
+        try {
+          await supabase.from("suppliers").insert({ name: sup });
+          setDbSuppliers(prev => [...prev, sup]);
+        } catch (err) {
+          console.error("Error al registrar proveedor automático:", err);
+        }
       }
     }
 
@@ -766,9 +798,9 @@ export default function SmartImporter({
           areaChar = String.fromCharCode(areaChar.charCodeAt(0) + 1);
         }
       }
-      const finalSupplier = (p.supplier && p.supplier !== "Pendiente" && p.supplier !== "") 
+      const finalSupplier = (p.supplier && p.supplier !== "Pendiente" && p.supplier.trim() !== "") 
         ? cleanAndCapitalize(p.supplier) 
-        : cleanSupplier;
+        : "Pendiente";
       return { ...p, supplier: finalSupplier, location: assignedLocation };
     });
 
@@ -1337,6 +1369,30 @@ export default function SmartImporter({
               </div>
             )}
 
+            {/* Panel de advertencias de IA */}
+            {aiWarnings.length > 0 && (
+              <div style={{
+                marginTop: "15px",
+                padding: "12px 16px",
+                borderRadius: "10px",
+                background: "rgba(245, 158, 11, 0.1)",
+                border: "1px solid rgba(245, 158, 11, 0.4)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "6px"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                  <span style={{ fontSize: "1.1rem" }}>🤖</span>
+                  <strong style={{ color: "#f59e0b", fontSize: "0.9rem" }}>ERIKA IA — Avisos de Revisión</strong>
+                </div>
+                {aiWarnings.map((w, idx) => (
+                  <div key={idx} style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.85)", paddingLeft: "8px", borderLeft: "2px solid #f59e0b" }}>
+                    {w}
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div
               style={{ display: "flex", gap: "15px", justifyContent: "center", marginTop: "20px" }}
             >
@@ -1385,35 +1441,36 @@ export default function SmartImporter({
               }}
             >
               <h3 style={{ color: "var(--color-primary)", marginBottom: "10px" }}>📝 Instrucciones para una carga 100% exacta:</h3>
-              <p style={{ marginBottom: "10px" }}>Para evitar cruces de información y errores matemáticos, ahora el sistema exige que tu archivo (CSV, XLS, XLSX) respete estrictamente este orden de columnas (puedes copiar y pegar los datos de tu proveedor en nuestra plantilla):</p>
+              <p style={{ marginBottom: "10px" }}>Para evitar errores, el sistema ahora incluye el <strong>PROVEEDOR como primera columna</strong>. Llena cada fila con el proveedor correspondiente — puedes mezclar proveedores en un mismo documento:</p>
               <ol style={{ marginLeft: "20px", marginBottom: "15px", opacity: 0.9, display: "flex", flexDirection: "column", gap: "5px" }}>
-                <li><strong>Columna A (1):</strong> Código de Barras / SKU</li>
-                <li><strong>Columna B (2):</strong> Nombre del Producto</li>
-                <li><strong>Columna C (3):</strong> Stock (Cantidad)</li>
-                <li><strong>Columna D (4):</strong> Costo Proveedor</li>
-                <li><strong>Columna E (5):</strong> Precio Venta <em>(Opcional, ERIKA lo calcula si está vacío)</em></li>
-                <li><strong>Columna F (6):</strong> Proveedor <em>(Opcional, para asignar diferentes proveedores)</em></li>
+                <li style={{ color: "var(--color-primary)", fontWeight: "bold" }}><strong>Columna A (1):</strong> 🏢 Proveedor <em style={{ color: "rgba(255,255,255,0.6)", fontWeight: "normal" }}>(¡NUEVO! Se carga automático por artículo)</em></li>
+                <li><strong>Columna B (2):</strong> Código de Barras / SKU</li>
+                <li><strong>Columna C (3):</strong> Nombre del Producto</li>
+                <li><strong>Columna D (4):</strong> Stock (Cantidad)</li>
+                <li><strong>Columna E (5):</strong> Costo Proveedor</li>
+                <li><strong>Columna F (6):</strong> Precio Venta <em>(Opcional, ERIKA lo calcula si está vacío)</em></li>
                 <li><strong>Columna G (7):</strong> Bodega/Ubicación <em>(Opcional, ERIKA asume la ubicación si está vacía)</em></li>
               </ol>
               <button 
                 onClick={() => {
+                  // NUEVA PLANTILLA: PROVEEDOR es la primera columna
                   const wsData: any[][] = [
-                    ["CODIGO", "PRODUCTO", "STOCK", "COSTO", "PRECIO", "PROVEEDOR", "BODEGA"],
+                    ["PROVEEDOR", "CODIGO", "PRODUCTO", "STOCK", "COSTO", "PRECIO", "BODEGA"],
                     ["", "", "", "", "", "", ""]
                   ];
                   const ws = XLSX.utils.aoa_to_sheet(wsData);
-                  ws["!cols"] = [{wch: 15}, {wch: 30}, {wch: 10}, {wch: 12}, {wch: 12}, {wch: 20}, {wch: 15}];
+                  ws["!cols"] = [{wch: 20}, {wch: 15}, {wch: 30}, {wch: 10}, {wch: 12}, {wch: 12}, {wch: 15}];
                   
-                  // Agregamos Validación de Datos (Lista Desplegable) para Proveedores
+                  // Validación de Datos (Lista Desplegable) para PROVEEDOR en columna A
                   const validSuppliers = uniqueSuppliers.length > 0 ? uniqueSuppliers.slice(0, 15).join(",") : "Pendiente";
                   ws["!dataValidation"] = [
                     {
-                      sqref: "F2:F1000",
+                      sqref: "A2:A1000",
                       type: "list",
                       allowBlank: true,
-                      showErrorMessage: true,
-                      errorTitle: "Proveedor Inválido",
-                      error: "Debes elegir un proveedor de la lista, o dejarlo en blanco.",
+                      showErrorMessage: false,
+                      errorTitle: "Proveedor",
+                      error: "Selecciona o escribe el nombre del proveedor.",
                       formula1: `"${validSuppliers.substring(0, 255)}"`
                     }
                   ];
@@ -1510,56 +1567,7 @@ export default function SmartImporter({
           </div>
         )}
 
-        {showSupplierModal && (
-          <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, backdropFilter: "blur(4px)" }}>
-            <div className="glass-panel animate-fade-in" style={{ padding: "30px", width: "400px", textAlign: "left", display: "flex", flexDirection: "column", gap: "15px" }}>
-              <h3 style={{ color: "var(--color-primary)", margin: 0 }}>🏢 Asignar Proveedor General</h3>
-              <p style={{ fontSize: "0.85rem", opacity: 0.8, margin: 0 }}>Ingresa el nombre del proveedor para estos productos. Utiliza las sugerencias para evitar duplicados.</p>
-              
-              <div style={{ position: "relative" }}>
-                <input 
-                  type="text"
-                  placeholder="Ej. TRUPER"
-                  value={supplierSearch}
-                  onChange={(e) => { setSupplierSearch(e.target.value); setIsDropdownOpen(true); }}
-                  onFocus={() => setIsDropdownOpen(true)}
-                  onBlur={() => setTimeout(() => setIsDropdownOpen(false), 200)}
-                  style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid var(--color-primary)", background: "rgba(0,0,0,0.8)", color: "white" }}
-                />
-                {isDropdownOpen && dbSuppliers.filter(s => s.toLowerCase().includes(supplierSearch.toLowerCase())).length > 0 && (
-                  <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "var(--glass-bg)", border: "1px solid var(--glass-border)", borderRadius: "8px", marginTop: "5px", maxHeight: "150px", overflowY: "auto", zIndex: 1200 }}>
-                    {dbSuppliers.filter(s => s.toLowerCase().includes(supplierSearch.toLowerCase())).map((sup, idx) => (
-                      <div key={idx} onClick={() => { setSupplierSearch(sup); setIsDropdownOpen(false); }} style={{ padding: "8px 10px", cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                        {sup}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {dbSuppliers.length === 0 && (
-                  <p style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "5px" }}>⚠️ No hay proveedores registrados. Registra uno nuevo.</p>
-                )}
-              </div>
-
-              <div style={{ display: "flex", gap: "10px", justifyContent: "space-between", marginTop: "10px" }}>
-                <button onClick={() => setShowNewSupplierModal(true)} className="btn-primary" style={{ background: "rgba(59, 130, 246, 0.2)", border: "1px solid #3b82f6", color: "#3b82f6" }}>➕ Nuevo</button>
-                <div style={{ display: "flex", gap: "10px" }}>
-                  <button onClick={() => setShowSupplierModal(false)} className="btn-primary" style={{ background: "transparent", border: "1px solid var(--color-primary)" }}>Cancelar</button>
-                  <button 
-                    onClick={() => {
-                      localStorage.setItem("lastErikaSupplier", supplierSearch);
-                      executeImport(supplierSearch);
-                    }} 
-                    className="btn-primary" 
-                    disabled={supplierSearch.trim() === ""} 
-                    style={{ background: "var(--color-primary)", opacity: supplierSearch.trim() !== "" ? 1 : 0.5 }}
-                  >
-                    Confirmar e Importar
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Modal de proveedor global eliminado — proveedor viene por fila desde el Excel */}
 
         {showNewSupplierModal && (
           <div style={{ zIndex: 1300, position: "relative" }}>
