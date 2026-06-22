@@ -341,6 +341,13 @@ export default function SmartImporter({
       updates.isIllegible = !nameVal || nameVal.trim() === "" || nameVal.trim().toLowerCase() === "producto sin nombre";
     }
 
+    // Recalcular isUnknownSupplier al editar proveedor
+    if (updates.supplier !== undefined) {
+      const sup = updates.supplier.trim();
+      updates.isUnknownSupplier = sup !== "" && sup !== "Pendiente" &&
+        !dbSuppliers.some((s: string) => s.toLowerCase() === sup.toLowerCase());
+    }
+
     const costVal = updates.cost !== undefined ? updates.cost : newData[index].cost;
     const priceVal = updates.price !== undefined ? updates.price : newData[index].price;
     updates.hasLoss = costVal > 0 && priceVal <= costVal;
@@ -352,7 +359,7 @@ export default function SmartImporter({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, rowIndex: number, field: string) => {
     if (e.key === 'Enter' || e.key === 'Tab') {
       e.preventDefault();
-      const fields = ['code', 'name', 'stock', 'cost', 'price'];
+      const fields = ['code', 'name', 'supplier', 'stock', 'cost', 'price', 'location'];
       const fieldIndex = fields.indexOf(field);
       
       let nextRow = rowIndex;
@@ -969,6 +976,12 @@ export default function SmartImporter({
                           {rawHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
                         </select>
                       </th>
+                      <th style={{ padding: "8px", background: "rgba(251,146,60,0.1)", borderLeft: "2px solid rgba(251,146,60,0.4)" }}>
+                        <div style={{ fontSize: "0.7rem", marginBottom: "4px", color: "#fb923c" }}>{detectionSource.supplier || "📋 Plantilla Oficial"}</div>
+                        <select value={columnMapping.supplier} onChange={(e) => handleMappingChange("supplier", parseInt(e.target.value))} style={{ background: "rgba(0,0,0,0.5)", color: "white", border: "1px solid rgba(251,146,60,0.4)", borderRadius: "4px", padding: "2px", width: "100%", fontSize: "0.8rem" }}>
+                          {rawHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
+                        </select>
+                      </th>
                       <th style={{ padding: "8px" }}>
                         <div style={{ fontSize: "0.7rem", marginBottom: "4px" }}>{detectionSource.stock}</div>
                         <select value={columnMapping.stock} onChange={(e) => handleMappingChange("stock", parseInt(e.target.value))} style={{ background: "rgba(0,0,0,0.5)", color: "white", border: "1px solid var(--glass-border)", borderRadius: "4px", padding: "2px", width: "100%", fontSize: "0.8rem" }}>
@@ -988,6 +1001,7 @@ export default function SmartImporter({
                           {rawHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
                         </select>
                       </th>
+                      <th style={{ padding: "8px" }}>Bodega</th>
                       <th style={{ padding: "8px" }}>Detalle</th>
                     </tr>
                   </thead>
@@ -1007,18 +1021,16 @@ export default function SmartImporter({
                             value={p.code || ""} 
                             onChange={(e) => handleEditRow(i, { code: e.target.value })}
                             onKeyDown={(e) => handleKeyDown(e, i, 'code')}
-                            disabled={!p.isNew}
                             style={{ 
                               width: "100%", 
-                              background: p.isDuplicateInFile ? "rgba(234, 179, 8, 0.3)" : (!p.isNew ? "rgba(255,255,255,0.05)" : "transparent"), 
-                              border: p.isDuplicateInFile ? "2px solid #eab308" : (!p.isNew ? "1px dashed rgba(255,255,255,0.2)" : "1px dashed var(--glass-border)"), 
-                              color: p.isDuplicateInFile ? "#fef08a" : (!p.isNew ? "rgba(255,255,255,0.5)" : "white"), 
+                              background: p.isDuplicateInFile ? "rgba(234, 179, 8, 0.3)" : (!p.isNew ? "rgba(59,130,246,0.08)" : "transparent"), 
+                              border: p.isDuplicateInFile ? "2px solid #eab308" : (!p.isNew ? "1px dashed rgba(59,130,246,0.4)" : "1px dashed var(--glass-border)"), 
+                              color: p.isDuplicateInFile ? "#fef08a" : (!p.isNew ? "rgba(147,197,253,0.8)" : "white"), 
                               padding: "2px 4px", 
                               borderRadius: "4px", 
                               fontFamily: "monospace",
-                              cursor: !p.isNew ? "not-allowed" : "text"
                             }}
-                            title={!p.isNew ? "Bloqueado para proteger identidad del producto" : (p.isDuplicateInFile ? "¡Advertencia! Este código está repetido en el archivo" : "")}
+                            title={p.isDuplicateInFile ? "¡Advertencia! Este código está repetido en el archivo" : (!p.isNew ? "Producto existente — editable (⚠️ cambiar código puede romper la coincidencia)" : "")}
                           />
                         </td>
                         <td style={{ padding: "8px" }}>
@@ -1032,18 +1044,16 @@ export default function SmartImporter({
                                 onFocus={() => setActiveSuggestRow(i)}
                                 onBlur={() => setTimeout(() => setActiveSuggestRow(null), 250)}
                                 onKeyDown={(e) => handleKeyDown(e, i, 'name')}
-                                disabled={!p.isNew}
                                 style={{ 
                                   width: "100%", 
-                                  background: p.isIllegible ? "rgba(239, 68, 68, 0.2)" : (!p.isNew ? "rgba(255,255,255,0.05)" : "transparent"), 
-                                  border: p.isIllegible ? "2px solid #ef4444" : (!p.isNew ? "1px dashed rgba(255,255,255,0.2)" : "1px dashed var(--glass-border)"), 
-                                  color: p.isIllegible ? "#ef4444" : (!p.isNew ? "rgba(255,255,255,0.5)" : "white"), 
+                                  background: p.isIllegible ? "rgba(239, 68, 68, 0.2)" : (!p.isNew ? "rgba(59,130,246,0.06)" : "transparent"), 
+                                  border: p.isIllegible ? "2px solid #ef4444" : (!p.isNew ? "1px dashed rgba(59,130,246,0.35)" : "1px dashed var(--glass-border)"), 
+                                  color: p.isIllegible ? "#ef4444" : (!p.isNew ? "rgba(147,197,253,0.9)" : "white"), 
                                   padding: "2px 4px", 
                                   borderRadius: "4px", 
                                   fontWeight: "bold",
-                                  cursor: !p.isNew ? "not-allowed" : "text"
                                 }}
-                                title={p.isIllegible ? "Error: Renglón no legible por la IA o sin nombre. Escribe un nombre válido para corregirlo." : (!p.isNew ? "Bloqueado para proteger identidad del producto" : "")}
+                                title={p.isIllegible ? "Error: Renglón no legible por la IA o sin nombre. Escribe un nombre válido para corregirlo." : (!p.isNew ? "Producto existente — editable con precaución" : "")}
                               />
                               {p.isIllegible && (
                                 <span style={{ fontSize: "0.65rem", background: "rgba(239, 68, 68, 0.2)", color: "#ef4444", border: "1px solid rgba(239, 68, 68, 0.4)", padding: "2px 6px", borderRadius: "4px", whiteSpace: "nowrap" }}>
@@ -1196,6 +1206,69 @@ export default function SmartImporter({
                               <span style={{ fontSize: "0.55rem", color: "#ef4444", fontWeight: "bold" }}>⚠️ Sin Margen / Pérdida</span>
                             )}
                           </div>
+                        </td>
+                        {/* Columna PROVEEDOR editable con autocomplete */}
+                        <td style={{ padding: "8px", borderLeft: "2px solid rgba(251,146,60,0.3)" }}>
+                          <div style={{ position: "relative" }}>
+                            <input
+                              id={`input-${i}-supplier`}
+                              type="text"
+                              value={p.supplier === "Pendiente" ? "" : (p.supplier || "")}
+                              placeholder="Proveedor..."
+                              onChange={(e) => handleEditRow(i, { supplier: e.target.value || "Pendiente" })}
+                              onFocus={() => setActiveSuggestRow(i + 10000)}
+                              onBlur={() => setTimeout(() => setActiveSuggestRow(null), 250)}
+                              onKeyDown={(e) => handleKeyDown(e, i, 'supplier')}
+                              style={{
+                                width: "100%",
+                                minWidth: "90px",
+                                background: (!p.supplier || p.supplier === "Pendiente") ? "rgba(239,68,68,0.12)" : (p.isUnknownSupplier ? "rgba(251,146,60,0.15)" : "rgba(16,185,129,0.1)"),
+                                border: (!p.supplier || p.supplier === "Pendiente") ? "1px solid rgba(239,68,68,0.4)" : (p.isUnknownSupplier ? "1px solid rgba(251,146,60,0.5)" : "1px solid rgba(16,185,129,0.4)"),
+                                color: (!p.supplier || p.supplier === "Pendiente") ? "#f87171" : (p.isUnknownSupplier ? "#fb923c" : "#6ee7b7"),
+                                padding: "3px 6px",
+                                borderRadius: "6px",
+                                fontSize: "0.75rem",
+                                fontWeight: "600",
+                              }}
+                              title={p.isUnknownSupplier ? `"${p.supplier}" es nuevo — se registrará automáticamente` : ""}
+                            />
+                            {/* Autocomplete dropdown del proveedor */}
+                            {activeSuggestRow === i + 10000 && dbSuppliers.filter(s => s.toLowerCase().includes((p.supplier || "").toLowerCase()) && p.supplier !== "Pendiente" && p.supplier !== "").length > 0 && (
+                              <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#1a1a1a", border: "1px solid #fb923c", borderRadius: "6px", zIndex: 200, maxHeight: "120px", overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.6)" }}>
+                                {dbSuppliers.filter(s => s.toLowerCase().includes((p.supplier || "").toLowerCase())).slice(0, 8).map((s, si) => (
+                                  <div
+                                    key={si}
+                                    onMouseDown={() => handleEditRow(i, { supplier: s, isUnknownSupplier: false })}
+                                    style={{ padding: "6px 8px", cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: "0.75rem", color: "#6ee7b7" }}
+                                  >
+                                    🏢 {s}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        {/* Columna BODEGA editable */}
+                        <td style={{ padding: "8px" }}>
+                          <input
+                            id={`input-${i}-location`}
+                            type="text"
+                            value={p.location || ""}
+                            placeholder="Auto..."
+                            onChange={(e) => handleEditRow(i, { location: e.target.value })}
+                            onKeyDown={(e) => handleKeyDown(e, i, 'location')}
+                            style={{
+                              width: "100%",
+                              minWidth: "55px",
+                              background: p.isUnknownLocation ? "rgba(234,179,8,0.15)" : "transparent",
+                              border: p.isUnknownLocation ? "1px solid #eab308" : "1px dashed var(--glass-border)",
+                              color: p.isUnknownLocation ? "#facc15" : "rgba(255,255,255,0.7)",
+                              padding: "3px 5px",
+                              borderRadius: "6px",
+                              fontSize: "0.75rem",
+                            }}
+                            title={p.isUnknownLocation ? `Bodega "${p.location}" es nueva` : ""}
+                          />
                         </td>
                         <td style={{ padding: "8px" }}>
                           <span style={{
@@ -1436,16 +1509,42 @@ export default function SmartImporter({
                   </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                     {entries.map(([sup, count], idx) => (
-                      <div key={idx} style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        padding: "4px 10px",
-                        borderRadius: "20px",
-                        background: sup.startsWith("⚠️") ? "rgba(239,68,68,0.15)" : "rgba(16,185,129,0.15)",
-                        border: `1px solid ${sup.startsWith("⚠️") ? "rgba(239,68,68,0.4)" : "rgba(16,185,129,0.3)"}`,
-                        fontSize: "0.8rem"
-                      }}>
+                      <div
+                        key={idx}
+                        onClick={() => {
+                          // SUGERENCIA 2: Reemplazo masivo — clic en chip abre prompt
+                          const newSup = window.prompt(
+                            `🔁 Reemplazo masivo de proveedor\n\nActualmente: "${sup}" (${count} artículos)\n\nEscribe el nuevo proveedor para estos ${count} artículos:`,
+                            sup.startsWith("⚠️") ? "" : sup
+                          );
+                          if (newSup !== null && newSup.trim() !== "") {
+                            const oldSup = sup.startsWith("⚠️") ? "" : sup;
+                            setPreviewData(prev => prev ? prev.map(p => {
+                              const pSup = (p.supplier && p.supplier !== "Pendiente" && p.supplier.trim() !== "") ? p.supplier : "";
+                              if (pSup === oldSup) {
+                                const isUnknownSupplier = !dbSuppliers.some((s: string) => s.toLowerCase() === newSup.trim().toLowerCase());
+                                return { ...p, supplier: newSup.trim(), isUnknownSupplier };
+                              }
+                              return p;
+                            }) : null);
+                          }
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          padding: "4px 10px",
+                          borderRadius: "20px",
+                          background: sup.startsWith("⚠️") ? "rgba(239,68,68,0.15)" : "rgba(16,185,129,0.15)",
+                          border: `1px solid ${sup.startsWith("⚠️") ? "rgba(239,68,68,0.4)" : "rgba(16,185,129,0.3)"}`,
+                          fontSize: "0.8rem",
+                          cursor: "pointer",
+                          transition: "all 0.15s ease",
+                        }}
+                        title={`Clic para reasignar los ${count} artículos de "${sup}" a otro proveedor`}
+                        onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.05)"; e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.3)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.boxShadow = "none"; }}
+                      >
                         <span style={{ fontWeight: "bold", color: sup.startsWith("⚠️") ? "#ef4444" : "var(--color-primary)" }}>{sup}</span>
                         <span style={{
                           background: sup.startsWith("⚠️") ? "rgba(239,68,68,0.3)" : "rgba(16,185,129,0.3)",
@@ -1455,6 +1554,7 @@ export default function SmartImporter({
                           fontWeight: "bold",
                           color: "white"
                         }}>{count}</span>
+                        <span style={{ fontSize: "0.6rem", opacity: 0.6 }}>✏️</span>
                       </div>
                     ))}
                   </div>
