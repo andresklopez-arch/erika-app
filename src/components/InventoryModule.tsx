@@ -108,6 +108,15 @@ export default function InventoryModule() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [totalCount, setTotalCount] = useState<number | null>(null);
+
+  const [dbSuppliers, setDbSuppliers] = useState<string[]>([]);
+  const [selectedSupplierFilter, setSelectedSupplierFilter] = useState<string>("");
+  const [sortColumn, setSortColumn] = useState<string>("name");
+  const [sortAscending, setSortAscending] = useState<boolean>(true);
+  const [editingCell, setEditingCell] = useState<{ itemId: string; field: string } | null>(null);
+  const [editValue, setEditValue] = useState<string>("");
+  const [hoveredCell, setHoveredCell] = useState<{ itemId: string; field: string } | null>(null);
+  const [hoveredHeader, setHoveredHeader] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   
   const [undoStack, setUndoStack] = useState<any[][]>(() => {
@@ -278,9 +287,14 @@ export default function InventoryModule() {
       let dbQuery = supabase
         .from("inventory")
         .select("*", { count: "exact" })
-        .not("deleted", "eq", true)
-        .order("name", { ascending: true });
+        .not("deleted", "eq", true);
 
+      // Apply supplier filter
+      if (selectedSupplierFilter) {
+        dbQuery = dbQuery.eq("supplier", selectedSupplierFilter);
+      }
+
+      // Apply search query
       const cleanQuery = queryStr.trim();
       if (cleanQuery) {
         const tokens = normalizeString(cleanQuery).split(/\s+/).filter(Boolean);
@@ -289,6 +303,14 @@ export default function InventoryModule() {
             `name.ilike.%${token}%,code.ilike.%${token}%,location.ilike.%${token}%,supplier.ilike.%${token}%`
           );
         });
+      }
+
+      // Apply sorting (if not margin)
+      if (sortColumn && sortColumn !== "margin") {
+        dbQuery = dbQuery.order(sortColumn, { ascending: sortAscending });
+      } else {
+        // Fallback or sort by name
+        dbQuery = dbQuery.order("name", { ascending: true });
       }
 
       const limit = 50;
@@ -301,10 +323,30 @@ export default function InventoryModule() {
       if (error) {
         console.error("Error fetching inventory:", error);
       } else if (data) {
+        let finalData = data;
+        // In-memory sorting for Margin calculated column
+        if (sortColumn === "margin") {
+          finalData = [...data].sort((a, b) => {
+            const marginA = a.cost > 0 ? (a.price - a.cost) / a.cost : 0;
+            const marginB = b.cost > 0 ? (b.price - b.cost) / b.cost : 0;
+            return sortAscending ? marginA - marginB : marginB - marginA;
+          });
+        }
+
         if (isReset) {
-          setItems(data);
+          setItems(finalData);
         } else {
-          setItems((prev) => [...prev, ...data]);
+          setItems((prev) => {
+            const combined = [...prev, ...finalData];
+            if (sortColumn === "margin") {
+              return combined.sort((a, b) => {
+                const marginA = a.cost > 0 ? (a.price - a.cost) / a.cost : 0;
+                const marginB = b.cost > 0 ? (b.price - b.cost) / b.cost : 0;
+                return sortAscending ? marginA - marginB : marginB - marginA;
+              });
+            }
+            return combined;
+          });
         }
         setTotalCount(count);
         setHasMore(data.length === limit);
@@ -495,10 +537,390 @@ export default function InventoryModule() {
     }
   };
 
+  const fetchSuppliers = async () => {
+    const { data } = await supabase.from("suppliers").select("name").order("name");
+    if (data) setDbSuppliers(data.map((s: any) => s.name));
+  };
+
+  const handleSort = (colName: string) => {
+    if (sortColumn === colName) {
+      setSortAscending(!sortAscending);
+    } else {
+      setSortColumn(colName);
+      setSortAscending(true);
+    }
+  };
+
+  const handleUpdateField = async (itemId: string, field: string, value: any) => {
+    let finalValue = value;
+    
+    // Type casting and validation
+    if (field === "stock") {
+      finalValue = parseInt(value);
+      if (isNaN(finalValue)) finalValue = 0;
+    } else if (field === "cost" || field === "price") {
+      finalValue = parseFloat(value);
+      if (isNaN(finalValue)) finalValue = 0;
+    } else if (field === "name") {
+      finalValue = String(value).trim();
+      if (!finalValue) {
+        alert("⚠️ El nombre del producto no puede estar vacío.");
+        setEditingCell(null);
+        return;
+      }
+    } else {
+      finalValue = String(value).trim();
+    }
+
+    const originalItem = allItems.find((i) => i.id === itemId);
+    if (originalItem && originalItem[field as keyof InventoryItem] === finalValue) {
+      setEditingCell(null);
+      return;
+    }
+
+    const updateObj: any = { [field]: finalValue };
+
+    if (field === "cost" && originalItem) {
+      updateObj.priceChanged = finalValue > originalItem.cost ? "up" : null;
+    }
+
+    const { error } = await supabase
+      .from("inventory")
+      .update(updateObj)
+      .eq("id", itemId);
+
+    if (error) {
+      alert("❌ Error al actualizar producto: " + error.message);
+    } else {
+      setItems((prev) =>
+        prev.map((item) => (item.id === itemId ? { ...item, ...updateObj } : item))
+      );
+      setAllItems((prev) =>
+        prev.map((item) => (item.id === itemId ? { ...item, ...updateObj } : item))
+      );
+    }
+    setEditingCell(null);
+  };
+
+  const getFilteredAllItems = () => {
+    let result = allItems.filter((i) => !i.deleted);
+
+    if (selectedSupplierFilter) {
+      result = result.filter((i) => i.supplier === selectedSupplierFilter);
+    }
+
+    const cleanQuery = debouncedSearchQuery.trim();
+    if (cleanQuery) {
+      const tokens = normalizeString(cleanQuery).split(/\s+/).filter(Boolean);
+      result = result.filter((item) =>
+        tokens.every((token) => {
+          const nameMatch = normalizeString(item.name || "").includes(token);
+          const codeMatch = normalizeString(item.code || "").includes(token);
+          const locMatch = normalizeString(item.location || "").includes(token);
+          const supMatch = normalizeString(item.supplier || "").includes(token);
+          return nameMatch || codeMatch || locMatch || supMatch;
+        })
+      );
+    }
+
+    result = [...result].sort((a, b) => {
+      let valA: any = a[sortColumn as keyof InventoryItem];
+      let valB: any = b[sortColumn as keyof InventoryItem];
+
+      if (sortColumn === "margin") {
+        valA = a.cost > 0 ? (a.price - a.cost) / a.cost : 0;
+        valB = b.cost > 0 ? (b.price - b.cost) / b.cost : 0;
+      }
+
+      if (valA === undefined || valA === null) return sortAscending ? 1 : -1;
+      if (valB === undefined || valB === null) return sortAscending ? -1 : 1;
+
+      if (typeof valA === "number" && typeof valB === "number") {
+        return sortAscending ? valA - valB : valB - valA;
+      }
+
+      const strA = String(valA).toLowerCase();
+      const strB = String(valB).toLowerCase();
+      return sortAscending ? strA.localeCompare(strB) : strB.localeCompare(strA);
+    });
+
+    return result;
+  };
+
+  const renderHeader = (label: string, colName: string) => {
+    const isSorted = sortColumn === colName;
+    return (
+      <th
+        onClick={() => handleSort(colName)}
+        onMouseEnter={() => setHoveredHeader(colName)}
+        onMouseLeave={() => setHoveredHeader(null)}
+        style={{
+          padding: "15px",
+          cursor: "pointer",
+          userSelect: "none",
+          background: isSorted ? "rgba(255,255,255,0.08)" : (hoveredHeader === colName ? "rgba(255,255,255,0.04)" : "transparent"),
+          transition: "background 0.2s",
+          color: isSorted ? "var(--color-primary)" : "white"
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+          <span>{label}</span>
+          <span style={{ fontSize: "0.75rem", opacity: isSorted ? 1 : 0.3 }}>
+            {isSorted ? (sortAscending ? "▲" : "▼") : "⇅"}
+          </span>
+        </div>
+      </th>
+    );
+  };
+
+  const renderEditableCell = (
+    item: InventoryItem, 
+    field: keyof InventoryItem, 
+    type: "text" | "number" = "text", 
+    isBold = false,
+    colorOverride?: string
+  ) => {
+    const isEditing = editingCell?.itemId === item.id && editingCell?.field === field;
+    const isHovered = hoveredCell?.itemId === item.id && hoveredCell?.field === field;
+    const value = item[field] === undefined || item[field] === null ? "" : String(item[field]);
+
+    if (isEditing) {
+      if (field === "supplier") {
+        return (
+          <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
+            <input
+              list="suppliers-datalist"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={() => {
+                setTimeout(() => {
+                  handleUpdateField(item.id, "supplier", editValue);
+                }, 200);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleUpdateField(item.id, "supplier", editValue);
+                } else if (e.key === "Escape") {
+                  setEditingCell(null);
+                }
+              }}
+              autoFocus
+              style={{
+                width: "100%",
+                padding: "6px 10px",
+                borderRadius: "6px",
+                border: "1px solid var(--color-primary)",
+                background: "rgba(0, 0, 0, 0.85)",
+                color: "white",
+                fontSize: "0.85rem",
+                outline: "none"
+              }}
+              placeholder="Proveedor..."
+            />
+            <datalist id="suppliers-datalist">
+              <option value="Pendiente" />
+              {dbSuppliers.map((s) => (
+                <option key={s} value={s} />
+              ))}
+            </datalist>
+          </div>
+        );
+      }
+
+      if (field === "location") {
+        const uniqueLocations = Array.from(new Set(allItems.map(i => i.location).filter(Boolean))) as string[];
+        return (
+          <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
+            <input
+              list="locations-datalist"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={() => {
+                setTimeout(() => {
+                  handleUpdateField(item.id, "location", editValue);
+                }, 200);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleUpdateField(item.id, "location", editValue);
+                } else if (e.key === "Escape") {
+                  setEditingCell(null);
+                }
+              }}
+              autoFocus
+              style={{
+                width: "100%",
+                padding: "6px 10px",
+                borderRadius: "6px",
+                border: "1px solid var(--color-primary)",
+                background: "rgba(0, 0, 0, 0.85)",
+                color: "white",
+                fontSize: "0.85rem",
+                outline: "none"
+              }}
+              placeholder="Ubicación..."
+            />
+            <datalist id="locations-datalist">
+              <option value="Pendiente" />
+              {uniqueLocations.map((loc) => (
+                <option key={loc} value={loc} />
+              ))}
+            </datalist>
+          </div>
+        );
+      }
+
+      return (
+        <input
+          type={type}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={() => handleUpdateField(item.id, field, editValue)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              handleUpdateField(item.id, field, editValue);
+            } else if (e.key === "Escape") {
+              setEditingCell(null);
+            }
+          }}
+          autoFocus
+          style={{
+            width: type === "number" ? "80px" : "100%",
+            padding: "6px 10px",
+            borderRadius: "6px",
+            border: "1px solid var(--color-primary)",
+            background: "rgba(0, 0, 0, 0.85)",
+            color: "white",
+            fontSize: "0.95rem",
+            fontWeight: isBold ? "bold" : "normal",
+            outline: "none"
+          }}
+        />
+      );
+    }
+
+    const displayColor = colorOverride || (isBold ? "white" : "inherit");
+
+    return (
+      <div
+        onClick={() => {
+          setEditingCell({ itemId: item.id, field });
+          setEditValue(value);
+        }}
+        onMouseEnter={() => setHoveredCell({ itemId: item.id, field })}
+        onMouseLeave={() => setHoveredCell(null)}
+        style={{
+          cursor: "pointer",
+          padding: "4px 8px",
+          borderRadius: "6px",
+          background: isHovered ? "rgba(255,255,255,0.06)" : "transparent",
+          transition: "background 0.15s, border-color 0.15s",
+          border: isHovered ? "1px dashed rgba(255,255,255,0.2)" : "1px solid transparent",
+          display: "inline-block",
+          minWidth: "60px",
+          fontWeight: isBold ? "bold" : "normal",
+          color: displayColor
+        }}
+        title="Clic para editar"
+      >
+        {field === "code" ? (
+          item.code ? highlightText(item.code, searchQuery) : <span style={{ opacity: 0.3 }}>-</span>
+        ) : field === "name" ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span>{highlightText(item.name, searchQuery)}</span>
+            {item.priceChanged === "up" && (
+              <span style={{ color: "#ef4444", fontSize: "0.75rem", background: "rgba(239, 68, 68, 0.15)", padding: "1px 5px", borderRadius: "4px" }}>
+                ⚠️ INFLACIÓN
+              </span>
+            )}
+          </div>
+        ) : field === "supplier" ? (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              if (item.supplier && item.supplier !== "Pendiente") {
+                setSelectedSupplierFilter(item.supplier);
+              } else {
+                setEditingCell({ itemId: item.id, field });
+                setEditValue(value);
+              }
+            }}
+            style={{
+              display: "inline-block",
+              background: item.supplier && item.supplier !== "Pendiente"
+                ? "rgba(16, 185, 129, 0.15)"
+                : "rgba(255, 255, 255, 0.05)",
+              border: item.supplier && item.supplier !== "Pendiente"
+                ? "1px solid rgba(16, 185, 129, 0.4)"
+                : "1px solid rgba(255, 255, 255, 0.1)",
+              color: item.supplier && item.supplier !== "Pendiente"
+                ? "#6ee7b7"
+                : "rgba(255, 255, 255, 0.4)",
+              padding: "3px 10px",
+              borderRadius: "20px",
+              fontSize: "0.8rem",
+              fontWeight: "600",
+              whiteSpace: "nowrap",
+              cursor: "pointer"
+            }}
+            title={item.supplier && item.supplier !== "Pendiente" ? `Clic para filtrar por ${item.supplier}` : "Clic para asignar proveedor"}
+          >
+            {item.supplier && item.supplier !== "Pendiente"
+              ? highlightText(item.supplier, searchQuery)
+              : "⏳ Asignar..."}
+          </span>
+        ) : field === "location" ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }} onClick={(e) => e.stopPropagation()}>
+            <span
+              onClick={() => {
+                setEditingCell({ itemId: item.id, field });
+                setEditValue(value);
+              }}
+              style={{
+                background: "rgba(255, 255, 255, 0.1)",
+                padding: "3px 8px",
+                borderRadius: "4px",
+                border: "1px solid var(--color-secondary)",
+                fontSize: "0.85rem",
+                cursor: "pointer"
+              }}
+            >
+              📍 {item.location ? highlightText(item.location, searchQuery) : "PENDIENTE"}
+            </span>
+            {item.location && (
+              <button
+                onClick={() => printDualLabel(item.location!, item.name, item.code || item.id)}
+                title="Imprimir Etiqueta Pasillo"
+                className="btn-primary"
+                style={{ padding: "2px 6px", fontSize: "0.8rem" }}
+              >
+                🗺️
+              </button>
+            )}
+            <button
+              onClick={() => printSingleBarcode(item.name, item.code || item.id)}
+              title="Imprimir Código de Barras Individual"
+              className="btn-primary"
+              style={{ padding: "2px 6px", fontSize: "0.8rem", background: "transparent", border: "1px solid var(--color-secondary)", color: "var(--color-secondary)" }}
+            >
+              🏷️
+            </button>
+          </div>
+        ) : field === "cost" ? (
+          `$${Number(item.cost).toFixed(2)}`
+        ) : field === "price" ? (
+          `$${Number(item.price).toFixed(2)}`
+        ) : (
+          value
+        )}
+      </div>
+    );
+  };
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
-    fetchInventory(0, "", true, true);
+    fetchSuppliers();
     loadAllItems();
   }, []);
 
@@ -514,7 +936,7 @@ export default function InventoryModule() {
       setPage(0);
       fetchInventory(0, debouncedSearchQuery, true, true);
     }
-  }, [debouncedSearchQuery]);
+  }, [mounted, debouncedSearchQuery, selectedSupplierFilter, sortColumn, sortAscending]);
 
   const loadNextPage = () => {
     if (isLoadingMore || !hasMore) return;
@@ -644,17 +1066,18 @@ export default function InventoryModule() {
   };
 
   const exportToExcel = () => {
-    const data = items.map((i) => ({
-      CÓDIGO: i.code || i.id,
-      Producto: i.name,
-      "Ubicación (Pasillo)": i.location || "Sin Asignar",
-      Proveedor: i.supplier || "No Asignado",
-      "Costo Compra": i.cost,
-      "Precio Venta": i.price,
-      Stock: i.stock,
-      Automático: i.autoPriced ? "SÍ" : "NO",
+    const filteredAll = getFilteredAllItems();
+    const data = filteredAll.map((i) => ({
+      CODIGO: i.code || "",
+      PRODUCTO: i.name,
+      PROVEEDOR: i.supplier || "",
+      STOCK: i.stock,
+      COSTO: i.cost,
+      PRECIO: i.price,
+      BODEGA: i.location || "",
     }));
     const ws = XLSX.utils.json_to_sheet(data);
+    ws["!cols"] = [{wch: 15}, {wch: 35}, {wch: 20}, {wch: 10}, {wch: 12}, {wch: 12}, {wch: 15}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Inventario_Filtrado");
     XLSX.writeFile(
@@ -1042,6 +1465,51 @@ export default function InventoryModule() {
               </button>
             )}
           </div>
+
+          {/* FILTRO DE PROVEEDOR */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <select
+              value={selectedSupplierFilter}
+              onChange={(e) => setSelectedSupplierFilter(e.target.value)}
+              style={{
+                padding: "12px 15px",
+                borderRadius: "10px",
+                border: "1px solid var(--glass-border)",
+                background: "rgba(0, 0, 0, 0.3)",
+                color: selectedSupplierFilter ? "#6ee7b7" : "white",
+                fontSize: "0.9rem",
+                outline: "none",
+                cursor: "pointer",
+                fontWeight: selectedSupplierFilter ? "600" : "normal",
+                transition: "border-color 0.2s"
+              }}
+            >
+              <option value="" style={{ background: "#18181b" }}>🏢 Todos los Proveedores</option>
+              {dbSuppliers.map((sup) => (
+                <option key={sup} value={sup} style={{ background: "#18181b" }}>
+                  {sup}
+                </option>
+              ))}
+            </select>
+            {selectedSupplierFilter && (
+              <button
+                onClick={() => setSelectedSupplierFilter("")}
+                title="Limpiar filtro de proveedor"
+                style={{
+                  background: "rgba(239, 68, 68, 0.15)",
+                  border: "1px solid rgba(239, 68, 68, 0.3)",
+                  color: "#ef4444",
+                  padding: "11px 13px",
+                  borderRadius: "10px",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                  transition: "background 0.2s"
+                }}
+              >
+                ✖
+              </button>
+            )}
+          </div>
           <div style={{ fontSize: "0.85rem", opacity: 0.8, minWidth: "180px", textAlign: "right" }}>
             {totalCount !== null ? (
               <>Total productos: <strong style={{ color: "var(--color-secondary)" }}>{totalCount}</strong></>
@@ -1298,14 +1766,14 @@ export default function InventoryModule() {
               }}
             >
               <tr>
-                <th style={{ padding: "15px" }}>Código</th>
-                <th style={{ padding: "15px" }}>Producto</th>
-                <th style={{ padding: "15px", color: "#6ee7b7" }}>Proveedor</th>
-                <th style={{ padding: "15px" }}>Ubicación y Códigos</th>
-                <th style={{ padding: "15px" }}>Stock</th>
-                <th style={{ padding: "15px" }}>Costo Prov.</th>
-                <th style={{ padding: "15px" }}>Precio Venta</th>
-                <th style={{ padding: "15px", color: "var(--color-secondary)" }}>Margen (%)</th>
+                {renderHeader("Código", "code")}
+                {renderHeader("Producto", "name")}
+                {renderHeader("Proveedor", "supplier")}
+                {renderHeader("Ubicación y Códigos", "location")}
+                {renderHeader("Stock", "stock")}
+                {renderHeader("Costo Prov.", "cost")}
+                {renderHeader("Precio Venta", "price")}
+                {renderHeader("Margen (%)", "margin")}
                 <th style={{ padding: "15px", textAlign: "center" }}>Acción</th>
               </tr>
             </thead>
@@ -1336,94 +1804,16 @@ export default function InventoryModule() {
                         color: "var(--color-primary)",
                       }}
                     >
-                      {item.code ? highlightText(item.code, searchQuery) : "-"}
+                      {renderEditableCell(item, "code", "text", true, "var(--color-primary)")}
                     </td>
                     <td style={{ padding: "15px", fontWeight: "bold" }}>
-                      {highlightText(item.name, searchQuery)}
-                      {item.priceChanged === "up" && (
-                        <span
-                          style={{
-                            marginLeft: "10px",
-                            color: "#ef4444",
-                            fontSize: "0.8rem",
-                          }}
-                        >
-                          ⚠️ INFLACIÓN
-                        </span>
-                      )}
-                    </td>
-                    {/* COLUMNA PROVEEDOR SEPARADA */}
-                    <td style={{ padding: "15px" }}>
-                      <span style={{
-                        display: "inline-block",
-                        background: item.supplier && item.supplier !== "Pendiente"
-                          ? "rgba(16, 185, 129, 0.15)"
-                          : "rgba(255,255,255,0.05)",
-                        border: item.supplier && item.supplier !== "Pendiente"
-                          ? "1px solid rgba(16,185,129,0.4)"
-                          : "1px solid rgba(255,255,255,0.1)",
-                        color: item.supplier && item.supplier !== "Pendiente"
-                          ? "#6ee7b7"
-                          : "rgba(255,255,255,0.3)",
-                        padding: "3px 10px",
-                        borderRadius: "20px",
-                        fontSize: "0.8rem",
-                        fontWeight: "600",
-                        whiteSpace: "nowrap",
-                      }}>
-                        {item.supplier && item.supplier !== "Pendiente"
-                          ? highlightText(item.supplier, searchQuery)
-                          : "⏳ Pendiente"}
-                      </span>
+                      {renderEditableCell(item, "name", "text", true)}
                     </td>
                     <td style={{ padding: "15px" }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            background: "rgba(255,255,255,0.1)",
-                            padding: "4px 8px",
-                            borderRadius: "4px",
-                            border: "1px solid var(--color-secondary)",
-                          }}
-                        >
-                          📍 {item.location ? highlightText(item.location, searchQuery) : "PENDIENTE"}
-                        </span>
-                        {item.location && (
-                          <button
-                            onClick={() =>
-                              printDualLabel(
-                                item.location!,
-                                item.name,
-                                item.code || item.id,
-                              )
-                            }
-                            title="Imprimir Etiqueta Pasillo"
-                            className="btn-primary"
-                            style={{ padding: "4px 8px", fontSize: "0.9rem" }}
-                          >
-                            🗺️
-                          </button>
-                        )}
-                        <button
-                            onClick={() =>
-                              printSingleBarcode(
-                                item.name,
-                                item.code || item.id,
-                              )
-                            }
-                            title="Imprimir Código de Barras Individual"
-                            className="btn-primary"
-                            style={{ padding: "4px 8px", fontSize: "0.9rem", background: "transparent", border: "1px solid var(--color-secondary)", color: "var(--color-secondary)" }}
-                          >
-                            🏷️
-                        </button>
-                      </div>
+                      {renderEditableCell(item, "supplier", "text")}
+                    </td>
+                    <td style={{ padding: "15px" }}>
+                      {renderEditableCell(item, "location", "text")}
                     </td>
                     <td
                       style={{
@@ -1433,10 +1823,10 @@ export default function InventoryModule() {
                           item.stock <= item.minStock ? "#ef4444" : "inherit",
                       }}
                     >
-                      {item.stock}
+                      {renderEditableCell(item, "stock", "number", true, item.stock <= item.minStock ? "#ef4444" : undefined)}
                     </td>
                     <td style={{ padding: "15px" }}>
-                      ${Number(item.cost).toFixed(2)}
+                      {renderEditableCell(item, "cost", "number")}
                     </td>
                     <td style={{ padding: "15px" }}>
                       <div
@@ -1446,16 +1836,7 @@ export default function InventoryModule() {
                           gap: "8px",
                         }}
                       >
-                        <span
-                          style={{
-                            color: item.autoPriced
-                              ? "var(--color-secondary)"
-                              : "white",
-                            fontWeight: "bold",
-                          }}
-                        >
-                          ${Number(item.price).toFixed(2)}
-                        </span>
+                        {renderEditableCell(item, "price", "number", true, item.autoPriced ? "var(--color-secondary)" : "white")}
                       </div>
                     </td>
                     <td style={{ padding: "15px", color: "var(--color-secondary)", fontWeight: "bold" }}>

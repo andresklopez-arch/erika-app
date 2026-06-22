@@ -1745,8 +1745,6 @@ export default function SmartImporter({
               }}
             >
               <h3 style={{ color: "var(--color-primary)", marginBottom: "10px" }}>📝 Instrucciones para una carga 100% exacta:</h3>
-              <p style={{ marginBottom: "10px" }}>Para evitar errores, el sistema ahora incluye el <strong>PROVEEDOR como primera columna</strong>. Llena cada fila con el proveedor correspondiente — puedes mezclar proveedores en un mismo documento:</p>
-              <ol style={{ marginLeft: "20px", marginBottom: "15px", opacity: 0.9, display: "flex", flexDirection: "column", gap: "5px" }}>
               <p style={{ marginBottom: "10px" }}>La plantilla coincide exactamente con la tabla del inventario. Cada columna corresponde con lo que ves en pantalla, facilitando la detección de errores:</p>
               <ol style={{ marginLeft: "20px", marginBottom: "15px", opacity: 0.9, display: "flex", flexDirection: "column", gap: "5px" }}>
                 <li><strong>Columna A (1):</strong> Código de Barras / SKU</li>
