@@ -261,6 +261,10 @@ export default function SmartImporter({
       const allKnownLocations = Array.from(new Set(existingItems.map(i => i.location).filter(l => l && l !== "Pendiente" && l !== ""))).map(l => String(l).trim().toLowerCase());
       const isUnknownLocation = rawLocation !== "" && !allKnownLocations.includes(rawLocation.toLowerCase());
 
+      // 🏢 SUGERENCIA 1: Validar proveedor contra BD en tiempo real
+      const isUnknownSupplier = rawSupplier !== "" && rawSupplier !== "Pendiente" &&
+        !dbSuppliers.some(s => s.toLowerCase() === rawSupplier.toLowerCase());
+
       const isIllegible = !cleanName || cleanName.trim() === "" || cleanName.trim().toLowerCase() === "producto sin nombre";
       const hasLoss = rawCost > 0 && finalPrice <= rawCost;
 
@@ -289,6 +293,7 @@ export default function SmartImporter({
         stockIsEmpty,
         isDuplicateInFile,
         isUnknownLocation,
+        isUnknownSupplier,
         isIllegible,
         hasLoss
       });
@@ -297,11 +302,15 @@ export default function SmartImporter({
     // 🤖 Generar advertencias de IA sobre datos sospechosos
     const warnings: string[] = [];
     const emptySup = importedProducts.filter(p => !p.supplier || p.supplier === "Pendiente" || p.supplier.trim() === "");
-    const unknownSup = importedProducts.filter(p => p.supplier && p.supplier !== "Pendiente" && p.supplier.trim() !== "");
+    const unknownSupList = importedProducts.filter(p => p.isUnknownSupplier);
     const zeroCost = importedProducts.filter(p => p.cost === 0 && !p.costIsEmpty);
     const highPrice = importedProducts.filter(p => p.cost > 0 && p.price > p.cost * 5);
     const hasLossItems = importedProducts.filter(p => p.hasLoss);
     if (emptySup.length > 0) warnings.push(`⚠️ ${emptySup.length} artículo(s) sin proveedor asignado en la columna PROVEEDOR. Revisa el archivo antes de importar.`);
+    if (unknownSupList.length > 0) {
+      const newSupNames = Array.from(new Set(unknownSupList.map(p => p.supplier))).slice(0, 5).join(", ");
+      warnings.push(`🏢 Proveedor(es) nuevo(s) no registrado(s) en el sistema: ${newSupNames}. Se registrarán automáticamente al importar.`);
+    }
     if (zeroCost.length > 0) warnings.push(`💰 ${zeroCost.length} artículo(s) con costo = $0 aunque la celda no está vacía. Verifica los precios de compra.`);
     if (highPrice.length > 0) warnings.push(`📈 ${highPrice.length} artículo(s) con precio de venta mayor a 5x el costo. Confirma que el precio es correcto.`);
     if (hasLossItems.length > 0) warnings.push(`🔴 ${hasLossItems.length} artículo(s) se venderían a pérdida (precio ≤ costo). Revisa antes de confirmar.`);
@@ -1075,6 +1084,14 @@ export default function SmartImporter({
                                   ⚠️ Bodega Nueva (Clic para corregir)
                                 </span>
                               )}
+                              {p.isUnknownSupplier && (
+                                <span 
+                                  style={{ fontSize: "0.6rem", background: "rgba(251, 146, 60, 0.2)", color: "#fb923c", border: "1px solid rgba(251,146,60,0.4)", padding: "2px 6px", borderRadius: "4px", whiteSpace: "nowrap" }} 
+                                  title={`El proveedor "${p.supplier}" no está registrado aún. Se creará automáticamente al importar.`}
+                                >
+                                  🏢 Proveedor Nuevo: {p.supplier}
+                                </span>
+                              )}
                             </div>
                             {!p.isNew && (
                               <div style={{ fontSize: "0.7rem", color: "var(--color-secondary)" }}>
@@ -1393,6 +1410,58 @@ export default function SmartImporter({
               </div>
             )}
 
+            {/* SUGERENCIA 3: Resumen por proveedor antes de confirmar */}
+            {previewData && importOption !== "" && (() => {
+              const supplierMap: Record<string, number> = {};
+              previewData.forEach(p => {
+                const sup = (p.supplier && p.supplier !== "Pendiente" && p.supplier.trim() !== "") ? p.supplier : "⚠️ Sin Proveedor";
+                supplierMap[sup] = (supplierMap[sup] || 0) + 1;
+              });
+              const entries = Object.entries(supplierMap).sort((a, b) => b[1] - a[1]);
+              return entries.length > 0 ? (
+                <div style={{
+                  marginTop: "15px",
+                  padding: "12px 16px",
+                  borderRadius: "10px",
+                  background: "rgba(16, 185, 129, 0.08)",
+                  border: "1px solid rgba(16, 185, 129, 0.3)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "1rem" }}>📊</span>
+                    <strong style={{ color: "var(--color-primary)", fontSize: "0.9rem" }}>Resumen por Proveedor</strong>
+                    <span style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)", marginLeft: "auto" }}>{previewData.length} artículos totales</span>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                    {entries.map(([sup, count], idx) => (
+                      <div key={idx} style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        padding: "4px 10px",
+                        borderRadius: "20px",
+                        background: sup.startsWith("⚠️") ? "rgba(239,68,68,0.15)" : "rgba(16,185,129,0.15)",
+                        border: `1px solid ${sup.startsWith("⚠️") ? "rgba(239,68,68,0.4)" : "rgba(16,185,129,0.3)"}`,
+                        fontSize: "0.8rem"
+                      }}>
+                        <span style={{ fontWeight: "bold", color: sup.startsWith("⚠️") ? "#ef4444" : "var(--color-primary)" }}>{sup}</span>
+                        <span style={{
+                          background: sup.startsWith("⚠️") ? "rgba(239,68,68,0.3)" : "rgba(16,185,129,0.3)",
+                          borderRadius: "10px",
+                          padding: "1px 7px",
+                          fontSize: "0.75rem",
+                          fontWeight: "bold",
+                          color: "white"
+                        }}>{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null;
+            })()}
+
             <div
               style={{ display: "flex", gap: "15px", justifyContent: "center", marginTop: "20px" }}
             >
@@ -1460,24 +1529,33 @@ export default function SmartImporter({
                   ];
                   const ws = XLSX.utils.aoa_to_sheet(wsData);
                   ws["!cols"] = [{wch: 20}, {wch: 15}, {wch: 30}, {wch: 10}, {wch: 12}, {wch: 12}, {wch: 15}];
-                  
-                  // Validación de Datos (Lista Desplegable) para PROVEEDOR en columna A
-                  const validSuppliers = uniqueSuppliers.length > 0 ? uniqueSuppliers.slice(0, 15).join(",") : "Pendiente";
+
+                  // SUGERENCIA 2: Hoja oculta _Proveedores para autocomplete ilimitado en Excel
+                  // (supera el límite de 255 caracteres de formula1 directo)
+                  const allSuppliersForSheet = dbSuppliers.length > 0 ? dbSuppliers : ["Pendiente"];
+                  const wsProvData: any[][] = [["Proveedor"], ...allSuppliersForSheet.map(s => [s])];
+                  const wsProv = XLSX.utils.aoa_to_sheet(wsProvData);
+
+                  // Validación referenciando la hoja _Proveedores (sin límite de 255 chars)
                   ws["!dataValidation"] = [
                     {
-                      sqref: "A2:A1000",
+                      sqref: "A2:A5000",
                       type: "list",
                       allowBlank: true,
+                      showDropDown: false,
                       showErrorMessage: false,
-                      errorTitle: "Proveedor",
-                      error: "Selecciona o escribe el nombre del proveedor.",
-                      formula1: `"${validSuppliers.substring(0, 255)}"`
+                      formula1: `_Proveedores!$A$2:$A$${allSuppliersForSheet.length + 1}`
                     }
                   ];
 
                   const wb = XLSX.utils.book_new();
                   XLSX.utils.book_append_sheet(wb, ws, "Inventario");
-                  
+                  XLSX.utils.book_append_sheet(wb, wsProv, "_Proveedores");
+                  // Ocultar la hoja _Proveedores
+                  wb.Workbook = wb.Workbook || { Sheets: [] };
+                  wb.Workbook.Sheets = wb.Workbook.Sheets || [];
+                  wb.Workbook.Sheets[1] = { Hidden: 1 };
+
                   const today = new Date();
                   const dateStr = `${today.getDate()}-${today.toLocaleString('es-ES', { month: 'short' })}-${today.getFullYear()}`;
                   XLSX.writeFile(wb, `ERIKA_Plantilla_Blanco_${dateStr}.xlsx`);
