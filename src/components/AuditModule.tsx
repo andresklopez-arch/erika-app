@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import type { InventoryItem } from "./InventoryModule";
+import { supabase } from "../lib/supabaseClient";
 
 interface AuditModuleProps {
   onClose: () => void;
@@ -18,6 +19,56 @@ export default function AuditModule({ onClose, inventory }: AuditModuleProps) {
   const [randomCount, setRandomCount] = useState(50);
   const [locationFilter, setLocationFilter] = useState("");
   const [lastAuditDate, setLastAuditDate] = useState<string | null>(null);
+
+  const [activeTab, setActiveTab] = useState<"arqueo" | "logs">("arqueo");
+  const [logs, setLogs] = useState<any[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [logSearchQuery, setLogSearchQuery] = useState("");
+  const [logFilterType, setLogFilterType] = useState<"all" | "today" | "cost" | "price" | "stock">("all");
+
+  const fetchManualAuditLogs = async () => {
+    setIsLoadingLogs(true);
+    const { data, error } = await supabase
+      .from("error_logs")
+      .select("*")
+      .eq("module", "Inventario_Edicion_Manual")
+      .order("created_at", { ascending: false })
+      .range(0, 99); // Carga 100 registros para permitir más filtrado local
+
+    if (error) {
+      console.error("Error al cargar auditorías:", error);
+    } else if (data) {
+      setLogs(data);
+    }
+    setIsLoadingLogs(false);
+  };
+
+  const getFilteredLogs = () => {
+    let result = [...logs];
+
+    // Filtrar por tipo de cambio
+    if (logFilterType === "today") {
+      const todayStr = new Date().toDateString();
+      result = result.filter(log => new Date(log.created_at).toDateString() === todayStr);
+    } else if (logFilterType === "cost") {
+      result = result.filter(log => log.error_details.toLowerCase().includes("costo"));
+    } else if (logFilterType === "price") {
+      result = result.filter(log => log.error_details.toLowerCase().includes("precio"));
+    } else if (logFilterType === "stock") {
+      result = result.filter(log => log.error_details.toLowerCase().includes("stock"));
+    }
+
+    // Filtrar por buscador
+    if (logSearchQuery.trim()) {
+      const q = logSearchQuery.toLowerCase();
+      result = result.filter(log => 
+        log.error_details.toLowerCase().includes(q) || 
+        log.usuario.toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  };
 
   // Interactive Mode States
   const [isInteractiveMode, setIsInteractiveMode] = useState(false);
@@ -278,56 +329,200 @@ export default function AuditModule({ onClose, inventory }: AuditModuleProps) {
       <div style={{
         background: "var(--color-bg)", border: "1px solid var(--color-primary)", borderRadius: "15px", padding: "30px", width: "100%", maxWidth: "600px", color: "var(--color-text)", boxShadow: "0 0 20px rgba(16, 185, 129, 0.2)",
       }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
           <h2 style={{ margin: 0, color: "var(--color-primary)", display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "1.5rem" }}>📋</span> Misiones de Arqueo
+            <span style={{ fontSize: "1.5rem" }}>📋</span> Auditoría y Arqueos
           </h2>
           <button onClick={onClose} style={{ background: "transparent", border: "none", color: "white", fontSize: "1.2rem", cursor: "pointer" }}>✖</button>
         </div>
 
-        {lastAuditDate && (
-          <div style={{ background: "rgba(168, 85, 247, 0.1)", border: "1px solid rgba(168, 85, 247, 0.3)", padding: "10px", borderRadius: "8px", marginBottom: "15px", color: "#d8b4fe", fontSize: "0.9rem" }}>
-            <strong>⏱️ Última misión asignada:</strong> {lastAuditDate}
-          </div>
-        )}
+        {/* TAB NAVIGATION */}
+        <div style={{ display: "flex", gap: "10px", marginBottom: "20px", borderBottom: "1px solid rgba(255,255,255,0.1)", paddingBottom: "10px" }}>
+          <button
+            onClick={() => setActiveTab("arqueo")}
+            style={{
+              background: activeTab === "arqueo" ? "rgba(16, 185, 129, 0.15)" : "transparent",
+              border: activeTab === "arqueo" ? "1px solid var(--color-primary)" : "1px solid transparent",
+              color: activeTab === "arqueo" ? "var(--color-primary)" : "white",
+              padding: "8px 16px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontWeight: "bold",
+              fontSize: "0.85rem",
+              transition: "all 0.2s"
+            }}
+          >
+            📋 Misiones de Arqueo
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("logs");
+              fetchManualAuditLogs();
+            }}
+            style={{
+              background: activeTab === "logs" ? "rgba(16, 185, 129, 0.15)" : "transparent",
+              border: activeTab === "logs" ? "1px solid var(--color-primary)" : "1px solid transparent",
+              color: activeTab === "logs" ? "var(--color-primary)" : "white",
+              padding: "8px 16px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontWeight: "bold",
+              fontSize: "0.85rem",
+              transition: "all 0.2s"
+            }}
+          >
+            🔄 Historial de Cambios Manuales
+          </button>
+        </div>
 
-        <p style={{ opacity: 0.8, marginBottom: "20px", fontSize: "0.9rem" }}>
-          Genera una misión ciega. Puedes imprimirla en Excel o usar el <strong>Modo Interactivo</strong>.
-        </p>
+        {activeTab === "logs" ? (
+          <div>
+            <p style={{ opacity: 0.8, marginBottom: "15px", fontSize: "0.9rem" }}>
+              Mostrando los cambios manuales en la tabla de inventario (auditoría en la nube).
+            </p>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px" }}>
-          {["total", "aleatorio", "recomendado", "inconsistencias"].map((type) => (
-            <label key={type} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", background: auditType === type ? "rgba(16, 185, 129, 0.2)" : "rgba(255,255,255,0.05)", borderRadius: "8px", cursor: "pointer" }}>
-              <input type="radio" name="auditType" checked={auditType === type} onChange={() => setAuditType(type as any)} />
-              <div style={{ flex: 1, textTransform: "capitalize" }}>
-                <strong>{type === "inconsistencias" ? "Solo Inconsistencias" : `Arqueo ${type}`}</strong>
+            {/* Buscador y filtro para la bitácora */}
+            <div style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
+              <input 
+                type="text" 
+                placeholder="Filtrar bitácora por producto o usuario..." 
+                value={logSearchQuery}
+                onChange={e => setLogSearchQuery(e.target.value)}
+                style={{
+                  flex: 2,
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  background: "rgba(0,0,0,0.3)",
+                  color: "white",
+                  fontSize: "0.85rem",
+                  outline: "none"
+                }}
+              />
+              <select
+                value={logFilterType}
+                onChange={e => setLogFilterType(e.target.value as any)}
+                style={{
+                  flex: 1,
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  background: "rgba(0,0,0,0.3)",
+                  color: "white",
+                  fontSize: "0.85rem",
+                  outline: "none"
+                }}
+              >
+                <option value="all">📅 Todos los días</option>
+                <option value="today">☀️ Solo Hoy</option>
+                <option value="cost">💰 Cambios de Costo</option>
+                <option value="price">🏷️ Cambios de Precio</option>
+                <option value="stock">📦 Cambios de Stock</option>
+              </select>
+            </div>
+
+            {isLoadingLogs ? (
+              <div style={{ padding: "30px", textAlign: "center", color: "var(--color-secondary)" }}>
+                ⏳ Cargando registros de auditoría...
               </div>
-              {type === "aleatorio" && auditType === "aleatorio" && (
-                <input type="number" value={randomCount} onChange={(e) => setRandomCount(Number(e.target.value))} style={{ width: "60px", padding: "5px", background: "var(--glass-bg)", color: "white", border: "1px solid var(--color-primary)", borderRadius: "4px" }} />
-              )}
-            </label>
-          ))}
-        </div>
+            ) : getFilteredLogs().length === 0 ? (
+              <div style={{ padding: "30px", textAlign: "center", color: "rgba(255,255,255,0.4)", border: "1px dashed rgba(255,255,255,0.1)", borderRadius: "8px" }}>
+                📭 No hay registros de cambios manuales que coincidan.
+              </div>
+            ) : (
+              <div style={{ maxHeight: "300px", overflowY: "auto", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", background: "rgba(0,0,0,0.2)" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", textAlign: "left" }}>
+                  <thead>
+                    <tr style={{ background: "rgba(255,255,255,0.05)", borderBottom: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)" }}>
+                      <th style={{ padding: "10px" }}>Fecha</th>
+                      <th style={{ padding: "10px" }}>Usuario</th>
+                      <th style={{ padding: "10px" }}>Detalles del Cambio</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {getFilteredLogs().map((log) => {
+                      const date = new Date(log.created_at);
+                      const formattedDate = date.toLocaleString("es-ES", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit"
+                      });
+                      return (
+                        <tr key={log.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                          <td style={{ padding: "10px", whiteSpace: "nowrap", opacity: 0.7 }}>{formattedDate}</td>
+                          <td style={{ padding: "10px", fontWeight: "bold", color: "#6ee7b7" }}>{log.usuario}</td>
+                          <td style={{ padding: "10px", color: "rgba(255,255,255,0.9)" }}>{log.error_details}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
+              <button 
+                onClick={fetchManualAuditLogs} 
+                style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.2)", color: "white", padding: "12px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
+              >
+                🔄 Actualizar
+              </button>
+              <button 
+                onClick={() => setActiveTab("arqueo")} 
+                className="btn-primary" 
+                style={{ flex: 1, background: "var(--color-primary)", border: "none", color: "black", padding: "12px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
+              >
+                ⬅️ Volver a Arqueo
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {lastAuditDate && (
+              <div style={{ background: "rgba(168, 85, 247, 0.1)", border: "1px solid rgba(168, 85, 247, 0.3)", padding: "10px", borderRadius: "8px", marginBottom: "15px", color: "#d8b4fe", fontSize: "0.9rem" }}>
+                <strong>⏱️ Última misión asignada:</strong> {lastAuditDate}
+              </div>
+            )}
 
-        <div style={{ marginBottom: "20px" }}>
-          <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Filtro Específico (Bodega, Proveedor, Nombre):</label>
-          <input 
-            type="text" 
-            placeholder="Ej. Pasillo A, Truper, Martillo..." 
-            value={locationFilter}
-            onChange={(e) => setLocationFilter(e.target.value)}
-            style={{ width: "100%", padding: "10px", background: "var(--glass-bg)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "8px", color: "white" }}
-          />
-        </div>
+            <p style={{ opacity: 0.8, marginBottom: "20px", fontSize: "0.9rem" }}>
+              Genera una misión ciega. Puedes imprimirla en Excel o usar el <strong>Modo Interactivo</strong>.
+            </p>
 
-        <div style={{ display: "flex", gap: "15px", marginTop: "20px" }}>
-          <button onClick={handleInteractiveMode} style={{ flex: 1, background: "linear-gradient(135deg, #3b82f6, #8b5cf6)", color: "white", border: "none", padding: "15px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold", fontSize: "1.1rem" }}>
-            📱 Modo Interactivo (Voz IA)
-          </button>
-          <button onClick={handleGenerateExcel} style={{ flex: 1, background: "var(--color-primary)", color: "black", border: "none", padding: "15px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold", fontSize: "1.1rem" }}>
-            📥 Descargar Excel (Ciego)
-          </button>
-        </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px" }}>
+              {["total", "aleatorio", "recomendado", "inconsistencias"].map((type) => (
+                <label key={type} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", background: auditType === type ? "rgba(16, 185, 129, 0.2)" : "rgba(255,255,255,0.05)", borderRadius: "8px", cursor: "pointer" }}>
+                  <input type="radio" name="auditType" checked={auditType === type} onChange={() => setAuditType(type as any)} />
+                  <div style={{ flex: 1, textTransform: "capitalize" }}>
+                    <strong>{type === "inconsistencias" ? "Solo Inconsistencias" : `Arqueo ${type}`}</strong>
+                  </div>
+                  {type === "aleatorio" && auditType === "aleatorio" && (
+                    <input type="number" value={randomCount} onChange={(e) => setRandomCount(Number(e.target.value))} style={{ width: "60px", padding: "5px", background: "var(--glass-bg)", color: "white", border: "1px solid var(--color-primary)", borderRadius: "4px" }} />
+                  )}
+                </label>
+              ))}
+            </div>
+
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Filtro Específico (Bodega, Proveedor, Nombre):</label>
+              <input 
+                type="text" 
+                placeholder="Ej. Pasillo A, Truper, Martillo..." 
+                value={locationFilter}
+                onChange={(e) => setLocationFilter(e.target.value)}
+                style={{ width: "100%", padding: "10px", background: "var(--glass-bg)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "8px", color: "white" }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "15px", marginTop: "20px" }}>
+              <button onClick={handleInteractiveMode} style={{ flex: 1, background: "linear-gradient(135deg, #3b82f6, #8b5cf6)", color: "white", border: "none", padding: "15px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold", fontSize: "1.1rem" }}>
+                📱 Modo Interactivo (Voz IA)
+              </button>
+              <button onClick={handleGenerateExcel} style={{ flex: 1, background: "var(--color-primary)", color: "black", border: "none", padding: "15px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold", fontSize: "1.1rem" }}>
+                📥 Descargar Excel (Ciego)
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

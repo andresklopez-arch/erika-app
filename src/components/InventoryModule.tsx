@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams, useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
@@ -117,6 +117,12 @@ export default function InventoryModule() {
   const [editValue, setEditValue] = useState<string>("");
   const [hoveredCell, setHoveredCell] = useState<{ itemId: string; field: string } | null>(null);
   const [hoveredHeader, setHoveredHeader] = useState<string | null>(null);
+  const [lastManualChange, setLastManualChange] = useState<{
+    itemId: string;
+    field: string;
+    oldValue: any;
+    newValue: any;
+  } | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   
   const [undoStack, setUndoStack] = useState<any[][]>(() => {
@@ -542,6 +548,48 @@ export default function InventoryModule() {
     if (data) setDbSuppliers(data.map((s: any) => s.name));
   };
 
+  const handleUndoLastChange = async () => {
+    if (!lastManualChange) return;
+    const { itemId, field, oldValue } = lastManualChange;
+
+    const { error } = await supabase
+      .from("inventory")
+      .update({ [field]: oldValue })
+      .eq("id", itemId);
+
+    if (error) {
+      alert("❌ Error al deshacer cambio: " + error.message);
+    } else {
+      setItems((prev) =>
+        prev.map((item) => (item.id === itemId ? { ...item, [field]: oldValue } : item))
+      );
+      setAllItems((prev) =>
+        prev.map((item) => (item.id === itemId ? { ...item, [field]: oldValue } : item))
+      );
+      
+      const originalItem = allItems.find((i) => i.id === itemId);
+      if (originalItem) {
+        supabase.from("error_logs").insert({
+          module: "Inventario_Edicion_Manual",
+          error_details: `Deshacer edición inline: [${originalItem.code || "Sin código"}] ${originalItem.name} -> Revirtió "${field}" al valor anterior "${oldValue}"`,
+          usuario: currentUser?.name || "Administrador"
+        }).then((res: any) => {
+          if (res.error) console.error("Error al registrar auditoría:", res.error);
+        });
+      }
+
+      setLastManualChange(null);
+      alert("✅ Cambio revertido con éxito.");
+    }
+  };
+
+  const getSearchPlaceholder = () => {
+    if (selectedSupplierFilter) {
+      return `Buscar productos, códigos o ubicaciones en ${selectedSupplierFilter}...`;
+    }
+    return "Buscar por Nombre, Código de Barras, Ubicación o Proveedor (Ej: 'tornillo truper pasillo A')...";
+  };
+
   const handleSort = (colName: string) => {
     if (sortColumn === colName) {
       setSortAscending(!sortAscending);
@@ -602,6 +650,16 @@ export default function InventoryModule() {
     if (error) {
       alert("❌ Error al actualizar producto: " + error.message);
     } else {
+      // Guardar cambio para el deshacer
+      if (originalItem) {
+        setLastManualChange({
+          itemId,
+          field,
+          oldValue: originalItem[field as keyof InventoryItem],
+          newValue: finalValue
+        });
+      }
+
       // SUGERENCIA 3: Registro automático en el Historial de Auditoría (error_logs)
       const criticalFields = ["cost", "price", "stock", "supplier", "location", "code", "name"];
       if (criticalFields.includes(field) && originalItem) {
@@ -976,6 +1034,27 @@ export default function InventoryModule() {
   }, []);
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+        if (editingCell) return;
+        e.preventDefault();
+        handleUndoLastChange();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lastManualChange, editingCell]);
+
+  useEffect(() => {
+    if (lastManualChange) {
+      const timer = setTimeout(() => {
+        setLastManualChange(null);
+      }, 8000); // Ocultar notificación de deshacer tras 8 segundos
+      return () => clearTimeout(timer);
+    }
+  }, [lastManualChange]);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchQuery(searchQuery);
     }, 300);
@@ -1071,6 +1150,26 @@ export default function InventoryModule() {
       return () => clearTimeout(timer);
     }
   }, [mergedItemId]);
+
+  // SUGERENCIA 2: Búsqueda combinada inteligente (autocompletado prioritario por proveedor)
+  const searchSuggestions = useMemo(() => {
+    const query = debouncedSearchQuery.trim();
+    if (!query) return [];
+    const normQuery = normalizeString(query);
+    const matches = allItems.filter(item =>
+      normalizeString(item.name).includes(normQuery) ||
+      (item.code && normalizeString(item.code).includes(normQuery))
+    );
+    if (selectedSupplierFilter) {
+      matches.sort((a, b) => {
+        const aBelongs = a.supplier === selectedSupplierFilter ? 1 : 0;
+        const bBelongs = b.supplier === selectedSupplierFilter ? 1 : 0;
+        return bBelongs - aBelongs;
+      });
+    }
+    const unique = Array.from(new Set(matches.map(m => m.name)));
+    return unique.slice(0, 10);
+  }, [debouncedSearchQuery, allItems, selectedSupplierFilter]);
 
   const avgMargin =
     allItems.length > 0
@@ -1470,9 +1569,10 @@ export default function InventoryModule() {
             </span>
             <input
               type="text"
-              placeholder="Buscar por Nombre, Código de Barras, Ubicación o Proveedor (Ej: 'tornillo truper pasillo A')..."
+              placeholder={getSearchPlaceholder()}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              list="search-suggestions-datalist"
               style={{
                 width: "100%",
                 padding: "12px 20px 12px 45px",
@@ -1493,6 +1593,11 @@ export default function InventoryModule() {
                 e.currentTarget.style.boxShadow = "none";
               }}
             />
+            <datalist id="search-suggestions-datalist">
+              {searchSuggestions.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
@@ -2244,6 +2349,55 @@ export default function InventoryModule() {
             <span>👇 Desplazar hacia abajo</span>
           </div>
         </>
+      )}
+      {lastManualChange && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: "30px",
+            left: "30px",
+            background: "#18181b",
+            border: "1px solid var(--color-primary)",
+            boxShadow: "0 4px 15px rgba(244, 63, 94, 0.25)",
+            padding: "12px 20px",
+            borderRadius: "10px",
+            zIndex: 99999,
+            display: "flex",
+            alignItems: "center",
+            gap: "15px",
+            color: "white",
+            fontSize: "0.9rem",
+          }}
+        >
+          <span>✏️ Cambio realizado.</span>
+          <button
+            onClick={handleUndoLastChange}
+            className="btn-primary"
+            style={{
+              background: "var(--color-primary)",
+              border: "none",
+              padding: "5px 12px",
+              borderRadius: "5px",
+              color: "black",
+              cursor: "pointer",
+              fontWeight: "bold"
+            }}
+          >
+            ↩️ Deshacer (Ctrl+Z)
+          </button>
+          <button
+            onClick={() => setLastManualChange(null)}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "rgba(255,255,255,0.4)",
+              cursor: "pointer",
+              fontSize: "1rem"
+            }}
+          >
+            ✖
+          </button>
+        </div>
       )}
     </div>
   );
