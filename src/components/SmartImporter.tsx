@@ -900,6 +900,24 @@ export default function SmartImporter({
         }
       }
 
+      // SUGERENCIA 2: Resumen Analítico de Importación
+      const total = previewData.length;
+      const nuevos = previewData.filter(p => p.isNew).length;
+      const existentes = previewData.filter(p => !p.isNew).length;
+      const sinProveedor = previewData.filter(p => !p.supplier || p.supplier === "Pendiente" || p.supplier.trim() === "").length;
+      const conInflacion = previewData.filter(p => p.isInflation).length;
+
+      const confirmMessage = `📦 YoY IA ERIKA — RESUMEN ANALÍTICO DE IMPORTACIÓN\n\n` +
+        `Estás a punto de procesar los siguientes cambios en tu catálogo:\n` +
+        `• Total de artículos a procesar: ${total}\n` +
+        `• 🆕 Artículos nuevos que se crearán: ${nuevos}\n` +
+        `• 🔄 Artículos existentes que se actualizarán: ${existentes}\n` +
+        `• ⏳ Artículos que quedarán sin proveedor: ${sinProveedor}\n` +
+        `• ⚠️ Artículos detectados con incremento (Inflación): ${conInflacion}\n\n` +
+        `¿Confirmas que deseas aplicar estos cambios en tu base de datos?`;
+
+      if (!window.confirm(confirmMessage)) return;
+
       // Ya no se pregunta por proveedor global — viene del Excel por fila
       executeImport();
     }

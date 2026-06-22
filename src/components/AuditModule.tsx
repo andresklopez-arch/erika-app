@@ -25,6 +25,7 @@ export default function AuditModule({ onClose, inventory }: AuditModuleProps) {
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
   const [logSearchQuery, setLogSearchQuery] = useState("");
   const [logFilterType, setLogFilterType] = useState<"all" | "today" | "cost" | "price" | "stock">("all");
+  const [selectedChartDay, setSelectedChartDay] = useState<string | null>(null);
 
   const fetchManualAuditLogs = async () => {
     setIsLoadingLogs(true);
@@ -56,6 +57,16 @@ export default function AuditModule({ onClose, inventory }: AuditModuleProps) {
       result = result.filter(log => log.error_details.toLowerCase().includes("precio"));
     } else if (logFilterType === "stock") {
       result = result.filter(log => log.error_details.toLowerCase().includes("stock"));
+    }
+
+    // Filtrar por día seleccionado en el gráfico (Sugerencia 3)
+    if (selectedChartDay) {
+      const dayNames = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+      result = result.filter(log => {
+        const date = new Date(log.created_at);
+        const dayStr = `${dayNames[date.getDay()]} ${date.getDate()}`;
+        return dayStr === selectedChartDay;
+      });
     }
 
     // Filtrar por buscador
@@ -465,18 +476,25 @@ export default function AuditModule({ onClose, inventory }: AuditModuleProps) {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", height: "65px", padding: "0 5px" }}>
                     {logsByDay.map(({ day, count }) => {
                       const pct = (count / maxCount) * 100;
+                      const isSelected = selectedChartDay === day;
                       return (
                         <div key={day} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1, gap: "4px" }}>
                           <div 
+                            onClick={() => setSelectedChartDay(isSelected ? null : day)}
                             style={{ 
                               width: "16px", 
                               height: `${Math.max(pct * 0.45, 4)}px`, // Altura ajustada
-                              background: count > 0 ? "linear-gradient(180deg, var(--color-primary), rgba(16, 185, 129, 0.3))" : "rgba(255,255,255,0.05)", 
+                              background: isSelected 
+                                ? "var(--color-primary)" 
+                                : (count > 0 ? "linear-gradient(180deg, var(--color-primary), rgba(16, 185, 129, 0.3))" : "rgba(255,255,255,0.05)"), 
                               borderRadius: "2px 2px 0 0", 
-                              transition: "height 0.3s ease",
-                              position: "relative"
+                              transition: "height 0.3s ease, background 0.2s, box-shadow 0.2s",
+                              position: "relative",
+                              cursor: "pointer",
+                              boxShadow: isSelected ? "0 0 8px var(--color-primary)" : "none",
+                              border: isSelected ? "1px solid #ffffff" : "none"
                             }}
-                            title={`${count} cambios`}
+                            title={isSelected ? "Filtrado activo (clic para quitar)" : `${count} cambios (clic para filtrar)`}
                           >
                             {count > 0 && (
                               <span style={{ 
@@ -486,18 +504,41 @@ export default function AuditModule({ onClose, inventory }: AuditModuleProps) {
                                 transform: "translateX(-50%)", 
                                 fontSize: "0.6rem", 
                                 fontWeight: "bold", 
-                                color: "var(--color-primary)" 
+                                color: isSelected ? "#fff" : "var(--color-primary)" 
                               }}>
                                 {count}
                               </span>
                             )}
                           </div>
-                          <span style={{ fontSize: "0.6rem", opacity: 0.6 }}>{day}</span>
+                          <span style={{ fontSize: "0.6rem", opacity: isSelected ? 1 : 0.6, fontWeight: isSelected ? "bold" : "normal", color: isSelected ? "var(--color-primary)" : "inherit" }}>{day}</span>
                         </div>
                       );
                     })}
                   </div>
                 </div>
+
+                {/* Chip de filtro de día seleccionado (Sugerencia 3) */}
+                {selectedChartDay && (
+                  <div style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "rgba(16, 185, 129, 0.15)",
+                    border: "1px solid var(--color-primary)",
+                    color: "var(--color-primary)",
+                    padding: "4px 10px",
+                    borderRadius: "20px",
+                    fontSize: "0.75rem",
+                    fontWeight: "bold",
+                    marginBottom: "15px",
+                    cursor: "pointer"
+                  }}
+                  onClick={() => setSelectedChartDay(null)}
+                  title="Clic para limpiar filtro"
+                  >
+                    📅 Día seleccionado: {selectedChartDay} <span style={{ opacity: 0.6 }}>✖</span>
+                  </div>
+                )}
 
                 {isLoadingLogs ? (
                   <div style={{ padding: "30px", textAlign: "center", color: "var(--color-secondary)" }}>
