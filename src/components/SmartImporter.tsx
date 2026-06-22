@@ -35,6 +35,8 @@ export default function SmartImporter({
   const [activeSuggestRow, setActiveSuggestRow] = useState<number | null>(null);
   const [showNewSupplierModal, setShowNewSupplierModal] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false); // conservado por compatibilidad
+  const [dragRowIndex, setDragRowIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchSuppliers = async () => {
@@ -45,6 +47,70 @@ export default function SmartImporter({
   useEffect(() => {
     fetchSuppliers();
   }, []);
+
+  // 📋 SUGERENCIA 3: Escuchar Ctrl+V para pegar datos de Excel directo
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      // Solo activar si no hay un input activo (para no interferir con la edición de celdas)
+      const activeTag = document.activeElement?.tagName;
+      if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') return;
+      if (previewData) return; // Ya hay datos cargados
+
+      const text = e.clipboardData?.getData('text/plain');
+      if (!text || text.trim() === '') return;
+
+      const lines = text.trim().split('\n').map(l => l.split('\t'));
+      if (lines.length < 2) return; // Necesita al menos cabecera + 1 fila
+
+      e.preventDefault();
+      setIsProcessing(true);
+      setProgress('📋 Procesando datos pegados del portapapeles...');
+
+      setTimeout(() => {
+        const rawData = lines.map(row => row.map(cell => cell.trim()));
+        const headers = rawData[0].map((h, i) => h || `Columna ${i + 1}`);
+        setRawHeaders(headers);
+        setProcessedRawData(rawData);
+        setUploadedFile(null);
+
+        // Detectar columnas igual que en processExcel
+        let finalSupplierIdx = 0, finalCodeIdx = 1, finalNameIdx = 2;
+        let finalStockIdx = 3, finalCostIdx = 4, finalPriceIdx = 5, finalLocationIdx = 6;
+        let detectedSupplier = false, detectedCode = false, detectedName = false;
+        let detectedStock = false, detectedCost = false, detectedPrice = false;
+
+        headers.forEach((h, idx) => {
+          const val = h.toLowerCase().trim();
+          if (val.includes('prove') || val.includes('supplier') || val.includes('brand')) { finalSupplierIdx = idx; detectedSupplier = true; }
+          else if (val.includes('cod') || val.includes('sku') || val.includes('barr')) { finalCodeIdx = idx; detectedCode = true; }
+          else if (val.includes('nom') || val.includes('prod') || val.includes('desc') || val.includes('art')) { finalNameIdx = idx; detectedName = true; }
+          else if (val.includes('cant') || val.includes('stock') || val.includes('exis')) { finalStockIdx = idx; detectedStock = true; }
+          else if (val.includes('cost') || val.includes('comp') || val.includes('costo')) { finalCostIdx = idx; detectedCost = true; }
+          else if (val.includes('prec') || val.includes('vent') || val.includes('precio')) { finalPriceIdx = idx; detectedPrice = true; }
+          else if (val.includes('ubica') || val.includes('bod') || val.includes('loc')) { finalLocationIdx = idx; }
+        });
+
+        const source = {
+          supplier: detectedSupplier ? '🤖 Auto-detectado' : '📋 Plantilla Oficial',
+          code: detectedCode ? '🤖 Auto-detectado' : '📋 Plantilla Oficial',
+          name: detectedName ? '🤖 Auto-detectado' : '📋 Plantilla Oficial',
+          stock: detectedStock ? '🤖 Auto-detectado' : '📋 Plantilla Oficial',
+          cost: detectedCost ? '🤖 Auto-detectado' : '📋 Plantilla Oficial',
+          price: detectedPrice ? '🤖 Auto-detectado' : '📋 Plantilla Oficial',
+          location: '📋 Plantilla Oficial',
+        };
+        setDetectionSource(source);
+
+        const mapping = { supplier: finalSupplierIdx, code: finalCodeIdx, name: finalNameIdx, stock: finalStockIdx, cost: finalCostIdx, price: finalPriceIdx, location: finalLocationIdx };
+        setColumnMapping(mapping);
+        generatePreviewAndReturnWarnings(mapping, rawData);
+        setIsProcessing(false);
+      }, 400);
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [previewData, dbSuppliers, existingItems]);
 
   // NLP Limpiador: Quitar dobles espacios y capitalizar "tHINNEr" -> "Thinner"
   const cleanAndCapitalize = (str: string) => {
@@ -376,6 +442,34 @@ export default function SmartImporter({
         if (nextInput instanceof HTMLInputElement) nextInput.select();
       }
     }
+  };
+
+  // 🔀 SUGERENCIA 2: Drag & Drop para reordenar filas en la tabla de previsualización
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDragRowIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(index);
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (dragRowIndex === null || dragRowIndex === dropIndex || !previewData) return;
+    const newData = [...previewData];
+    const [moved] = newData.splice(dragRowIndex, 1);
+    newData.splice(dropIndex, 0, moved);
+    setPreviewData(newData);
+    setDragRowIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragRowIndex(null);
+    setDragOverIndex(null);
   };
 
   const highlightMatch = (text: string, query: string) => {
@@ -821,6 +915,28 @@ export default function SmartImporter({
     });
 
     onImport(finalProducts, importOption as any, accumulateStock);
+
+    // 📜 SUGERENCIA 1: Registrar historial de importación en Supabase
+    try {
+      const supplierBreakdown: Record<string, number> = {};
+      finalProducts.forEach(p => {
+        const sup = p.supplier || 'Pendiente';
+        supplierBreakdown[sup] = (supplierBreakdown[sup] || 0) + 1;
+      });
+      await supabase.from('import_logs').insert({
+        imported_at: new Date().toISOString(),
+        filename: uploadedFile ? uploadedFile.name : 'Pegado desde portapapeles',
+        total_articles: finalProducts.length,
+        import_option: importOption,
+        suppliers_breakdown: JSON.stringify(supplierBreakdown),
+        new_count: finalProducts.filter(p => p.isNew).length,
+        update_count: finalProducts.filter(p => !p.isNew).length,
+      });
+    } catch (err) {
+      // El historial es no-bloqueante; si falla la tabla no existe aún, no interrumpir
+      console.warn('Historial de importación no guardado (tabla import_logs no disponible):', err);
+    }
+
     onClose();
   };
 
@@ -964,6 +1080,7 @@ export default function SmartImporter({
                 >
                   <thead style={{ background: "rgba(255,255,255,0.05)" }}>
                     <tr style={{ color: "var(--color-secondary)", borderBottom: "1px solid rgba(255,255,255,0.2)" }}>
+                      <th style={{ padding: "8px", width: "28px", color: "rgba(255,255,255,0.3)", textAlign: "center" }} title="Arrastra para reordenar">☰</th>
                       <th style={{ padding: "8px" }}>
                         <div style={{ fontSize: "0.7rem", marginBottom: "4px" }}>{detectionSource.code}</div>
                         <select value={columnMapping.code} onChange={(e) => handleMappingChange("code", parseInt(e.target.value))} style={{ background: "rgba(0,0,0,0.5)", color: "white", border: "1px solid var(--glass-border)", borderRadius: "4px", padding: "2px", width: "100%", fontSize: "0.8rem" }}>
@@ -1009,11 +1126,28 @@ export default function SmartImporter({
                     {previewData.map((p, i) => (
                       <tr
                         key={i}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, i)}
+                        onDragOver={(e) => handleDragOver(e, i)}
+                        onDrop={(e) => handleDrop(e, i)}
+                        onDragEnd={handleDragEnd}
                         style={{
                           borderBottom: "1px solid rgba(255,255,255,0.05)",
-                          background: p.isInflation ? "rgba(239, 68, 68, 0.08)" : "transparent"
+                          background: dragOverIndex === i && dragRowIndex !== i
+                            ? "rgba(16,185,129,0.15)"
+                            : (p.isInflation ? "rgba(239, 68, 68, 0.08)" : "transparent"),
+                          opacity: dragRowIndex === i ? 0.4 : 1,
+                          transition: "background 0.15s, opacity 0.15s",
+                          cursor: "grab",
                         }}
                       >
+                        {/* Handle de drag */}
+                        <td
+                          style={{ padding: "8px", textAlign: "center", color: "rgba(255,255,255,0.25)", cursor: "grab", userSelect: "none", fontSize: "1rem" }}
+                          title="Arrastra para reordenar"
+                        >
+                          ⋮
+                        </td>
                         <td style={{ padding: "8px" }}>
                           <input 
                             id={`input-${i}-code`}
@@ -1700,7 +1834,6 @@ export default function SmartImporter({
                   }}
                 />
                 
-                {/* Zona de Arrastre visualmente premium */}
                 <div 
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={(e) => {
@@ -1739,6 +1872,31 @@ export default function SmartImporter({
                   <span style={{ fontSize: "3rem" }}>📁</span>
                   <strong style={{ color: "var(--color-primary)" }}>Seleccionar o arrastrar archivo aquí</strong>
                   <span style={{ fontSize: "0.8rem", opacity: 0.6 }}>Formatos: Excel, CSV, PDF o Imágenes (JPG, PNG)</span>
+                </div>
+
+                {/* Banner de Pegar desde Portapapeles */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    padding: "14px 18px",
+                    borderRadius: "10px",
+                    background: "rgba(99, 102, 241, 0.1)",
+                    border: "1px dashed rgba(99, 102, 241, 0.5)",
+                    cursor: "default",
+                  }}
+                >
+                  <span style={{ fontSize: "1.6rem" }}>📋</span>
+                  <div style={{ textAlign: "left" }}>
+                    <div style={{ fontWeight: "bold", color: "#a5b4fc", fontSize: "0.9rem" }}>
+                      ¿Tienes los datos en Excel? ¡Pégalos directo aquí!
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)", marginTop: "2px" }}>
+                      Copia las celdas en Excel → haz clic fuera de cualquier campo → presiona{" "}
+                      <kbd style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "4px", padding: "1px 6px", fontSize: "0.75rem", fontFamily: "monospace" }}>Ctrl+V</kbd>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
