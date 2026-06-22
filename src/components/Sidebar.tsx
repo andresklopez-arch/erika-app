@@ -157,10 +157,24 @@ export default function Sidebar() {
 
   return (
     <aside className={`glass-panel sidebar-container ${isPinned ? "pinned" : ""}`} style={{ padding: "15px 8px" }}>
-      <div className="menu-header">
-        <span className="nav-text" style={{ fontSize: "0.8rem", fontWeight: "bold", color: "var(--color-primary)", textTransform: "uppercase" }}>
-          Menú ERIKA
-        </span>
+      <div className="menu-header" style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <img 
+            src="/erika_avatar.png" 
+            alt="YoY IA ERIKA Logo" 
+            style={{ 
+              width: "28px", 
+              height: "28px", 
+              borderRadius: "50%", 
+              border: "1px solid var(--color-primary)",
+              boxShadow: "0 0 8px rgba(16, 185, 129, 0.2)",
+              objectFit: "cover"
+            }}
+          />
+          <span className="nav-text" style={{ fontSize: "0.8rem", fontWeight: "bold", color: "var(--color-primary)", textTransform: "uppercase" }}>
+            YoY IA ERIKA
+          </span>
+        </div>
         <button 
           onClick={() => setIsPinned(!isPinned)} 
           title={isPinned ? "Desfijar Menú" : "Fijar Menú Abierto"} 

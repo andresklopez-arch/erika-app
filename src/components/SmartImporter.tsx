@@ -575,7 +575,11 @@ export default function SmartImporter({
           return filledCells >= 2; // Al menos 2 columnas con datos
         });
 
-        if (rawData.length < 2) throw new Error("Documento vacío o sin suficientes datos");
+        if (rawData.length === 0) {
+          throw new Error("El archivo de Excel está vacío y no contiene ningún dato.");
+        } else if (rawData.length === 1) {
+          throw new Error("El archivo de Excel solo contiene la fila de encabezados. Por favor, agrega al menos una fila con los datos de tus productos antes de subirlo.");
+        }
 
         // Extraer Headers Virtuales para selectores
         let maxCols = 0;
@@ -679,9 +683,10 @@ export default function SmartImporter({
           const preview = generatePreviewAndReturnWarnings(mapping, rawData);
           setIsProcessing(false);
         }, 800);
-      } catch (err) {
+      } catch (err: any) {
         console.error("Error procesando Excel:", err);
-        alert("Error al leer el Excel. Asegúrate de que no esté dañado o encriptado y revisa las columnas.");
+        const errMsg = err?.message || "Error al leer el Excel. Asegúrate de que no esté dañado o encriptado y revisa las columnas.";
+        alert(errMsg.includes("encabezado") || errMsg.includes("vacío") ? `⚠️ ${errMsg}` : errMsg);
         setIsProcessing(false);
       }
     };

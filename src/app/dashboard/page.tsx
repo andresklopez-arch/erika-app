@@ -56,7 +56,7 @@ class ReportsErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <span style={{ fontSize: "2.5rem", display: "block", marginBottom: "10px" }}>⚠️</span>
           <h3 style={{ margin: "10px 0 5px 0", color: "#ef4444", fontWeight: "bold" }}>Error de conexión al cargar la Inteligencia</h3>
           <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.95rem", maxWidth: "450px", margin: "0 auto 20px auto", lineHeight: 1.4 }}>
-            No pudimos descargar el módulo de Inteligencia de Erika. Esto suele ocurrir por microcortes en la conexión a internet.
+            No pudimos descargar el módulo de Inteligencia de YoY IA Erika. Esto suele ocurrir por microcortes en la conexión a internet.
           </p>
           <button
             onClick={() => this.setState({ hasError: false })}
@@ -104,7 +104,7 @@ const ReportsModule = dynamic(() => import("../../components/ReportsModule"), {
         animation: "erika-spin 1s linear infinite",
         margin: "0 auto 15px auto"
       }}></div>
-      <span style={{ fontWeight: "bold", fontSize: "1.1rem" }}>Iniciando Erika AI...</span>
+      <span style={{ fontWeight: "bold", fontSize: "1.1rem" }}>Iniciando YoY IA Erika...</span>
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes erika-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
       `}} />
@@ -529,7 +529,7 @@ export default function Dashboard() {
             <p style={{ color: "var(--color-secondary)", margin: "5px 0 0 0", fontSize: "0.95rem" }}>
               {activeTab === "dashboard" 
                 ? "Métricas y KPIs en tiempo real" 
-                : "Consejos ERIKA, Autofacturación y Marketing"}
+                : "Consejos YoY IA ERIKA, Autofacturación y Marketing"}
             </p>
           </div>
 
@@ -972,7 +972,7 @@ export default function Dashboard() {
                           textShadow: "0 0 15px var(--color-primary)",
                         }}
                       >
-                        ERIKA
+                        YoY IA ERIKA
                       </span>
                     </h2>
                     <span
