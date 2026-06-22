@@ -298,25 +298,30 @@ export default function SmartImporter({
          stockHasError = true;
       }
       
-      // Obtener el precio de la columna mapeada si está definida, de lo contrario auto-calcular
+      let priceHasError = false;
       let finalPrice = (mapping.price !== undefined && mapping.price !== -1 && row[mapping.price] !== undefined) ? row[mapping.price] : undefined;
       let autoPriced = true;
-      if (finalPrice === undefined || finalPrice === null || String(finalPrice).trim() === "") {
+      const priceIsEmpty = finalPrice === undefined || finalPrice === null || String(finalPrice).trim() === "";
+      if (priceIsEmpty) {
         finalPrice = smartPrices.price;
         autoPriced = true;
       } else {
-        const cleanedStr = String(finalPrice).replace(/[^0-9.-]+/g, "");
-        if (cleanedStr === "") {
+        let numericPrice = Number(finalPrice);
+        if (isNaN(numericPrice) && typeof finalPrice === "string") {
+          const cleanedStr = String(finalPrice).replace(/[^0-9.-]+/g, "");
+          if (cleanedStr === "") {
+            numericPrice = NaN;
+          } else {
+            numericPrice = Number(cleanedStr);
+          }
+        }
+        if (isNaN(numericPrice)) {
           finalPrice = smartPrices.price;
           autoPriced = true;
+          priceHasError = true;
         } else {
-          finalPrice = Number(cleanedStr);
-          if (isNaN(finalPrice)) {
-            finalPrice = smartPrices.price;
-            autoPriced = true;
-          } else {
-            autoPriced = false;
-          }
+          finalPrice = numericPrice;
+          autoPriced = false;
         }
       }
 
@@ -353,6 +358,7 @@ export default function SmartImporter({
         prevCost: smartPrices.prevCost,
         isFuzzy: smartPrices.isFuzzy || isFuzzy,
         originalExistingName: smartPrices.originalExistingName || (existing ? existing.name : undefined),
+        priceHasError,
         costHasError,
         stockHasError,
         costIsEmpty,
@@ -847,6 +853,26 @@ export default function SmartImporter({
         return;
       }
 
+      // SUGERENCIA 1: Validación semántica de valores no numéricos o negativos en la carga
+      const invalidRows = previewData.filter(p => 
+        p.costHasError || p.stockHasError || p.priceHasError || 
+        p.cost < 0 || p.price < 0 || p.stock < 0
+      );
+      if (invalidRows.length > 0) {
+        const rowDetails = invalidRows.slice(0, 5).map(p => {
+          const reasons = [];
+          if (p.costHasError) reasons.push("Costo no numérico");
+          else if (p.cost < 0) reasons.push("Costo negativo");
+          if (p.stockHasError) reasons.push("Stock no numérico");
+          else if (p.stock < 0) reasons.push("Stock negativo");
+          if (p.priceHasError) reasons.push("Precio no numérico");
+          else if (p.price < 0) reasons.push("Precio negativo");
+          return `- "${p.name}": ${reasons.join(", ")}`;
+        }).join("\n");
+        alert(`⚠️ Hay ${invalidRows.length} producto(s) con valores no numéricos o negativos en Costo, Stock o Precio. Corrígelos en la tabla antes de importar.\n\nEjemplos:\n${rowDetails}`);
+        return;
+      }
+
       // Advertir si hay artículos sin proveedor
       const emptySup = previewData.filter(p => !p.supplier || p.supplier === "Pendiente" || p.supplier.trim() === "");
       if (emptySup.length > 0) {
@@ -1327,19 +1353,19 @@ export default function SmartImporter({
                                 type="number" 
                                 value={p.price} 
                                 onChange={(e) => {
-                                  handleEditRow(i, { price: Number(e.target.value), autoPriced: false });
+                                  handleEditRow(i, { price: Number(e.target.value), autoPriced: false, priceHasError: false });
                                 }}
                                 onKeyDown={(e) => handleKeyDown(e, i, 'price')}
                                 style={{ 
                                   width: "70px", 
-                                  background: "transparent", 
-                                  border: p.hasLoss ? "1px solid #ef4444" : "1px dashed var(--color-primary)", 
-                                  color: p.hasLoss ? "#ef4444" : "var(--color-secondary)", 
+                                  background: p.priceHasError ? "rgba(239, 68, 68, 0.2)" : "transparent", 
+                                  border: p.priceHasError ? "2px solid #ef4444" : (p.hasLoss ? "1px solid #ef4444" : "1px dashed var(--color-primary)"), 
+                                  color: p.priceHasError ? "#ef4444" : (p.hasLoss ? "#ef4444" : "var(--color-secondary)"), 
                                   padding: "2px 4px", 
                                   borderRadius: "4px", 
                                   fontWeight: "bold" 
                                 }}
-                                title={p.hasLoss ? "¡Alerta de Pérdida! El precio de venta sugerido es menor o igual al costo." : ""}
+                                title={p.priceHasError ? "Error: Valor no numérico detectado" : (p.hasLoss ? "¡Alerta de Pérdida! El precio de venta sugerido es menor o igual al costo." : "")}
                               />
                             </div>
                             {p.hasLoss && (

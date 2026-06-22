@@ -376,106 +376,186 @@ export default function AuditModule({ onClose, inventory }: AuditModuleProps) {
         </div>
 
         {activeTab === "logs" ? (
-          <div>
-            <p style={{ opacity: 0.8, marginBottom: "15px", fontSize: "0.9rem" }}>
-              Mostrando los cambios manuales en la tabla de inventario (auditoría en la nube).
-            </p>
+          (() => {
+            // Generar datos agrupados por día de la semana para los últimos 7 días
+            const getLogsByDay = () => {
+              const daysData: Record<string, number> = {};
+              const dayNames = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+              
+              // Inicializar los últimos 7 días con valor 0
+              for (let i = 6; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                const key = `${dayNames[d.getDay()]} ${d.getDate()}`;
+                daysData[key] = 0;
+              }
 
-            {/* Buscador y filtro para la bitácora */}
-            <div style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
-              <input 
-                type="text" 
-                placeholder="Filtrar bitácora por producto o usuario..." 
-                value={logSearchQuery}
-                onChange={e => setLogSearchQuery(e.target.value)}
-                style={{
-                  flex: 2,
-                  padding: "8px 12px",
-                  borderRadius: "6px",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  background: "rgba(0,0,0,0.3)",
-                  color: "white",
-                  fontSize: "0.85rem",
-                  outline: "none"
-                }}
-              />
-              <select
-                value={logFilterType}
-                onChange={e => setLogFilterType(e.target.value as any)}
-                style={{
-                  flex: 1,
-                  padding: "8px 12px",
-                  borderRadius: "6px",
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  background: "rgba(0,0,0,0.3)",
-                  color: "white",
-                  fontSize: "0.85rem",
-                  outline: "none"
-                }}
-              >
-                <option value="all">📅 Todos los días</option>
-                <option value="today">☀️ Solo Hoy</option>
-                <option value="cost">💰 Cambios de Costo</option>
-                <option value="price">🏷️ Cambios de Precio</option>
-                <option value="stock">📦 Cambios de Stock</option>
-              </select>
-            </div>
+              // Contar los registros reales cargados en memoria
+              logs.forEach(log => {
+                const date = new Date(log.created_at);
+                const key = `${dayNames[date.getDay()]} ${date.getDate()}`;
+                if (daysData[key] !== undefined) {
+                  daysData[key] += 1;
+                }
+              });
 
-            {isLoadingLogs ? (
-              <div style={{ padding: "30px", textAlign: "center", color: "var(--color-secondary)" }}>
-                ⏳ Cargando registros de auditoría...
-              </div>
-            ) : getFilteredLogs().length === 0 ? (
-              <div style={{ padding: "30px", textAlign: "center", color: "rgba(255,255,255,0.4)", border: "1px dashed rgba(255,255,255,0.1)", borderRadius: "8px" }}>
-                📭 No hay registros de cambios manuales que coincidan.
-              </div>
-            ) : (
-              <div style={{ maxHeight: "300px", overflowY: "auto", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", background: "rgba(0,0,0,0.2)" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", textAlign: "left" }}>
-                  <thead>
-                    <tr style={{ background: "rgba(255,255,255,0.05)", borderBottom: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)" }}>
-                      <th style={{ padding: "10px" }}>Fecha</th>
-                      <th style={{ padding: "10px" }}>Usuario</th>
-                      <th style={{ padding: "10px" }}>Detalles del Cambio</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {getFilteredLogs().map((log) => {
-                      const date = new Date(log.created_at);
-                      const formattedDate = date.toLocaleString("es-ES", {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit"
-                      });
+              return Object.entries(daysData).map(([day, count]) => ({ day, count }));
+            };
+
+            const logsByDay = getLogsByDay();
+            const maxCount = Math.max(...logsByDay.map(d => d.count), 1);
+
+            return (
+              <div>
+                <p style={{ opacity: 0.8, marginBottom: "15px", fontSize: "0.9rem" }}>
+                  Mostrando los cambios manuales en la tabla de inventario (auditoría en la nube).
+                </p>
+
+                {/* Buscador y filtro para la bitácora */}
+                <div style={{ display: "flex", gap: "10px", marginBottom: "15px" }}>
+                  <input 
+                    type="text" 
+                    placeholder="Filtrar bitácora por producto o usuario..." 
+                    value={logSearchQuery}
+                    onChange={e => setLogSearchQuery(e.target.value)}
+                    style={{
+                      flex: 2,
+                      padding: "8px 12px",
+                      borderRadius: "6px",
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      background: "rgba(0,0,0,0.3)",
+                      color: "white",
+                      fontSize: "0.85rem",
+                      outline: "none"
+                    }}
+                  />
+                  <select
+                    value={logFilterType}
+                    onChange={e => setLogFilterType(e.target.value as any)}
+                    style={{
+                      flex: 1,
+                      padding: "8px 12px",
+                      borderRadius: "6px",
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      background: "rgba(0,0,0,0.3)",
+                      color: "white",
+                      fontSize: "0.85rem",
+                      outline: "none"
+                    }}
+                  >
+                    <option value="all">📅 Todos los días</option>
+                    <option value="today">☀️ Solo Hoy</option>
+                    <option value="cost">💰 Cambios de Costo</option>
+                    <option value="price">🏷️ Cambios de Precio</option>
+                    <option value="stock">📦 Cambios de Stock</option>
+                  </select>
+                </div>
+
+                {/* Gráfico de Actividad de Cambios */}
+                <div style={{ 
+                  background: "rgba(255, 255, 255, 0.02)", 
+                  border: "1px solid rgba(255, 255, 255, 0.06)", 
+                  borderRadius: "10px", 
+                  padding: "12px 15px", 
+                  marginBottom: "15px" 
+                }}>
+                  <h4 style={{ margin: "0 0 10px 0", color: "var(--color-primary)", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    📊 Actividad de Modificaciones Manuales (Últimos 7 Días)
+                  </h4>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", height: "65px", padding: "0 5px" }}>
+                    {logsByDay.map(({ day, count }) => {
+                      const pct = (count / maxCount) * 100;
                       return (
-                        <tr key={log.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
-                          <td style={{ padding: "10px", whiteSpace: "nowrap", opacity: 0.7 }}>{formattedDate}</td>
-                          <td style={{ padding: "10px", fontWeight: "bold", color: "#6ee7b7" }}>{log.usuario}</td>
-                          <td style={{ padding: "10px", color: "rgba(255,255,255,0.9)" }}>{log.error_details}</td>
-                        </tr>
+                        <div key={day} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1, gap: "4px" }}>
+                          <div 
+                            style={{ 
+                              width: "16px", 
+                              height: `${Math.max(pct * 0.45, 4)}px`, // Altura ajustada
+                              background: count > 0 ? "linear-gradient(180deg, var(--color-primary), rgba(16, 185, 129, 0.3))" : "rgba(255,255,255,0.05)", 
+                              borderRadius: "2px 2px 0 0", 
+                              transition: "height 0.3s ease",
+                              position: "relative"
+                            }}
+                            title={`${count} cambios`}
+                          >
+                            {count > 0 && (
+                              <span style={{ 
+                                position: "absolute", 
+                                top: "-14px", 
+                                left: "50%", 
+                                transform: "translateX(-50%)", 
+                                fontSize: "0.6rem", 
+                                fontWeight: "bold", 
+                                color: "var(--color-primary)" 
+                              }}>
+                                {count}
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ fontSize: "0.6rem", opacity: 0.6 }}>{day}</span>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </div>
+                </div>
+
+                {isLoadingLogs ? (
+                  <div style={{ padding: "30px", textAlign: "center", color: "var(--color-secondary)" }}>
+                    ⏳ Cargando registros de auditoría...
+                  </div>
+                ) : getFilteredLogs().length === 0 ? (
+                  <div style={{ padding: "30px", textAlign: "center", color: "rgba(255,255,255,0.4)", border: "1px dashed rgba(255,255,255,0.1)", borderRadius: "8px" }}>
+                    📭 No hay registros de cambios manuales que coincidan.
+                  </div>
+                ) : (
+                  <div style={{ maxHeight: "250px", overflowY: "auto", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", background: "rgba(0,0,0,0.2)" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", textAlign: "left" }}>
+                      <thead>
+                        <tr style={{ background: "rgba(255,255,255,0.05)", borderBottom: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.6)" }}>
+                          <th style={{ padding: "10px" }}>Fecha</th>
+                          <th style={{ padding: "10px" }}>Usuario</th>
+                          <th style={{ padding: "10px" }}>Detalles del Cambio</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {getFilteredLogs().map((log) => {
+                          const date = new Date(log.created_at);
+                          const formattedDate = date.toLocaleString("es-ES", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          });
+                          return (
+                            <tr key={log.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                              <td style={{ padding: "10px", whiteSpace: "nowrap", opacity: 0.7 }}>{formattedDate}</td>
+                              <td style={{ padding: "10px", fontWeight: "bold", color: "#6ee7b7" }}>{log.usuario}</td>
+                              <td style={{ padding: "10px", color: "rgba(255,255,255,0.9)" }}>{log.error_details}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
+                  <button 
+                    onClick={fetchManualAuditLogs} 
+                    style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.2)", color: "white", padding: "12px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
+                  >
+                    🔄 Actualizar
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab("arqueo")} 
+                    className="btn-primary" 
+                    style={{ flex: 1, background: "var(--color-primary)", border: "none", color: "black", padding: "12px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
+                  >
+                    ⬅️ Volver a Arqueo
+                  </button>
+                </div>
               </div>
-            )}
-            <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
-              <button 
-                onClick={fetchManualAuditLogs} 
-                style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.2)", color: "white", padding: "12px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
-              >
-                🔄 Actualizar
-              </button>
-              <button 
-                onClick={() => setActiveTab("arqueo")} 
-                className="btn-primary" 
-                style={{ flex: 1, background: "var(--color-primary)", border: "none", color: "black", padding: "12px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
-              >
-                ⬅️ Volver a Arqueo
-              </button>
-            </div>
-          </div>
+            );
+          })()
         ) : (
           <>
             {lastAuditDate && (

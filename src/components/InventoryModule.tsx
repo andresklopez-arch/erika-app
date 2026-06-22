@@ -123,6 +123,7 @@ export default function InventoryModule() {
     oldValue: any;
     newValue: any;
   } | null>(null);
+  const [isReverting, setIsReverting] = useState<boolean>(false);
   const panelRef = useRef<HTMLDivElement>(null);
   
   const [undoStack, setUndoStack] = useState<any[][]>(() => {
@@ -552,34 +553,39 @@ export default function InventoryModule() {
     if (!lastManualChange) return;
     const { itemId, field, oldValue } = lastManualChange;
 
-    const { error } = await supabase
-      .from("inventory")
-      .update({ [field]: oldValue })
-      .eq("id", itemId);
+    setIsReverting(true);
+    try {
+      const { error } = await supabase
+        .from("inventory")
+        .update({ [field]: oldValue })
+        .eq("id", itemId);
 
-    if (error) {
-      alert("❌ Error al deshacer cambio: " + error.message);
-    } else {
-      setItems((prev) =>
-        prev.map((item) => (item.id === itemId ? { ...item, [field]: oldValue } : item))
-      );
-      setAllItems((prev) =>
-        prev.map((item) => (item.id === itemId ? { ...item, [field]: oldValue } : item))
-      );
-      
-      const originalItem = allItems.find((i) => i.id === itemId);
-      if (originalItem) {
-        supabase.from("error_logs").insert({
-          module: "Inventario_Edicion_Manual",
-          error_details: `Deshacer edición inline: [${originalItem.code || "Sin código"}] ${originalItem.name} -> Revirtió "${field}" al valor anterior "${oldValue}"`,
-          usuario: currentUser?.name || "Administrador"
-        }).then((res: any) => {
-          if (res.error) console.error("Error al registrar auditoría:", res.error);
-        });
+      if (error) {
+        alert("❌ Error al deshacer cambio: " + error.message);
+      } else {
+        setItems((prev) =>
+          prev.map((item) => (item.id === itemId ? { ...item, [field]: oldValue } : item))
+        );
+        setAllItems((prev) =>
+          prev.map((item) => (item.id === itemId ? { ...item, [field]: oldValue } : item))
+        );
+        
+        const originalItem = allItems.find((i) => i.id === itemId);
+        if (originalItem) {
+          await supabase.from("error_logs").insert({
+            module: "Inventario_Edicion_Manual",
+            error_details: `Deshacer edición inline: [${originalItem.code || "Sin código"}] ${originalItem.name} -> Revirtió "${field}" al valor anterior "${oldValue}"`,
+            usuario: currentUser?.name || "Administrador"
+          });
+        }
+
+        setLastManualChange(null);
+        alert("✅ Cambio revertido con éxito.");
       }
-
-      setLastManualChange(null);
-      alert("✅ Cambio revertido con éxito.");
+    } catch (e: any) {
+      console.error(e);
+    } finally {
+      setIsReverting(false);
     }
   };
 
@@ -2397,6 +2403,39 @@ export default function InventoryModule() {
           >
             ✖
           </button>
+        </div>
+      )}
+      {isReverting && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0, 0, 0, 0.55)",
+          backdropFilter: "blur(4px)",
+          zIndex: 999999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: "15px",
+          color: "white"
+        }}>
+          <div style={{
+            border: "4px solid rgba(255,255,255,0.1)",
+            width: "40px",
+            height: "40px",
+            borderRadius: "50%",
+            borderLeftColor: "var(--color-primary)",
+            animation: "erika-spin 1s linear infinite"
+          }}></div>
+          <span style={{ fontWeight: "bold", fontSize: "1.1rem", textShadow: "0 2px 10px rgba(0,0,0,0.5)" }}>
+            🔮 Revirtiendo cambio en la base de datos...
+          </span>
+          <style dangerouslySetInnerHTML={{__html: `
+            @keyframes erika-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+          `}} />
         </div>
       )}
     </div>
