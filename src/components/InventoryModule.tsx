@@ -554,13 +554,23 @@ export default function InventoryModule() {
   const handleUpdateField = async (itemId: string, field: string, value: any) => {
     let finalValue = value;
     
-    // Type casting and validation
+    // Type casting and validation (SUGERENCIA 1: Validación preventiva de valores negativos)
     if (field === "stock") {
       finalValue = parseInt(value);
       if (isNaN(finalValue)) finalValue = 0;
+      if (finalValue < 0) {
+        alert("⚠️ El stock no puede ser un número negativo.");
+        setEditingCell(null);
+        return;
+      }
     } else if (field === "cost" || field === "price") {
       finalValue = parseFloat(value);
       if (isNaN(finalValue)) finalValue = 0;
+      if (finalValue < 0) {
+        alert(`⚠️ El ${field === "cost" ? "costo" : "precio"} no puede ser menor a 0.`);
+        setEditingCell(null);
+        return;
+      }
     } else if (field === "name") {
       finalValue = String(value).trim();
       if (!finalValue) {
@@ -592,6 +602,33 @@ export default function InventoryModule() {
     if (error) {
       alert("❌ Error al actualizar producto: " + error.message);
     } else {
+      // SUGERENCIA 3: Registro automático en el Historial de Auditoría (error_logs)
+      const criticalFields = ["cost", "price", "stock", "supplier", "location", "code", "name"];
+      if (criticalFields.includes(field) && originalItem) {
+        const fieldLabels: Record<string, string> = {
+          cost: "Costo",
+          price: "Precio",
+          stock: "Stock",
+          supplier: "Proveedor",
+          location: "Ubicación",
+          code: "Código de Barras",
+          name: "Nombre"
+        };
+        const label = fieldLabels[field] || field;
+        const oldVal = originalItem[field as keyof InventoryItem] === undefined || originalItem[field as keyof InventoryItem] === null ? "N/A" : String(originalItem[field as keyof InventoryItem]);
+        const newVal = String(finalValue);
+
+        if (oldVal !== newVal) {
+          supabase.from("error_logs").insert({
+            module: "Inventario_Edicion_Manual",
+            error_details: `Edición inline: [${originalItem.code || "Sin código"}] ${originalItem.name} -> Cambió "${label}" de "${oldVal}" a "${newVal}"`,
+            usuario: currentUser?.name || "Administrador"
+          }).then((res: any) => {
+            if (res.error) console.error("Error al registrar auditoría:", res.error);
+          });
+        }
+      }
+
       setItems((prev) =>
         prev.map((item) => (item.id === itemId ? { ...item, ...updateObj } : item))
       );
@@ -678,11 +715,43 @@ export default function InventoryModule() {
     field: keyof InventoryItem, 
     type: "text" | "number" = "text", 
     isBold = false,
-    colorOverride?: string
+    colorOverride?: string,
+    rowIndex = 0
   ) => {
     const isEditing = editingCell?.itemId === item.id && editingCell?.field === field;
     const isHovered = hoveredCell?.itemId === item.id && hoveredCell?.field === field;
     const value = item[field] === undefined || item[field] === null ? "" : String(item[field]);
+
+    // SUGERENCIA 2: Manejo de navegación por teclado (ArrowUp / ArrowDown)
+    const handleNavigationKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, currentVal: string) => {
+      if (e.key === "Enter") {
+        handleUpdateField(item.id, field, currentVal);
+      } else if (e.key === "Escape") {
+        setEditingCell(null);
+      } else if (e.key === "ArrowDown" && field !== "supplier" && field !== "location") {
+        e.preventDefault();
+        handleUpdateField(item.id, field, currentVal);
+        const nextRowIndex = rowIndex + 1;
+        if (nextRowIndex < items.length) {
+          const nextItem = items[nextRowIndex];
+          setTimeout(() => {
+            setEditingCell({ itemId: nextItem.id, field });
+            setEditValue(nextItem[field as keyof InventoryItem] === undefined || nextItem[field as keyof InventoryItem] === null ? "" : String(nextItem[field as keyof InventoryItem]));
+          }, 100);
+        }
+      } else if (e.key === "ArrowUp" && field !== "supplier" && field !== "location") {
+        e.preventDefault();
+        handleUpdateField(item.id, field, currentVal);
+        const prevRowIndex = rowIndex - 1;
+        if (prevRowIndex >= 0) {
+          const prevItem = items[prevRowIndex];
+          setTimeout(() => {
+            setEditingCell({ itemId: prevItem.id, field });
+            setEditValue(prevItem[field as keyof InventoryItem] === undefined || prevItem[field as keyof InventoryItem] === null ? "" : String(prevItem[field as keyof InventoryItem]));
+          }, 100);
+        }
+      }
+    };
 
     if (isEditing) {
       if (field === "supplier") {
@@ -697,13 +766,7 @@ export default function InventoryModule() {
                   handleUpdateField(item.id, "supplier", editValue);
                 }, 200);
               }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleUpdateField(item.id, "supplier", editValue);
-                } else if (e.key === "Escape") {
-                  setEditingCell(null);
-                }
-              }}
+              onKeyDown={(e) => handleNavigationKeyDown(e, editValue)}
               autoFocus
               style={{
                 width: "100%",
@@ -740,13 +803,7 @@ export default function InventoryModule() {
                   handleUpdateField(item.id, "location", editValue);
                 }, 200);
               }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleUpdateField(item.id, "location", editValue);
-                } else if (e.key === "Escape") {
-                  setEditingCell(null);
-                }
-              }}
+              onKeyDown={(e) => handleNavigationKeyDown(e, editValue)}
               autoFocus
               style={{
                 width: "100%",
@@ -776,13 +833,7 @@ export default function InventoryModule() {
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={() => handleUpdateField(item.id, field, editValue)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              handleUpdateField(item.id, field, editValue);
-            } else if (e.key === "Escape") {
-              setEditingCell(null);
-            }
-          }}
+          onKeyDown={(e) => handleNavigationKeyDown(e, editValue)}
           autoFocus
           style={{
             width: type === "number" ? "80px" : "100%",
@@ -1778,7 +1829,7 @@ export default function InventoryModule() {
               </tr>
             </thead>
             <tbody>
-              {filteredItems.map((item) => {
+              {filteredItems.map((item, rowIndex) => {
                 const isRecentlyMerged = mergedItemId === item.id;
                 const rowBg =
                   isRecentlyMerged
@@ -1804,16 +1855,16 @@ export default function InventoryModule() {
                         color: "var(--color-primary)",
                       }}
                     >
-                      {renderEditableCell(item, "code", "text", true, "var(--color-primary)")}
+                      {renderEditableCell(item, "code", "text", true, "var(--color-primary)", rowIndex)}
                     </td>
                     <td style={{ padding: "15px", fontWeight: "bold" }}>
-                      {renderEditableCell(item, "name", "text", true)}
+                      {renderEditableCell(item, "name", "text", true, undefined, rowIndex)}
                     </td>
                     <td style={{ padding: "15px" }}>
-                      {renderEditableCell(item, "supplier", "text")}
+                      {renderEditableCell(item, "supplier", "text", false, undefined, rowIndex)}
                     </td>
                     <td style={{ padding: "15px" }}>
-                      {renderEditableCell(item, "location", "text")}
+                      {renderEditableCell(item, "location", "text", false, undefined, rowIndex)}
                     </td>
                     <td
                       style={{
@@ -1823,10 +1874,10 @@ export default function InventoryModule() {
                           item.stock <= item.minStock ? "#ef4444" : "inherit",
                       }}
                     >
-                      {renderEditableCell(item, "stock", "number", true, item.stock <= item.minStock ? "#ef4444" : undefined)}
+                      {renderEditableCell(item, "stock", "number", true, item.stock <= item.minStock ? "#ef4444" : undefined, rowIndex)}
                     </td>
                     <td style={{ padding: "15px" }}>
-                      {renderEditableCell(item, "cost", "number")}
+                      {renderEditableCell(item, "cost", "number", false, undefined, rowIndex)}
                     </td>
                     <td style={{ padding: "15px" }}>
                       <div
@@ -1836,7 +1887,7 @@ export default function InventoryModule() {
                           gap: "8px",
                         }}
                       >
-                        {renderEditableCell(item, "price", "number", true, item.autoPriced ? "var(--color-secondary)" : "white")}
+                        {renderEditableCell(item, "price", "number", true, item.autoPriced ? "var(--color-secondary)" : "white", rowIndex)}
                       </div>
                     </td>
                     <td style={{ padding: "15px", color: "var(--color-secondary)", fontWeight: "bold" }}>
