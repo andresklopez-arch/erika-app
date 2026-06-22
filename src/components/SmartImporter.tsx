@@ -1294,6 +1294,47 @@ export default function SmartImporter({
                             )}
                           </div>
                         </td>
+                        {/* Columna PROVEEDOR editable con autocomplete */}
+                        <td style={{ padding: "8px", borderLeft: "2px solid rgba(251,146,60,0.3)" }}>
+                          <div style={{ position: "relative" }}>
+                            <input
+                              id={`input-${i}-supplier`}
+                              type="text"
+                              value={p.supplier === "Pendiente" ? "" : (p.supplier || "")}
+                              placeholder="Proveedor..."
+                              onChange={(e) => handleEditRow(i, { supplier: e.target.value || "Pendiente" })}
+                              onFocus={() => setActiveSuggestRow(i + 10000)}
+                              onBlur={() => setTimeout(() => setActiveSuggestRow(null), 250)}
+                              onKeyDown={(e) => handleKeyDown(e, i, 'supplier')}
+                              style={{
+                                width: "100%",
+                                minWidth: "90px",
+                                background: (!p.supplier || p.supplier === "Pendiente") ? "rgba(239,68,68,0.12)" : (p.isUnknownSupplier ? "rgba(251,146,60,0.15)" : "rgba(16,185,129,0.1)"),
+                                border: (!p.supplier || p.supplier === "Pendiente") ? "1px solid rgba(239,68,68,0.4)" : (p.isUnknownSupplier ? "1px solid rgba(251,146,60,0.5)" : "1px solid rgba(16,185,129,0.4)"),
+                                color: (!p.supplier || p.supplier === "Pendiente") ? "#f87171" : (p.isUnknownSupplier ? "#fb923c" : "#6ee7b7"),
+                                padding: "3px 6px",
+                                borderRadius: "6px",
+                                fontSize: "0.75rem",
+                                fontWeight: "600",
+                              }}
+                              title={p.isUnknownSupplier ? `"${p.supplier}" es nuevo — se registrará automáticamente` : ""}
+                            />
+                            {/* Autocomplete dropdown del proveedor */}
+                            {activeSuggestRow === i + 10000 && dbSuppliers.filter(s => s.toLowerCase().includes((p.supplier || "").toLowerCase()) && p.supplier !== "Pendiente" && p.supplier !== "").length > 0 && (
+                              <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#1a1a1a", border: "1px solid #fb923c", borderRadius: "6px", zIndex: 200, maxHeight: "120px", overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.6)" }}>
+                                {dbSuppliers.filter(s => s.toLowerCase().includes((p.supplier || "").toLowerCase())).slice(0, 8).map((s, si) => (
+                                  <div
+                                    key={si}
+                                    onMouseDown={() => handleEditRow(i, { supplier: s, isUnknownSupplier: false })}
+                                    style={{ padding: "6px 8px", cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: "0.75rem", color: "#6ee7b7" }}
+                                  >
+                                    🏢 {s}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </td>
                         <td style={{ padding: "8px" }}>
                           <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                             <input 
@@ -1388,47 +1429,6 @@ export default function SmartImporter({
                             </div>
                             {p.hasLoss && (
                               <span style={{ fontSize: "0.55rem", color: "#ef4444", fontWeight: "bold" }}>⚠️ Sin Margen / Pérdida</span>
-                            )}
-                          </div>
-                        </td>
-                        {/* Columna PROVEEDOR editable con autocomplete */}
-                        <td style={{ padding: "8px", borderLeft: "2px solid rgba(251,146,60,0.3)" }}>
-                          <div style={{ position: "relative" }}>
-                            <input
-                              id={`input-${i}-supplier`}
-                              type="text"
-                              value={p.supplier === "Pendiente" ? "" : (p.supplier || "")}
-                              placeholder="Proveedor..."
-                              onChange={(e) => handleEditRow(i, { supplier: e.target.value || "Pendiente" })}
-                              onFocus={() => setActiveSuggestRow(i + 10000)}
-                              onBlur={() => setTimeout(() => setActiveSuggestRow(null), 250)}
-                              onKeyDown={(e) => handleKeyDown(e, i, 'supplier')}
-                              style={{
-                                width: "100%",
-                                minWidth: "90px",
-                                background: (!p.supplier || p.supplier === "Pendiente") ? "rgba(239,68,68,0.12)" : (p.isUnknownSupplier ? "rgba(251,146,60,0.15)" : "rgba(16,185,129,0.1)"),
-                                border: (!p.supplier || p.supplier === "Pendiente") ? "1px solid rgba(239,68,68,0.4)" : (p.isUnknownSupplier ? "1px solid rgba(251,146,60,0.5)" : "1px solid rgba(16,185,129,0.4)"),
-                                color: (!p.supplier || p.supplier === "Pendiente") ? "#f87171" : (p.isUnknownSupplier ? "#fb923c" : "#6ee7b7"),
-                                padding: "3px 6px",
-                                borderRadius: "6px",
-                                fontSize: "0.75rem",
-                                fontWeight: "600",
-                              }}
-                              title={p.isUnknownSupplier ? `"${p.supplier}" es nuevo — se registrará automáticamente` : ""}
-                            />
-                            {/* Autocomplete dropdown del proveedor */}
-                            {activeSuggestRow === i + 10000 && dbSuppliers.filter(s => s.toLowerCase().includes((p.supplier || "").toLowerCase()) && p.supplier !== "Pendiente" && p.supplier !== "").length > 0 && (
-                              <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#1a1a1a", border: "1px solid #fb923c", borderRadius: "6px", zIndex: 200, maxHeight: "120px", overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.6)" }}>
-                                {dbSuppliers.filter(s => s.toLowerCase().includes((p.supplier || "").toLowerCase())).slice(0, 8).map((s, si) => (
-                                  <div
-                                    key={si}
-                                    onMouseDown={() => handleEditRow(i, { supplier: s, isUnknownSupplier: false })}
-                                    style={{ padding: "6px 8px", cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: "0.75rem", color: "#6ee7b7" }}
-                                  >
-                                    🏢 {s}
-                                  </div>
-                                ))}
-                              </div>
                             )}
                           </div>
                         </td>

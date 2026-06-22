@@ -2079,7 +2079,28 @@ export default function InventoryModule() {
               let skippedCount = 0;
               let rescuedCount = 0;
               const undoLog: any[] = [];
-              const processedCodes = new Set(allItems.map(i => (i.code || "").trim().toUpperCase()));
+
+              // Cargar todos los artículos de la BD (incluyendo eliminados) para comparar correctamente y evitar colisiones de códigos únicos
+              let dbAllItems: any[] = [];
+              let from = 0;
+              const limit = 1000;
+              let hasMoreData = true;
+              while (hasMoreData) {
+                const { data, error } = await supabase
+                  .from("inventory")
+                  .select("*")
+                  .range(from, from + limit - 1);
+                if (error) throw error;
+                if (data && data.length > 0) {
+                  dbAllItems = [...dbAllItems, ...data];
+                  if (data.length < limit) hasMoreData = false;
+                  else from += limit;
+                } else {
+                  hasMoreData = false;
+                }
+              }
+
+              const processedCodes = new Set(dbAllItems.map(i => (i.code || "").trim().toUpperCase()));
 
               const inserts: any[] = [];
               const updates: any[] = [];
@@ -2113,7 +2134,7 @@ export default function InventoryModule() {
                   });
                   newCount++;
                 } else {
-                  const existing = allItems.find(
+                  const existing = dbAllItems.find(
                     (i) =>
                       (i.code && p.code && i.code.trim().toUpperCase() === p.code.trim().toUpperCase() && p.code !== "") ||
                       (normalizeString(i.name) === normalizeString(p.name))
