@@ -1300,6 +1300,7 @@ export default function InventoryModule() {
               <tr>
                 <th style={{ padding: "15px" }}>Código</th>
                 <th style={{ padding: "15px" }}>Producto</th>
+                <th style={{ padding: "15px", color: "#6ee7b7" }}>Proveedor</th>
                 <th style={{ padding: "15px" }}>Ubicación y Códigos</th>
                 <th style={{ padding: "15px" }}>Stock</th>
                 <th style={{ padding: "15px" }}>Costo Prov.</th>
@@ -1350,14 +1351,30 @@ export default function InventoryModule() {
                           ⚠️ INFLACIÓN
                         </span>
                       )}
-                      <div
-                        style={{
-                          fontSize: "0.75rem",
-                          color: "var(--color-secondary)",
-                        }}
-                      >
-                        Prov: {item.supplier ? highlightText(item.supplier, searchQuery) : "N/A"}
-                      </div>
+                    </td>
+                    {/* COLUMNA PROVEEDOR SEPARADA */}
+                    <td style={{ padding: "15px" }}>
+                      <span style={{
+                        display: "inline-block",
+                        background: item.supplier && item.supplier !== "Pendiente"
+                          ? "rgba(16, 185, 129, 0.15)"
+                          : "rgba(255,255,255,0.05)",
+                        border: item.supplier && item.supplier !== "Pendiente"
+                          ? "1px solid rgba(16,185,129,0.4)"
+                          : "1px solid rgba(255,255,255,0.1)",
+                        color: item.supplier && item.supplier !== "Pendiente"
+                          ? "#6ee7b7"
+                          : "rgba(255,255,255,0.3)",
+                        padding: "3px 10px",
+                        borderRadius: "20px",
+                        fontSize: "0.8rem",
+                        fontWeight: "600",
+                        whiteSpace: "nowrap",
+                      }}>
+                        {item.supplier && item.supplier !== "Pendiente"
+                          ? highlightText(item.supplier, searchQuery)
+                          : "⏳ Pendiente"}
+                      </span>
                     </td>
                     <td style={{ padding: "15px" }}>
                       <div

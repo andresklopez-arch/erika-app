@@ -24,7 +24,7 @@ export default function SmartImporter({
   const [previewData, setPreviewData] = useState<any[] | null>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
-  const [columnMapping, setColumnMapping] = useState({ supplier: 0, code: 1, name: 2, stock: 3, cost: 4, price: 5, location: 6 });
+  const [columnMapping, setColumnMapping] = useState({ code: 0, name: 1, supplier: 2, stock: 3, cost: 4, price: 5, location: 6 });
   const [detectionSource, setDetectionSource] = useState({ supplier: "", name: "", cost: "", stock: "", code: "", price: "" });
   const [aiWarnings, setAiWarnings] = useState<string[]>([]);
   const [rawHeaders, setRawHeaders] = useState<string[]>([]);
@@ -74,7 +74,7 @@ export default function SmartImporter({
         setUploadedFile(null);
 
         // Detectar columnas igual que en processExcel
-        let finalSupplierIdx = 0, finalCodeIdx = 1, finalNameIdx = 2;
+        let finalCodeIdx = 0, finalNameIdx = 1, finalSupplierIdx = 2;
         let finalStockIdx = 3, finalCostIdx = 4, finalPriceIdx = 5, finalLocationIdx = 6;
         let detectedSupplier = false, detectedCode = false, detectedName = false;
         let detectedStock = false, detectedCost = false, detectedPrice = false;
@@ -589,10 +589,11 @@ export default function SmartImporter({
            headersForSelect.push(rawData[0][c] ? String(rawData[0][c]) : `Columna ${c + 1}`);
         }
 
-        // Heurística inteligente de detección de columnas (con fallback a plantilla estricta nueva: PROVEEDOR primero)
-        let finalSupplierIdx = 0;
-        let finalCodeIdx = 1;
-        let finalNameIdx = 2;
+        // Heurística inteligente de detección de columnas
+        // Fallback = plantilla oficial: CODIGO | PRODUCTO | PROVEEDOR | STOCK | COSTO | PRECIO | BODEGA
+        let finalCodeIdx = 0;
+        let finalNameIdx = 1;
+        let finalSupplierIdx = 2;
         let finalStockIdx = 3;
         let finalCostIdx = 4;
         let finalPriceIdx = 5;
@@ -638,7 +639,7 @@ export default function SmartImporter({
           location: "📋 Plantilla Oficial",
         };
 
-        let mapping = { supplier: finalSupplierIdx, name: finalNameIdx, cost: finalCostIdx, stock: finalStockIdx, code: finalCodeIdx, price: finalPriceIdx, location: finalLocationIdx };
+        let mapping = { code: finalCodeIdx, name: finalNameIdx, supplier: finalSupplierIdx, stock: finalStockIdx, cost: finalCostIdx, price: finalPriceIdx, location: finalLocationIdx };
         let finalSource = source;
 
         // 🧠 Cargar plantilla de mapeo guardada si es compatible con el archivo actual
@@ -1746,9 +1747,11 @@ export default function SmartImporter({
               <h3 style={{ color: "var(--color-primary)", marginBottom: "10px" }}>📝 Instrucciones para una carga 100% exacta:</h3>
               <p style={{ marginBottom: "10px" }}>Para evitar errores, el sistema ahora incluye el <strong>PROVEEDOR como primera columna</strong>. Llena cada fila con el proveedor correspondiente — puedes mezclar proveedores en un mismo documento:</p>
               <ol style={{ marginLeft: "20px", marginBottom: "15px", opacity: 0.9, display: "flex", flexDirection: "column", gap: "5px" }}>
-                <li style={{ color: "var(--color-primary)", fontWeight: "bold" }}><strong>Columna A (1):</strong> 🏢 Proveedor <em style={{ color: "rgba(255,255,255,0.6)", fontWeight: "normal" }}>(¡NUEVO! Se carga automático por artículo)</em></li>
-                <li><strong>Columna B (2):</strong> Código de Barras / SKU</li>
-                <li><strong>Columna C (3):</strong> Nombre del Producto</li>
+              <p style={{ marginBottom: "10px" }}>La plantilla coincide exactamente con la tabla del inventario. Cada columna corresponde con lo que ves en pantalla, facilitando la detección de errores:</p>
+              <ol style={{ marginLeft: "20px", marginBottom: "15px", opacity: 0.9, display: "flex", flexDirection: "column", gap: "5px" }}>
+                <li><strong>Columna A (1):</strong> Código de Barras / SKU</li>
+                <li><strong>Columna B (2):</strong> Nombre del Producto</li>
+                <li style={{ color: "var(--color-primary)", fontWeight: "bold" }}><strong>Columna C (3):</strong> 🏢 Proveedor <em style={{ color: "rgba(255,255,255,0.6)", fontWeight: "normal" }}>(Se asigna automático por artículo)</em></li>
                 <li><strong>Columna D (4):</strong> Stock (Cantidad)</li>
                 <li><strong>Columna E (5):</strong> Costo Proveedor</li>
                 <li><strong>Columna F (6):</strong> Precio Venta <em>(Opcional, ERIKA lo calcula si está vacío)</em></li>
@@ -1756,39 +1759,33 @@ export default function SmartImporter({
               </ol>
               <button 
                 onClick={() => {
-                  // NUEVA PLANTILLA: PROVEEDOR es la primera columna
+                  // PLANTILLA: coincide con el orden de la tabla del inventario
+                  // CODIGO | PRODUCTO | PROVEEDOR | STOCK | COSTO | PRECIO | BODEGA
                   const wsData: any[][] = [
-                    ["PROVEEDOR", "CODIGO", "PRODUCTO", "STOCK", "COSTO", "PRECIO", "BODEGA"],
+                    ["CODIGO", "PRODUCTO", "PROVEEDOR", "STOCK", "COSTO", "PRECIO", "BODEGA"],
                     ["", "", "", "", "", "", ""]
                   ];
                   const ws = XLSX.utils.aoa_to_sheet(wsData);
-                  ws["!cols"] = [{wch: 20}, {wch: 15}, {wch: 30}, {wch: 10}, {wch: 12}, {wch: 12}, {wch: 15}];
+                  ws["!cols"] = [{wch: 15}, {wch: 30}, {wch: 20}, {wch: 10}, {wch: 12}, {wch: 12}, {wch: 15}];
 
-                  // SUGERENCIA 2: Hoja oculta _Proveedores para autocomplete ilimitado en Excel
-                  // (supera el límite de 255 caracteres de formula1 directo)
-                  const allSuppliersForSheet = dbSuppliers.length > 0 ? dbSuppliers : ["Pendiente"];
-                  const wsProvData: any[][] = [["Proveedor"], ...allSuppliersForSheet.map(s => [s])];
-                  const wsProv = XLSX.utils.aoa_to_sheet(wsProvData);
-
-                  // Validación referenciando la hoja _Proveedores (sin límite de 255 chars)
-                  ws["!dataValidation"] = [
-                    {
-                      sqref: "A2:A5000",
+                  // Lista directa de proveedores (evita referencias entre hojas que causan error de lectura)
+                  const validSuppliers = dbSuppliers.length > 0
+                    ? dbSuppliers.slice(0, 20).join(",")  // Máx 20 proveedores en la lista
+                    : "Pendiente";
+                  // Solo agregar dataValidation si la lista cabe en 255 chars
+                  if (validSuppliers.length <= 255) {
+                    ws["!dataValidation"] = [{
+                      sqref: "C2:C5000",
                       type: "list",
                       allowBlank: true,
                       showDropDown: false,
                       showErrorMessage: false,
-                      formula1: `_Proveedores!$A$2:$A$${allSuppliersForSheet.length + 1}`
-                    }
-                  ];
+                      formula1: `"${validSuppliers}"`
+                    }];
+                  }
 
                   const wb = XLSX.utils.book_new();
                   XLSX.utils.book_append_sheet(wb, ws, "Inventario");
-                  XLSX.utils.book_append_sheet(wb, wsProv, "_Proveedores");
-                  // Ocultar la hoja _Proveedores
-                  wb.Workbook = wb.Workbook || { Sheets: [] };
-                  wb.Workbook.Sheets = wb.Workbook.Sheets || [];
-                  wb.Workbook.Sheets[1] = { Hidden: 1 };
 
                   const today = new Date();
                   const dateStr = `${today.getDate()}-${today.toLocaleString('es-ES', { month: 'short' })}-${today.getFullYear()}`;
