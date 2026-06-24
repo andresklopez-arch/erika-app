@@ -660,16 +660,24 @@ export default function SmartImporter({
             const savedMapping = JSON.parse(savedMappingStr);
             const isValid = Object.values(savedMapping).every(idx => typeof idx === "number" && idx < maxCols);
             if (isValid) {
-              mapping = savedMapping;
+              mapping = { ...mapping, ...savedMapping };
+              // Si el archivo contiene una columna de precio detectada, ignorar el "-1" o undefined guardado y usar la detectada
+              if (detectedPrice && (savedMapping.price === undefined || savedMapping.price === -1)) {
+                mapping.price = finalPriceIdx;
+                finalSource.price = "🤖 Auto-detectado";
+              }
               if (savedSourceStr) {
-                finalSource = JSON.parse(savedSourceStr);
+                finalSource = { ...finalSource, ...JSON.parse(savedSourceStr) };
+                if (detectedPrice && (savedMapping.price === undefined || savedMapping.price === -1)) {
+                  finalSource.price = "🤖 Auto-detectado";
+                }
               } else {
                 finalSource = {
                   code: "👤 Manual (Guardado)",
                   name: "👤 Manual (Guardado)",
                   stock: "👤 Manual (Guardado)",
                   cost: "👤 Manual (Guardado)",
-                  price: "👤 Manual (Guardado)",
+                  price: detectedPrice && (savedMapping.price === undefined || savedMapping.price === -1) ? "🤖 Auto-detectado" : "👤 Manual (Guardado)",
                   supplier: "👤 Manual (Guardado)",
                   location: "👤 Manual (Guardado)",
                 };

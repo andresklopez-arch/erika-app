@@ -235,7 +235,7 @@ export default function InventoryModule() {
       minStock: 5,
       location: "Pendiente",
       supplier: "Pendiente",
-      autoPriced: true
+      autoPriced: p > 0 ? false : true
     });
     
     alert("✅ Producto creado con éxito");
@@ -646,6 +646,10 @@ export default function InventoryModule() {
 
     if (field === "cost" && originalItem) {
       updateObj.priceChanged = finalValue > originalItem.cost ? "up" : null;
+    }
+
+    if (field === "price") {
+      updateObj.autoPriced = false;
     }
 
     const { error } = await supabase
