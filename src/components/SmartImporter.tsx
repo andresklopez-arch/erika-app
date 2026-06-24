@@ -881,6 +881,18 @@ export default function SmartImporter({
         return;
       }
 
+      // 🔴 Validación preventiva de Margen Negativo (Venta a Pérdida)
+      const lossItems = previewData.filter(p => p.hasLoss);
+      if (lossItems.length > 0) {
+        const proceed = window.confirm(
+          `🔴 ALERTA DE VENTA A PÉRDIDA:\n\nSe detectaron ${lossItems.length} producto(s) cuyo precio de venta es menor o igual al costo (se venderían sin margen o a pérdida):\n\n` +
+          `${lossItems.slice(0, 8).map(p => `- "${p.name}": Costo $${p.cost.toFixed(2)} | Precio $${p.price.toFixed(2)}`).join("\n")}` +
+          `${lossItems.length > 8 ? `\n... y ${lossItems.length - 8} más.` : ""}\n\n` +
+          `¿Estás seguro de que deseas importar estos artículos con estos precios a pérdida?`
+        );
+        if (!proceed) return;
+      }
+
       // Advertir si hay artículos sin proveedor
       const emptySup = previewData.filter(p => !p.supplier || p.supplier === "Pendiente" || p.supplier.trim() === "");
       if (emptySup.length > 0) {
