@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { useSearchParams, useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import SmartImporter from "./SmartImporter";
-import { supabase } from "../lib/supabaseClient";
+import { supabase, clearMissingColumnsCache } from "../lib/supabaseClient";
 import ClientCaptureModal from "./ClientCaptureModal";
 import SuppliersManagerModal from "./SuppliersManagerModal";
 import AccountsPayableModal from "./AccountsPayableModal";
@@ -280,9 +280,9 @@ export default function InventoryModule() {
       }
     }
 
-    if (allData.length > 0) {
-      setAllItems(allData);
-    }
+    // CORRECCIÓN: siempre actualizar el estado aunque sea array vacío,
+    // para reflejar el estado real de la BD en la pantalla.
+    setAllItems(allData);
     if (lastError) console.error("Error al cargar catálogo completo:", lastError);
   };
 
@@ -2077,6 +2077,9 @@ export default function InventoryModule() {
           onClose={clearTabParam}
           onImport={async (newProducts, importOption, accumulateStock) => {
             setIsLoading(true);
+            // Limpiar caché de columnas faltantes para evitar que errores de sesiones
+            // anteriores eliminen campos críticos del INSERT de forma silenciosa.
+            clearMissingColumnsCache();
             try {
               let updatedCount = 0;
               let newCount = 0;
@@ -2216,10 +2219,26 @@ export default function InventoryModule() {
                 }
               }
 
-              // Ejecutar inserciones en lote
+              // Ejecutar inserciones en lotes de 50 para que un código duplicado
+              // no anule toda la importación.
+              const BATCH_SIZE = 50;
+              let failedInserts = 0;
               if (inserts.length > 0) {
-                const { error: insertError } = await supabase.from("inventory").insert(inserts);
-                if (insertError) throw insertError;
+                for (let batchStart = 0; batchStart < inserts.length; batchStart += BATCH_SIZE) {
+                  const batch = inserts.slice(batchStart, batchStart + BATCH_SIZE);
+                  const { error: insertError } = await supabase.from("inventory").insert(batch);
+                  if (insertError) {
+                    // Intento de recuperación: insertar uno por uno para salvar los que sí pasan
+                    for (const item of batch) {
+                      const { error: singleErr } = await supabase.from("inventory").insert([item]);
+                      if (singleErr) {
+                        console.warn(`[Import] No se pudo insertar "${item.name}" (${item.code}): ${singleErr.message}`);
+                        failedInserts++;
+                        newCount--; // descontar del total reportado
+                      }
+                    }
+                  }
+                }
               }
 
               // Ejecutar actualizaciones en lote
@@ -2251,6 +2270,9 @@ export default function InventoryModule() {
                 alertMsg += `🆕 Nuevos: ${newCount} productos agregados.\n⏭️ Omitidos por ya existir: ${skippedCount} productos.`;
               } else {
                 alertMsg += `📊 Actualizados: ${updatedCount} productos.\n🆕 Nuevos: ${newCount} productos.${rescueMsg}`;
+              }
+              if (failedInserts > 0) {
+                alertMsg += `\n\n⚠️ ${failedInserts} artículo(s) no pudieron guardarse (código duplicado u otro error). Revisa la consola para ver cuáles.`;
               }
               alert(alertMsg);
             } catch (err: any) {

@@ -28,6 +28,7 @@ function sanitizeHistory(callHistory: any[], table: string): { sanitizedHistory:
           const copy = { ...item };
           for (const col of cols) {
             if (col in copy) {
+              console.warn(`[Self-Healing] Eliminando campo '${col}' de '${table}' por caché de columnas faltantes. Si el import no guarda, ejecuta clearMissingColumnsCache().`);
               delete copy[col];
               modified = true;
             }
@@ -38,6 +39,7 @@ function sanitizeHistory(callHistory: any[], table: string): { sanitizedHistory:
         args[0] = { ...args[0] };
         for (const col of cols) {
           if (col in args[0]) {
+            console.warn(`[Self-Healing] Eliminando campo '${col}' de '${table}' por caché de columnas faltantes. Si el import no guarda, ejecuta clearMissingColumnsCache().`);
             delete args[0][col];
             modified = true;
           }
@@ -146,6 +148,16 @@ function createBuilderProxy(originalBuilder: any, table: string, callHistory: an
       return val;
     }
   });
+}
+
+/**
+ * Limpia la caché en memoria de columnas faltantes.
+ * Llama esto antes de cada importación masiva para evitar que errores anteriores
+ * eliminen campos del INSERT de forma silenciosa.
+ */
+export function clearMissingColumnsCache(): void {
+  missingColumnsCache.clear();
+  console.info('[Self-Healing] Caché de columnas faltantes limpiada correctamente.');
 }
 
 export const supabase = new Proxy(rawSupabase, {
