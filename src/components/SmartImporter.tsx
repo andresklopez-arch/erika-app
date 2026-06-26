@@ -280,10 +280,20 @@ export default function SmartImporter({
       // 🔍 Detección Anti-Duplicados usando findExistingItem (difusa)
       let { item: existing, isFuzzy } = findExistingItem(rawCode, cleanName);
 
-      if (existing) {
+      // ⚠️ SEGURIDAD CRÍTICA: Solo reemplazar código y nombre cuando la coincidencia
+      // es EXACTA (por código o nombre idéntico). Para coincidencias difusas (fuzzy),
+      // conservar siempre el código y nombre ORIGINALES del Excel.
+      // Un fuzzy match solo se usa para calcular precio sugerido y mostrar advertencia
+      // en la vista previa — NUNCA para reemplazar datos reales.
+      const importedCode = rawCode; // Guardar código original del Excel
+      const importedName = cleanName; // Guardar nombre original del Excel
+
+      if (existing && !isFuzzy) {
+        // Solo para coincidencias exactas: usar el código/nombre de la BD (por si hay variantes de mayúsculas)
         if (existing.code) rawCode = existing.code;
         if (existing.name) cleanName = existing.name;
       }
+      // Para isFuzzy: rawCode y cleanName permanecen con el valor original del Excel
 
       const smartPrices = getSmartPriceSuggestion(cleanName, rawCost, rawCode, minBatchMargin);
       
@@ -358,6 +368,8 @@ export default function SmartImporter({
         prevCost: smartPrices.prevCost,
         isFuzzy: smartPrices.isFuzzy || isFuzzy,
         originalExistingName: smartPrices.originalExistingName || (existing ? existing.name : undefined),
+        importedCode,    // Código original del Excel — siempre usar este para el import real
+        importedName,    // Nombre original del Excel — siempre usar este para el import real
         priceHasError,
         costHasError,
         stockHasError,
@@ -787,7 +799,11 @@ export default function SmartImporter({
 
       // Detectar si ya existe en inventario (con coincidencia difusa)
       let { item: existing, isFuzzy } = findExistingItem(code, name);
-      if (existing) {
+      // ⚠️ SEGURIDAD: Solo usar código/nombre del inventario cuando la coincidencia es EXACTA.
+      // Fuzzy match solo se usa para advertencia visual y precio sugerido.
+      const importedCode = code; // original del archivo
+      const importedName = name; // original del archivo
+      if (existing && !isFuzzy) {
         if (existing.code) code = existing.code;
         if (existing.name) name = existing.name;
       }
@@ -826,6 +842,8 @@ export default function SmartImporter({
         prevCost: smart.prevCost,
         isFuzzy: smart.isFuzzy || isFuzzy,
         originalExistingName: smart.originalExistingName || (existing ? existing.name : undefined),
+        importedCode,    // Código original del archivo — usar para el import real
+        importedName,    // Nombre original del archivo — usar para el import real
         costHasError: cost === 0,
         stockHasError: false,
         costIsEmpty,

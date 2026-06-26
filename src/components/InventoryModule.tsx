@@ -2113,15 +2113,21 @@ export default function InventoryModule() {
               const updates: any[] = [];
 
               for (const p of newProducts) {
+                // Usar el código/nombre ORIGINAL del Excel para todo el proceso de import.
+                // importedCode e importedName son los valores intactos del archivo,
+                // nunca reemplazados por fuzzy match del preview.
+                const pCode = (p.importedCode || p.code || "").trim();
+                const pName = p.importedName || p.name || "";
+
                 if (importOption === "nuevo") {
-                  let uniqueCode = p.code || `SKU-${Date.now()}`;
+                  let uniqueCode = pCode || `SKU-${Date.now()}`;
                   let suffix = 1;
-                  const baseCodeUpper = (p.code || "").trim().toUpperCase();
+                  const baseCodeUpper = uniqueCode.toUpperCase();
                   if (baseCodeUpper && processedCodes.has(baseCodeUpper)) {
-                    let candidate = `${p.code}-${suffix}`;
+                    let candidate = `${uniqueCode}-${suffix}`;
                     while (processedCodes.has(candidate.toUpperCase())) {
                       suffix++;
-                      candidate = `${p.code}-${suffix}`;
+                      candidate = `${uniqueCode}-${suffix}`;
                     }
                     uniqueCode = candidate;
                   }
@@ -2143,8 +2149,8 @@ export default function InventoryModule() {
                 } else {
                   const existing = dbAllItems.find(
                     (i) =>
-                      (i.code && p.code && i.code.trim().toUpperCase() === p.code.trim().toUpperCase() && p.code !== "") ||
-                      (normalizeString(i.name) === normalizeString(p.name))
+                      (i.code && pCode && i.code.trim().toUpperCase() === pCode.toUpperCase()) ||
+                      (normalizeString(i.name) === normalizeString(pName))
                   );
 
                   if (existing) {
@@ -2189,14 +2195,14 @@ export default function InventoryModule() {
                     });
                     updatedCount++;
                   } else {
-                    let uniqueCode = p.code || `SKU-${Date.now()}`;
+                    let uniqueCode = pCode || `SKU-${Date.now()}`;
                     let suffix = 1;
-                    const baseCodeUpper = (p.code || "").trim().toUpperCase();
+                    const baseCodeUpper = uniqueCode.toUpperCase();
                     if (baseCodeUpper && processedCodes.has(baseCodeUpper)) {
-                      let candidate = `${p.code}-${suffix}`;
+                      let candidate = `${uniqueCode}-${suffix}`;
                       while (processedCodes.has(candidate.toUpperCase())) {
                         suffix++;
-                        candidate = `${p.code}-${suffix}`;
+                        candidate = `${uniqueCode}-${suffix}`;
                       }
                       uniqueCode = candidate;
                     }
