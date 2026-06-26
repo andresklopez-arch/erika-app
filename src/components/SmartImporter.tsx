@@ -57,6 +57,7 @@ export default function SmartImporter({
   }
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [isGeneratingCsv, setIsGeneratingCsv] = useState(false);
+  const [downloadCount, setDownloadCount] = useState(0);
 
   const showToast = (message: string) => {
     const id = `toast-${Date.now()}-${Math.random()}`;
@@ -511,32 +512,36 @@ export default function SmartImporter({
 
   const downloadCollisionReport = (fuzzyItems: any[]) => {
     setIsGeneratingCsv(true);
-    setTimeout(() => {
-      const headers = ["Nombre en Excel", "Codigo en Excel", "Producto Existente en Catalogo", "Codigo Existente en Catalogo"];
-      const rows = fuzzyItems.map(p => [
-        p.importedName || p.name || "",
-        p.importedCode || p.code || "",
-        p.originalExistingName || "",
-        p.originalExistingCode || ""
-      ]);
-      
-      const csvContent = "\uFEFF" + [
-        headers.join(","),
-        ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))
-      ].join("\r\n");
-      
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.setAttribute("href", url);
-      link.setAttribute("download", `reporte_colisiones_erika_${new Date().toISOString().slice(0, 10)}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      setIsGeneratingCsv(false);
-      showToast("Reporte CSV descargado con éxito");
-    }, 600);
+    setDownloadCount(prev => {
+      const nextCount = prev + 1;
+      setTimeout(() => {
+        const headers = ["Nombre en Excel", "Codigo en Excel", "Producto Existente en Catalogo", "Codigo Existente en Catalogo"];
+        const rows = fuzzyItems.map(p => [
+          p.importedName || p.name || "",
+          p.importedCode || p.code || "",
+          p.originalExistingName || "",
+          p.originalExistingCode || ""
+        ]);
+        
+        const csvContent = "\uFEFF" + [
+          headers.join(","),
+          ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))
+        ].join("\r\n");
+        
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `reporte_colisiones_erika_v${nextCount}_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        setIsGeneratingCsv(false);
+        showToast(`Reporte CSV (v${nextCount}) descargado con éxito`);
+      }, 600);
+      return nextCount;
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, rowIndex: number, field: string) => {
@@ -2352,7 +2357,7 @@ export default function SmartImporter({
               style={{
                 background: "#10b981",
                 color: "white",
-                padding: "12px 24px",
+                padding: "12px 20px",
                 borderRadius: "8px",
                 boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
                 display: "flex",
@@ -2365,7 +2370,34 @@ export default function SmartImporter({
               }}
             >
               <span>✅</span>
-              <span>{t.message}</span>
+              <span style={{ flex: 1 }}>{t.message}</span>
+              <span
+                onClick={() => setToasts(prev => prev.filter(item => item.id !== t.id))}
+                style={{
+                  cursor: "pointer",
+                  marginLeft: "10px",
+                  opacity: 0.7,
+                  fontSize: "0.8rem",
+                  padding: "2px 6px",
+                  borderRadius: "4px",
+                  background: "rgba(255,255,255,0.18)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transition: "opacity 0.15s, background 0.15s"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = "1";
+                  e.currentTarget.style.background = "rgba(255,255,255,0.3)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = "0.7";
+                  e.currentTarget.style.background = "rgba(255,255,255,0.18)";
+                }}
+                title="Cerrar notificación"
+              >
+                ✕
+              </span>
             </div>
           ))}
         </div>
