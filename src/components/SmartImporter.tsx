@@ -37,10 +37,16 @@ export default function SmartImporter({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false); // conservado por compatibilidad
   const [dragRowIndex, setDragRowIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  // Sugerencia 2: Umbral de similitud fuzzy ajustable (0.05 a 0.30), persiste en localStorage
+  // Sugerencia 2: Umbral de similitud fuzzy ajustable (0.05 a 0.30), persiste en localStorage (con fallback seguro)
   const [fuzzyThreshold, setFuzzyThreshold] = useState<number>(() => {
     const stored = localStorage.getItem("erika_fuzzy_threshold");
-    return stored ? parseFloat(stored) : 0.15;
+    if (stored) {
+      const val = parseFloat(stored);
+      if (!isNaN(val) && val >= 0.03 && val <= 0.30) {
+        return val;
+      }
+    }
+    return 0.15;
   });
   // Sugerencia 3: Panel de colisiones colapsable
   const [showCollisionsPanel, setShowCollisionsPanel] = useState(false);
@@ -247,7 +253,7 @@ export default function SmartImporter({
       }
     }
 
-    return { price, alertText, isInflation, isNew, prevPrice, prevCost, isFuzzy, originalExistingName: existing ? existing.name : undefined };
+    return { price, alertText, isInflation, isNew, prevPrice, prevCost, isFuzzy, originalExistingName: existing ? existing.name : undefined, originalExistingCode: existing ? existing.code : undefined };
   };
 
   const generatePreviewAndReturnWarnings = (mapping: { name: number, cost: number, stock: number, code: number, price: number, supplier?: number, location?: number }, data: any[][]) => {
@@ -376,6 +382,7 @@ export default function SmartImporter({
         prevCost: smartPrices.prevCost,
         isFuzzy: smartPrices.isFuzzy || isFuzzy,
         originalExistingName: smartPrices.originalExistingName || (existing ? existing.name : undefined),
+        originalExistingCode: smartPrices.originalExistingCode || (existing ? existing.code : undefined),
         importedCode,    // Código original del Excel — siempre usar este para el import real
         importedName,    // Nombre original del Excel — siempre usar este para el import real
         priceHasError,
@@ -446,6 +453,46 @@ export default function SmartImporter({
 
     newData[index] = { ...newData[index], ...updates };
     setPreviewData(newData);
+  };
+
+  const handleLinkFuzzyProduct = (originalIndex: number, existingCode: string, existingName: string) => {
+    const existing = existingItems.find(item => item.code === existingCode);
+    const prevPrice = existing ? existing.price : 0;
+    const prevCost = existing ? existing.cost : 0;
+    
+    handleEditRow(originalIndex, {
+      code: existingCode,
+      name: existingName,
+      isNew: false,
+      isFuzzy: false,
+      prevPrice,
+      prevCost,
+      alertText: "🔄 Vincular al Inventario"
+    });
+  };
+
+  const downloadCollisionReport = (fuzzyItems: any[]) => {
+    const headers = ["Nombre en Excel", "Codigo en Excel", "Producto Existente en Catalogo", "Codigo Existente en Catalogo"];
+    const rows = fuzzyItems.map(p => [
+      p.importedName || p.name || "",
+      p.importedCode || p.code || "",
+      p.originalExistingName || "",
+      p.originalExistingCode || ""
+    ]);
+    
+    const csvContent = "\uFEFF" + [
+      headers.join(","),
+      ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))
+    ].join("\r\n");
+    
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `reporte_colisiones_erika_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, rowIndex: number, field: string) => {
@@ -1875,7 +1922,11 @@ export default function SmartImporter({
 
             {/* ─── SUGERENCIA 3: Panel de colisiones colapsable ─── */}
             {(() => {
-              const fuzzyItems = previewData ? previewData.filter(p => p.isFuzzy && p.originalExistingName) : [];
+              const fuzzyItems = previewData
+                ? previewData
+                    .map((p, idx) => ({ ...p, originalIndex: idx }))
+                    .filter(p => p.isFuzzy && p.originalExistingName)
+                : [];
               if (fuzzyItems.length === 0) return null;
               return (
                 <div style={{
@@ -1912,15 +1963,36 @@ export default function SmartImporter({
                   </button>
                   {showCollisionsPanel && (
                     <div style={{ background: "rgba(0,0,0,0.3)", padding: "12px 16px", display: "flex", flexDirection: "column", gap: "8px", maxHeight: "250px", overflowY: "auto" }}>
-                      <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)", marginBottom: "4px" }}>
-                        Revisa si alguno de estos artículos debería actualizar al existente. Si es así, edita el código manualmente en la tabla para que coincida con el del inventario.
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "10px" }}>
+                        <span style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)" }}>
+                          Revisa si alguno de estos artículos debería actualizar al existente.
+                        </span>
+                        <button
+                          onClick={() => downloadCollisionReport(fuzzyItems)}
+                          style={{
+                            background: "rgba(245, 158, 11, 0.2)",
+                            border: "1px solid rgba(245, 158, 11, 0.5)",
+                            color: "#f59e0b",
+                            padding: "4px 10px",
+                            borderRadius: "6px",
+                            fontSize: "0.75rem",
+                            cursor: "pointer",
+                            fontWeight: "bold",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px"
+                          }}
+                          title="Descargar todos los conflictos en formato CSV"
+                        >
+                          Descargar CSV
+                        </button>
                       </div>
                       {fuzzyItems.map((p, idx) => (
                         <div key={idx} style={{
                           display: "grid",
-                          gridTemplateColumns: "1fr auto 1fr",
+                          gridTemplateColumns: "1fr auto 1fr auto",
                           alignItems: "center",
-                          gap: "8px",
+                          gap: "12px",
                           padding: "8px 12px",
                           background: "rgba(245,158,11,0.06)",
                           borderRadius: "6px",
@@ -1934,7 +2006,26 @@ export default function SmartImporter({
                           <div style={{ color: "rgba(255,255,255,0.3)", fontSize: "1.2rem", textAlign: "center" }}>↔️</div>
                           <div>
                             <div style={{ color: "#6ee7b7", fontWeight: "bold" }}>📦 {p.originalExistingName}</div>
-                            <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.7rem" }}>En inventario actual</div>
+                            <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.7rem" }}>En inventario actual (Cód: {p.originalExistingCode})</div>
+                          </div>
+                          <div>
+                            <button
+                              onClick={() => handleLinkFuzzyProduct(p.originalIndex, p.originalExistingCode!, p.originalExistingName!)}
+                              style={{
+                                background: "rgba(110, 231, 183, 0.15)",
+                                border: "1px solid rgba(110, 231, 183, 0.4)",
+                                color: "#6ee7b7",
+                                padding: "4px 8px",
+                                borderRadius: "4px",
+                                fontSize: "0.72rem",
+                                cursor: "pointer",
+                                fontWeight: "bold",
+                                whiteSpace: "nowrap"
+                              }}
+                              title="Vincular este producto al existente usando su código"
+                            >
+                              Vincular
+                            </button>
                           </div>
                         </div>
                       ))}
