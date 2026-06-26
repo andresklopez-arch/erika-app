@@ -57,7 +57,14 @@ export default function SmartImporter({
   }
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [isGeneratingCsv, setIsGeneratingCsv] = useState(false);
-  const [downloadCount, setDownloadCount] = useState(0);
+  const [downloadCount, setDownloadCount] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("erika_csv_download_count");
+      return stored ? parseInt(stored, 10) : 0;
+    }
+    return 0;
+  });
+  const [csvDownloadSuccess, setCsvDownloadSuccess] = useState(false);
 
   const showToast = (message: string) => {
     const id = `toast-${Date.now()}-${Math.random()}`;
@@ -66,6 +73,16 @@ export default function SmartImporter({
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 3000);
   };
+
+  useEffect(() => {
+    const handleGlobalEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setToasts([]);
+      }
+    };
+    window.addEventListener("keydown", handleGlobalEscape);
+    return () => window.removeEventListener("keydown", handleGlobalEscape);
+  }, []);
 
   const fetchSuppliers = async () => {
     const { data } = await supabase.from("suppliers").select("name").order("name");
@@ -514,6 +531,9 @@ export default function SmartImporter({
     setIsGeneratingCsv(true);
     setDownloadCount(prev => {
       const nextCount = prev + 1;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("erika_csv_download_count", String(nextCount));
+      }
       setTimeout(() => {
         const headers = ["Nombre en Excel", "Codigo en Excel", "Producto Existente en Catalogo", "Codigo Existente en Catalogo"];
         const rows = fuzzyItems.map(p => [
@@ -538,7 +558,12 @@ export default function SmartImporter({
         document.body.removeChild(link);
         
         setIsGeneratingCsv(false);
+        setCsvDownloadSuccess(true);
         showToast(`Reporte CSV (v${nextCount}) descargado con éxito`);
+        
+        setTimeout(() => {
+          setCsvDownloadSuccess(false);
+        }, 1500);
       }, 600);
       return nextCount;
     });
@@ -2053,22 +2078,25 @@ export default function SmartImporter({
                         </span>
                         <button
                           onClick={() => downloadCollisionReport(fuzzyItems)}
+                          disabled={isGeneratingCsv}
                           style={{
-                            background: "rgba(245, 158, 11, 0.2)",
-                            border: "1px solid rgba(245, 158, 11, 0.5)",
-                            color: "#f59e0b",
+                            background: csvDownloadSuccess ? "rgba(16, 185, 129, 0.2)" : "rgba(245, 158, 11, 0.2)",
+                            border: csvDownloadSuccess ? "1px solid rgba(16, 185, 129, 0.5)" : "1px solid rgba(245, 158, 11, 0.5)",
+                            color: csvDownloadSuccess ? "#10b981" : "#f59e0b",
                             padding: "4px 10px",
                             borderRadius: "6px",
                             fontSize: "0.75rem",
-                            cursor: "pointer",
+                            cursor: isGeneratingCsv ? "not-allowed" : "pointer",
                             fontWeight: "bold",
                             display: "inline-flex",
                             alignItems: "center",
-                            gap: "5px"
+                            gap: "5px",
+                            opacity: isGeneratingCsv ? 0.6 : 1,
+                            transition: "all 0.3s ease"
                           }}
                           title="Descargar todos los conflictos en formato CSV"
                         >
-                          Descargar CSV
+                          {isGeneratingCsv ? "⏳ Generando CSV..." : csvDownloadSuccess ? "✓ Descargado" : "Descargar CSV"}
                         </button>
                       </div>
                       {fuzzyItems.map((p, idx) => (
