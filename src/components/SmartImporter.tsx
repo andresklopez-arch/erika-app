@@ -51,15 +51,19 @@ export default function SmartImporter({
   // Sugerencia 3: Panel de colisiones colapsable
   const [showCollisionsPanel, setShowCollisionsPanel] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  interface ToastItem {
+    id: string;
+    message: string;
+  }
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [isGeneratingCsv, setIsGeneratingCsv] = useState(false);
 
   const showToast = (message: string) => {
-    setToastMessage(message);
-    const timeoutId = setTimeout(() => {
-      setToastMessage(null);
-    }, 2500);
-    return () => clearTimeout(timeoutId);
+    const id = `toast-${Date.now()}-${Math.random()}`;
+    setToasts(prev => [...prev, { id, message }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3000);
   };
 
   const fetchSuppliers = async () => {
@@ -2026,7 +2030,18 @@ export default function SmartImporter({
                     <span style={{ fontSize: "0.8rem", opacity: 0.7 }}>{showCollisionsPanel ? "▲ Ocultar" : "▼ Ver lista"}</span>
                   </button>
                   {showCollisionsPanel && (
-                    <div style={{ background: "rgba(0,0,0,0.3)", padding: "12px 16px", display: "flex", flexDirection: "column", gap: "8px", maxHeight: "250px", overflowY: "auto" }}>
+                    <div style={{
+                      background: "rgba(0,0,0,0.3)",
+                      padding: "12px 16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                      maxHeight: "250px",
+                      overflowY: "auto",
+                      pointerEvents: isGeneratingCsv ? "none" : "auto",
+                      opacity: isGeneratingCsv ? 0.6 : 1,
+                      transition: "opacity 0.2s ease"
+                    }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "10px" }}>
                         <span style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)" }}>
                           Revisa si alguno de estos artículos debería actualizar al existente.
@@ -2308,30 +2323,52 @@ export default function SmartImporter({
           </div>
         )}
 
-        {/* 🔔 Toast Notification */}
-        {toastMessage && (
-          <div style={{
-            position: "fixed",
-            bottom: "20px",
-            right: "20px",
-            background: "#10b981",
-            color: "white",
-            padding: "12px 24px",
-            borderRadius: "8px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-            zIndex: 9999,
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            fontWeight: "bold",
-            fontSize: "0.9rem",
-            pointerEvents: "none",
-            animation: "fadeIn 0.3s ease-out"
-          }}>
-            <span>✅</span>
-            <span>{toastMessage}</span>
-          </div>
-        )}
+        {/* 🔔 Toast Notification Stack */}
+        <div style={{
+          position: "fixed",
+          bottom: "20px",
+          right: "20px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "10px",
+          zIndex: 9999,
+          pointerEvents: "none"
+        }}>
+          <style dangerouslySetInnerHTML={{ __html: `
+            @keyframes erikaSlideIn {
+              from {
+                transform: translateX(120%);
+                opacity: 0;
+              }
+              to {
+                transform: translateX(0);
+                opacity: 1;
+              }
+            }
+          ` }} />
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              style={{
+                background: "#10b981",
+                color: "white",
+                padding: "12px 24px",
+                borderRadius: "8px",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                fontWeight: "bold",
+                fontSize: "0.9rem",
+                animation: "erikaSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+                pointerEvents: "auto"
+              }}
+            >
+              <span>✅</span>
+              <span>{t.message}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
