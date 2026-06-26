@@ -51,6 +51,16 @@ export default function SmartImporter({
   // Sugerencia 3: Panel de colisiones colapsable
   const [showCollisionsPanel, setShowCollisionsPanel] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isGeneratingCsv, setIsGeneratingCsv] = useState(false);
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    const timeoutId = setTimeout(() => {
+      setToastMessage(null);
+    }, 2500);
+    return () => clearTimeout(timeoutId);
+  };
 
   const fetchSuppliers = async () => {
     const { data } = await supabase.from("suppliers").select("name").order("name");
@@ -469,30 +479,60 @@ export default function SmartImporter({
       prevCost,
       alertText: "🔄 Vincular al Inventario"
     });
+    showToast(`Vinculado: "${existingName}"`);
+  };
+
+  const handleUndoLink = (index: number) => {
+    if (!previewData) return;
+    const p = previewData[index];
+    const originalCode = p.importedCode || p.code;
+    const originalName = p.importedName || p.name;
+    
+    const smart = getSmartPriceSuggestion(originalName, p.cost, originalCode, minBatchMargin);
+    let { isFuzzy } = findExistingItem(originalCode, originalName);
+
+    handleEditRow(index, {
+      code: originalCode,
+      name: originalName,
+      isNew: smart.isNew,
+      isFuzzy: isFuzzy,
+      prevPrice: smart.prevPrice,
+      prevCost: smart.prevCost,
+      alertText: smart.alertText,
+      price: smart.price
+    });
+    
+    showToast(`Deshecho: "${originalName}"`);
   };
 
   const downloadCollisionReport = (fuzzyItems: any[]) => {
-    const headers = ["Nombre en Excel", "Codigo en Excel", "Producto Existente en Catalogo", "Codigo Existente en Catalogo"];
-    const rows = fuzzyItems.map(p => [
-      p.importedName || p.name || "",
-      p.importedCode || p.code || "",
-      p.originalExistingName || "",
-      p.originalExistingCode || ""
-    ]);
-    
-    const csvContent = "\uFEFF" + [
-      headers.join(","),
-      ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))
-    ].join("\r\n");
-    
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `reporte_colisiones_erika_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    setIsGeneratingCsv(true);
+    setTimeout(() => {
+      const headers = ["Nombre en Excel", "Codigo en Excel", "Producto Existente en Catalogo", "Codigo Existente en Catalogo"];
+      const rows = fuzzyItems.map(p => [
+        p.importedName || p.name || "",
+        p.importedCode || p.code || "",
+        p.originalExistingName || "",
+        p.originalExistingCode || ""
+      ]);
+      
+      const csvContent = "\uFEFF" + [
+        headers.join(","),
+        ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))
+      ].join("\r\n");
+      
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `reporte_colisiones_erika_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setIsGeneratingCsv(false);
+      showToast("Reporte CSV descargado con éxito");
+    }, 600);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, rowIndex: number, field: string) => {
@@ -1578,16 +1618,40 @@ export default function SmartImporter({
                           />
                         </td>
                         <td style={{ padding: "8px" }}>
-                          <span style={{
-                            padding: "2px 6px",
-                            borderRadius: "4px",
-                            fontSize: "0.7rem",
-                            fontWeight: "bold",
-                            background: p.isInflation ? "rgba(239,68,68,0.2)" : p.isNew ? "rgba(59,130,246,0.2)" : "rgba(16,185,129,0.2)",
-                            color: p.isInflation ? "#ef4444" : p.isNew ? "#3b82f6" : "#10b981"
-                          }}>
-                            {p.alertText}
-                          </span>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              fontSize: "0.7rem",
+                              fontWeight: "bold",
+                              background: p.isInflation ? "rgba(239,68,68,0.2)" : p.isNew ? "rgba(59,130,246,0.2)" : "rgba(16,185,129,0.2)",
+                              color: p.isInflation ? "#ef4444" : p.isNew ? "#3b82f6" : "#10b981"
+                            }}>
+                              {p.alertText}
+                            </span>
+                            {((p.importedCode && p.importedCode !== p.code) || (p.importedName && p.importedName !== p.name)) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUndoLink(i);
+                                }}
+                                style={{
+                                  background: "rgba(239, 68, 68, 0.15)",
+                                  border: "1px solid rgba(239, 68, 68, 0.4)",
+                                  color: "#ef4444",
+                                  padding: "2px 6px",
+                                  borderRadius: "4px",
+                                  fontSize: "0.65rem",
+                                  cursor: "pointer",
+                                  fontWeight: "bold",
+                                  whiteSpace: "nowrap"
+                                }}
+                                title="Deshacer vinculación de este producto y restaurar valores del Excel"
+                              >
+                                Deshacer
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )))}
@@ -2241,6 +2305,31 @@ export default function SmartImporter({
         {showNewSupplierModal && (
           <div style={{ zIndex: 1300, position: "relative" }}>
             <SuppliersManagerModal onClose={() => { setShowNewSupplierModal(false); fetchSuppliers(); }} />
+          </div>
+        )}
+
+        {/* 🔔 Toast Notification */}
+        {toastMessage && (
+          <div style={{
+            position: "fixed",
+            bottom: "20px",
+            right: "20px",
+            background: "#10b981",
+            color: "white",
+            padding: "12px 24px",
+            borderRadius: "8px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            fontWeight: "bold",
+            fontSize: "0.9rem",
+            pointerEvents: "none",
+            animation: "fadeIn 0.3s ease-out"
+          }}>
+            <span>✅</span>
+            <span>{toastMessage}</span>
           </div>
         )}
       </div>
