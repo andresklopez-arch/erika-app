@@ -653,10 +653,12 @@ export default function SmartImporter({
         let finalSource = source;
 
         // 🧠 Cargar plantilla de mapeo guardada si es compatible con el archivo actual
+        // Pero NO sobreescribir si ya detectamos cabeceras explícitas de alta confianza en el archivo
+        const hasHighConfidenceDetection = detectedName && (detectedCost || detectedPrice || detectedStock);
         try {
           const savedMappingStr = localStorage.getItem("erika_excel_mapping");
           const savedSourceStr = localStorage.getItem("erika_excel_detection");
-          if (savedMappingStr) {
+          if (savedMappingStr && !hasHighConfidenceDetection) {
             const savedMapping = JSON.parse(savedMappingStr);
             const isValid = Object.values(savedMapping).every(idx => typeof idx === "number" && idx < maxCols);
             if (isValid) {
@@ -1193,7 +1195,20 @@ export default function SmartImporter({
                     </tr>
                   </thead>
                   <tbody>
-                    {previewData.map((p, i) => (
+                    {previewData.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} style={{ padding: "40px 20px", textAlign: "center", color: "#f87171" }}>
+                          <div style={{ fontSize: "1.1rem", fontWeight: "bold", marginBottom: "8px" }}>
+                            ⚠️ No se detectaron productos a importar
+                          </div>
+                          <div style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.6)" }}>
+                            El archivo no contiene filas válidas o las columnas no están correctamente mapeadas.<br/>
+                            Asegúrate de que la columna de <strong>Producto (Nombre)</strong> esté asignada a la columna correcta de tu Excel.
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      previewData.map((p, i) => (
                       <tr
                         key={i}
                         draggable
@@ -1487,7 +1502,7 @@ export default function SmartImporter({
                           </span>
                         </td>
                       </tr>
-                    ))}
+                    )))}
                   </tbody>
                 </table>
               </div>
@@ -1782,16 +1797,18 @@ export default function SmartImporter({
               <button
                 className="btn-primary"
                 onClick={confirmImport}
-                disabled={importOption === "" || (previewData ? previewData.some(p => p.isIllegible) : false)}
+                disabled={importOption === "" || !previewData || previewData.length === 0 || previewData.some(p => p.isIllegible)}
                 style={{
                   background: "var(--color-primary)",
-                  opacity: (importOption === "" || (previewData ? previewData.some(p => p.isIllegible) : false)) ? 0.5 : 1,
-                  cursor: (importOption === "" || (previewData ? previewData.some(p => p.isIllegible) : false)) ? "not-allowed" : "pointer"
+                  opacity: (importOption === "" || !previewData || previewData.length === 0 || previewData.some(p => p.isIllegible)) ? 0.5 : 1,
+                  cursor: (importOption === "" || !previewData || previewData.length === 0 || previewData.some(p => p.isIllegible)) ? "not-allowed" : "pointer"
                 }}
               >
-                {previewData && previewData.some(p => p.isIllegible)
-                  ? "⚠️ Corrija nombres ilegibles"
-                  : (importOption === "" ? "⏳ Elija un método" : "✅ Confirmar e Importar")
+                {!previewData || previewData.length === 0
+                  ? "⚠️ No hay productos que importar"
+                  : (previewData.some(p => p.isIllegible)
+                    ? "⚠️ Corrija nombres ilegibles"
+                    : (importOption === "" ? "⏳ Elija un método" : "✅ Confirmar e Importar"))
                 }
               </button>
             </div>
