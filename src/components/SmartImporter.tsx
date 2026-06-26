@@ -37,6 +37,13 @@ export default function SmartImporter({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false); // conservado por compatibilidad
   const [dragRowIndex, setDragRowIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  // Sugerencia 2: Umbral de similitud fuzzy ajustable (0.05 a 0.30), persiste en localStorage
+  const [fuzzyThreshold, setFuzzyThreshold] = useState<number>(() => {
+    const stored = localStorage.getItem("erika_fuzzy_threshold");
+    return stored ? parseFloat(stored) : 0.15;
+  });
+  // Sugerencia 3: Panel de colisiones colapsable
+  const [showCollisionsPanel, setShowCollisionsPanel] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchSuppliers = async () => {
@@ -176,7 +183,8 @@ export default function SmartImporter({
         
         if (Math.abs(normItemName.length - cleanName.length) <= 5) {
           const dist = getLevenshteinDistance(cleanName, normItemName);
-          const threshold = Math.max(3, Math.floor(cleanName.length * 0.15));
+          // Usar el umbral dinámico configurado por el usuario
+          const threshold = Math.max(3, Math.floor(cleanName.length * fuzzyThreshold));
           if (dist <= threshold && dist < minDistance) {
             minDistance = dist;
             bestMatch = item;
@@ -1313,8 +1321,23 @@ export default function SmartImporter({
                                 </div>
                               )}
                               {!p.isNew && p.isFuzzy && (
-                                <span style={{ fontSize: "0.65rem", background: "rgba(245, 158, 11, 0.2)", color: "#f59e0b", border: "1px solid rgba(245, 158, 11, 0.4)", padding: "2px 6px", borderRadius: "4px", whiteSpace: "nowrap" }} title={`Coincidencia difusa con "${p.originalExistingName}" en base de datos.`}>
-                                  ⚠️ Coincidencia Difusa
+                                <span
+                                  style={{
+                                    fontSize: "0.65rem",
+                                    background: "rgba(245, 158, 11, 0.2)",
+                                    color: "#f59e0b",
+                                    border: "1px solid rgba(245, 158, 11, 0.5)",
+                                    padding: "2px 6px",
+                                    borderRadius: "4px",
+                                    whiteSpace: "nowrap",
+                                    cursor: "help",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "4px"
+                                  }}
+                                  title={`⚠️ Coincidencia aproximada (fuzzy) con:\n"${p.originalExistingName}"\n\nEste artículo NO actualizará el producto existente — se importará con su código original.\nSi quieres que actualice el existente, cambia el código manualmente al del inventario.`}
+                                >
+                                  ⚠️ Parecido a: <em style={{fontStyle:"normal", maxWidth:"120px", overflow:"hidden", textOverflow:"ellipsis", display:"inline-block"}}>{p.originalExistingName || "desconocido"}</em>
                                 </span>
                               )}
                               {!p.isNew && !p.isFuzzy && (
@@ -1798,10 +1821,130 @@ export default function SmartImporter({
                 </div>
               ) : null;
             })()}
+            {/* ─── SUGERENCIA 2: Slider de umbral de similitud ─── */}
+            <div style={{
+              marginTop: "15px",
+              padding: "12px 18px",
+              borderRadius: "10px",
+              background: "rgba(139, 92, 246, 0.08)",
+              border: "1px solid rgba(139, 92, 246, 0.3)",
+              display: "flex",
+              alignItems: "center",
+              gap: "14px",
+              flexWrap: "wrap"
+            }}>
+              <span style={{ fontSize: "1rem" }}>🎚️</span>
+              <div style={{ flex: 1, minWidth: "220px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                  <strong style={{ color: "#a78bfa", fontSize: "0.85rem" }}>Sensibilidad de detección de similitud</strong>
+                  <span style={{
+                    background: "rgba(139,92,246,0.25)",
+                    color: "#c4b5fd",
+                    padding: "2px 8px",
+                    borderRadius: "10px",
+                    fontSize: "0.75rem",
+                    fontWeight: "bold"
+                  }}>
+                    {fuzzyThreshold <= 0.07 ? "🔒 Muy Estricto" : fuzzyThreshold <= 0.12 ? "🟡 Estricto" : fuzzyThreshold <= 0.18 ? "🟢 Normal" : fuzzyThreshold <= 0.24 ? "🟠 Permisivo" : "🔴 Muy Permisivo"}
+                    {" — "}{Math.round(fuzzyThreshold * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0.03"
+                  max="0.30"
+                  step="0.01"
+                  value={fuzzyThreshold}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    setFuzzyThreshold(val);
+                    localStorage.setItem("erika_fuzzy_threshold", String(val));
+                    // Re-generar preview con nuevo umbral
+                    if (processedRawData.length > 0) {
+                      generatePreviewAndReturnWarnings(columnMapping, processedRawData);
+                    }
+                  }}
+                  style={{ width: "100%", accentColor: "#a78bfa", cursor: "pointer" }}
+                />
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "rgba(255,255,255,0.4)", marginTop: "2px" }}>
+                  <span>Proveedores distintos</span>
+                  <span>Mismo proveedor</span>
+                </div>
+              </div>
+            </div>
 
-            <div
-              style={{ display: "flex", gap: "15px", justifyContent: "center", marginTop: "20px" }}
-            >
+            {/* ─── SUGERENCIA 3: Panel de colisiones colapsable ─── */}
+            {(() => {
+              const fuzzyItems = previewData ? previewData.filter(p => p.isFuzzy && p.originalExistingName) : [];
+              if (fuzzyItems.length === 0) return null;
+              return (
+                <div style={{
+                  marginTop: "15px",
+                  borderRadius: "10px",
+                  border: "1px solid rgba(245, 158, 11, 0.4)",
+                  overflow: "hidden"
+                }}>
+                  <button
+                    onClick={() => setShowCollisionsPanel(p => !p)}
+                    style={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "10px 16px",
+                      background: "rgba(245, 158, 11, 0.12)",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "#f59e0b",
+                      fontWeight: "bold",
+                      fontSize: "0.85rem",
+                      textAlign: "left"
+                    }}
+                  >
+                    <span style={{ fontSize: "1rem" }}>⚠️</span>
+                    <span style={{ flex: 1 }}>
+                      {fuzzyItems.length} artículo(s) con nombre similar a productos existentes
+                      <span style={{ fontWeight: "normal", fontSize: "0.75rem", marginLeft: "8px", opacity: 0.7 }}>
+                        (se importarán como NUEVOS — no actualizarán los existentes)
+                      </span>
+                    </span>
+                    <span style={{ fontSize: "0.8rem", opacity: 0.7 }}>{showCollisionsPanel ? "▲ Ocultar" : "▼ Ver lista"}</span>
+                  </button>
+                  {showCollisionsPanel && (
+                    <div style={{ background: "rgba(0,0,0,0.3)", padding: "12px 16px", display: "flex", flexDirection: "column", gap: "8px", maxHeight: "250px", overflowY: "auto" }}>
+                      <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)", marginBottom: "4px" }}>
+                        Revisa si alguno de estos artículos debería actualizar al existente. Si es así, edita el código manualmente en la tabla para que coincida con el del inventario.
+                      </div>
+                      {fuzzyItems.map((p, idx) => (
+                        <div key={idx} style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr auto 1fr",
+                          alignItems: "center",
+                          gap: "8px",
+                          padding: "8px 12px",
+                          background: "rgba(245,158,11,0.06)",
+                          borderRadius: "6px",
+                          border: "1px solid rgba(245,158,11,0.15)",
+                          fontSize: "0.78rem"
+                        }}>
+                          <div>
+                            <div style={{ color: "#fcd34d", fontWeight: "bold" }}>📄 {p.importedName || p.name}</div>
+                            <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.7rem" }}>Código Excel: {p.importedCode || p.code}</div>
+                          </div>
+                          <div style={{ color: "rgba(255,255,255,0.3)", fontSize: "1.2rem", textAlign: "center" }}>↔️</div>
+                          <div>
+                            <div style={{ color: "#6ee7b7", fontWeight: "bold" }}>📦 {p.originalExistingName}</div>
+                            <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.7rem" }}>En inventario actual</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            <div style={{ display: "flex", gap: "15px", justifyContent: "center", marginTop: "20px" }}>
               <button
                 className="btn-primary"
                 onClick={() => { setPreviewData(null); setUploadedFile(null); setFilePreviewUrl(null); setImportOption(""); }}
