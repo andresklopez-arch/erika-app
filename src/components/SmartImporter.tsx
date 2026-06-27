@@ -13,6 +13,18 @@ interface SmartImporterProps {
   ) => void;
 }
 
+// Normalizador de cadenas para comparación de nombres
+const normalizeString = (str: string) => {
+  if (!str) return "";
+  return str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
 export default function SmartImporter({
   avgMargin,
   existingItems,
@@ -52,14 +64,11 @@ export default function SmartImporter({
   // Función para procesar y limpiar el texto pegado
   const parsePastedText = (text: string) => {
     if (!text) return [];
-    // Dividir por saltos de línea
     const lines = text.split(/\r?\n/);
-    // Eliminar última línea si está vacía (común en Excel al copiar rangos)
     if (lines.length > 0 && lines[lines.length - 1].trim() === "") {
       lines.pop();
     }
     return lines.map((line) => {
-      // Si el usuario copió accidentalmente más columnas, tomar sólo la primera (separador tabulador)
       const firstColumn = line.split("\t")[0];
       return firstColumn ? firstColumn.trim() : "";
     });
@@ -124,7 +133,6 @@ export default function SmartImporter({
       setInputText("");
       setStep(2);
     } else {
-      // Validar cantidad de filas estricta en base al Paso 1
       if (parsed.length !== codes.length) {
         setErrorMsg(
           `⚠️ La cantidad de filas copiadas (${parsed.length}) no coincide con la cantidad de Códigos ingresados originalmente (${codes.length}). Por favor, vuelve a seleccionar y copiar los datos correctos en tu Excel.`
@@ -193,6 +201,25 @@ export default function SmartImporter({
     }
   };
 
+  // Reiniciar el asistente por completo
+  const handleReset = () => {
+    if (
+      window.confirm(
+        "¿Estás seguro de que deseas reiniciar el asistente? Se borrarán todos los datos pegados hasta el momento."
+      )
+    ) {
+      setCodes([]);
+      setNames([]);
+      setSuppliers([]);
+      setStocks([]);
+      setCosts([]);
+      setPrices([]);
+      setInputText("");
+      setErrorMsg("");
+      setStep(1);
+    }
+  };
+
   // Asignar ubicación automática (por cuadrantes secuenciales: C-1 a C-20, luego D-1, etc.)
   const autoLocations: string[] = [];
   if (codes.length > 0) {
@@ -205,6 +232,56 @@ export default function SmartImporter({
         areaNum = 1;
         areaChar = String.fromCharCode(areaChar.charCodeAt(0) + 1);
       }
+    }
+  }
+
+  // Lógica de cálculo de advertencias y alertas del lote
+  const warningsList: string[] = [];
+  let lossCount = 0;
+  let zeroOrNegativeMoneyCount = 0;
+  let negativeStockCount = 0;
+  let emptyNameOrCodeCount = 0;
+
+  if (step === 7) {
+    codes.forEach((code, idx) => {
+      const name = names[idx] || "";
+      const stock = stocks[idx] || 0;
+      const cost = costs[idx] || 0;
+      const price = prices[idx] || 0;
+
+      if (!code || !name) {
+        emptyNameOrCodeCount++;
+      }
+      if (stock < 0) {
+        negativeStockCount++;
+      }
+      if (cost <= 0 || price <= 0) {
+        zeroOrNegativeMoneyCount++;
+      }
+      if (cost >= price && cost > 0 && price > 0) {
+        lossCount++;
+      }
+    });
+
+    if (lossCount > 0) {
+      warningsList.push(
+        `⚠️ Margen de Ganancia: Hay ${lossCount} producto(s) donde el costo es mayor o igual al precio de venta.`
+      );
+    }
+    if (zeroOrNegativeMoneyCount > 0) {
+      warningsList.push(
+        `⚠️ Precios Sospechosos: Hay ${zeroOrNegativeMoneyCount} producto(s) con costo o precio de venta en $0 o negativo.`
+      );
+    }
+    if (negativeStockCount > 0) {
+      warningsList.push(
+        `⚠️ Existencias: Hay ${negativeStockCount} producto(s) con stock negativo.`
+      );
+    }
+    if (emptyNameOrCodeCount > 0) {
+      warningsList.push(
+        `⚠️ Datos Faltantes: Hay ${emptyNameOrCodeCount} producto(s) sin código o sin nombre.`
+      );
     }
   }
 
@@ -226,7 +303,6 @@ export default function SmartImporter({
       for (const sup of uniqueSuppliers) {
         if (!dbSuppliersLower.includes(sup.toLowerCase())) {
           try {
-            // Capitalizar nombre de proveedor de forma limpia
             const cleanSup = sup
               .toLowerCase()
               .replace(/\b\w/g, (c) => c.toUpperCase());
@@ -258,7 +334,42 @@ export default function SmartImporter({
         };
       });
 
-      // 3. Ejecutar la importación (acumulando existencias y actualizando precios de los existentes)
+      // 3. Bitácora de importación (logs) en la base de datos Supabase
+      try {
+        const supplierBreakdown: Record<string, number> = {};
+        finalProducts.forEach((p) => {
+          const sup = p.supplier || "Pendiente";
+          supplierBreakdown[sup] = (supplierBreakdown[sup] || 0) + 1;
+        });
+
+        let newCount = 0;
+        let updateCount = 0;
+
+        finalProducts.forEach((p) => {
+          const exists = existingItems.some(
+            (i) =>
+              (i.code && p.code && i.code.trim().toUpperCase() === p.code.trim().toUpperCase()) ||
+              normalizeString(i.name) === normalizeString(p.name)
+          );
+          if (exists) {
+            updateCount++;
+          } else {
+            newCount++;
+          }
+        });
+
+        await supabase.from("import_logs").insert({
+          suppliers_breakdown: JSON.stringify(supplierBreakdown),
+          new_count: newCount,
+          update_count: updateCount,
+          total_count: finalProducts.length,
+          created_at: new Date().toISOString(),
+        });
+      } catch (logErr) {
+        console.error("Error al registrar bitácora de importación (import_logs):", logErr);
+      }
+
+      // 4. Ejecutar la importación (acumulando existencias y actualizando precios de los existentes)
       await onImport(finalProducts, "sustituir", true);
       onClose();
     } catch (err) {
@@ -510,7 +621,7 @@ export default function SmartImporter({
                 📋 Resumen y Alineación de Datos
               </h3>
               <p style={{ color: "rgba(255, 255, 255, 0.7)", fontSize: "0.95rem" }}>
-                Verifica que todos los datos estén alineados correctamente antes de guardar.
+                Verifica que todos los datos estén alineados correctamente. Celdas con posibles errores se resaltarán en rojo.
               </p>
             </div>
 
@@ -518,7 +629,7 @@ export default function SmartImporter({
             <div
               style={{
                 overflowX: "auto",
-                maxHeight: "300px",
+                maxHeight: "260px",
                 border: "1px solid var(--glass-border)",
                 borderRadius: "10px",
                 backgroundColor: "rgba(0,0,0,0.15)",
@@ -550,53 +661,129 @@ export default function SmartImporter({
                   </tr>
                 </thead>
                 <tbody>
-                  {codes.map((code, idx) => (
-                    <tr
-                      key={idx}
-                      style={{
-                        borderBottom: "1px solid rgba(255, 255, 255, 0.03)",
-                        transition: "background 0.2s",
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.02)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                    >
-                      <td style={{ padding: "8px 15px", color: "rgba(255,255,255,0.4)" }}>
-                        {idx + 1}
-                      </td>
-                      <td style={{ padding: "8px 15px", fontWeight: "bold", color: "#fca5a5" }}>
-                        {code}
-                      </td>
-                      <td style={{ padding: "8px 15px", color: "white" }}>{names[idx]}</td>
-                      <td style={{ padding: "8px 15px" }}>
-                        <span
+                  {codes.map((code, idx) => {
+                    const name = names[idx] || "";
+                    const stock = stocks[idx] || 0;
+                    const cost = costs[idx] || 0;
+                    const price = prices[idx] || 0;
+
+                    // Lógica de alerta por celda
+                    const isCodeErr = !code;
+                    const isNameErr = !name;
+                    const isStockErr = stock < 0;
+                    const isCostErr = cost <= 0 || (cost >= price && cost > 0 && price > 0);
+                    const isPriceErr = price <= 0 || (cost >= price && cost > 0 && price > 0);
+
+                    return (
+                      <tr
+                        key={idx}
+                        style={{
+                          borderBottom: "1px solid rgba(255, 255, 255, 0.03)",
+                          transition: "background 0.2s",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.02)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                      >
+                        <td style={{ padding: "8px 15px", color: "rgba(255,255,255,0.4)" }}>
+                          {idx + 1}
+                        </td>
+                        <td
                           style={{
-                            background: "rgba(16, 185, 129, 0.15)",
-                            color: "#34d399",
-                            padding: "3px 8px",
-                            borderRadius: "12px",
-                            fontSize: "0.75rem",
+                            padding: "8px 15px",
+                            fontWeight: "bold",
+                            color: isCodeErr ? "#fca5a5" : "#fca5a5",
+                            backgroundColor: isCodeErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
                           }}
+                          title={isCodeErr ? "Código vacío o inválido" : ""}
                         >
-                          {suppliers[idx] || "Pendiente"}
-                        </span>
-                      </td>
-                      <td style={{ padding: "8px 15px", color: "#fb923c" }}>
-                        {autoLocations[idx]}
-                      </td>
-                      <td style={{ padding: "8px 15px", fontWeight: 600, color: "white" }}>
-                        {stocks[idx]}
-                      </td>
-                      <td style={{ padding: "8px 15px", color: "rgba(255,255,255,0.8)" }}>
-                        ${(costs[idx] || 0).toFixed(2)}
-                      </td>
-                      <td style={{ padding: "8px 15px", fontWeight: 600, color: "#34d399" }}>
-                        ${(prices[idx] || 0).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
+                          {code || "---"}
+                        </td>
+                        <td
+                          style={{
+                            padding: "8px 15px",
+                            color: "white",
+                            backgroundColor: isNameErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
+                          }}
+                          title={isNameErr ? "Nombre vacío" : ""}
+                        >
+                          {name || "Producto sin nombre"}
+                        </td>
+                        <td style={{ padding: "8px 15px" }}>
+                          <span
+                            style={{
+                              background: "rgba(16, 185, 129, 0.15)",
+                              color: "#34d399",
+                              padding: "3px 8px",
+                              borderRadius: "12px",
+                              fontSize: "0.75rem",
+                            }}
+                          >
+                            {suppliers[idx] || "Pendiente"}
+                          </span>
+                        </td>
+                        <td style={{ padding: "8px 15px", color: "#fb923c" }}>
+                          {autoLocations[idx]}
+                        </td>
+                        <td
+                          style={{
+                            padding: "8px 15px",
+                            fontWeight: 600,
+                            color: isStockErr ? "#ef4444" : "white",
+                            backgroundColor: isStockErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
+                          }}
+                          title={isStockErr ? "Stock negativo" : ""}
+                        >
+                          {stock}
+                        </td>
+                        <td
+                          style={{
+                            padding: "8px 15px",
+                            color: isCostErr ? "#ef4444" : "rgba(255,255,255,0.8)",
+                            backgroundColor: isCostErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
+                          }}
+                          title={cost >= price ? "Costo es mayor o igual al precio de venta" : cost <= 0 ? "Costo es $0 o negativo" : ""}
+                        >
+                          ${cost.toFixed(2)}
+                        </td>
+                        <td
+                          style={{
+                            padding: "8px 15px",
+                            fontWeight: 600,
+                            color: isPriceErr ? "#ef4444" : "#34d399",
+                            backgroundColor: isPriceErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
+                          }}
+                          title={cost >= price ? "Precio de venta es menor o igual al costo" : price <= 0 ? "Precio es $0 o negativo" : ""}
+                        >
+                          ${price.toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+
+            {/* Alertas de Validación / Advertencias */}
+            {warningsList.length > 0 && (
+              <div
+                style={{
+                  background: "rgba(245, 158, 11, 0.08)",
+                  border: "1px solid rgba(245, 158, 11, 0.4)",
+                  borderRadius: "8px",
+                  padding: "12px 16px",
+                  color: "#fde047",
+                  fontSize: "0.85rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                }}
+              >
+                <strong style={{ color: "#fbbf24" }}>⚠️ Advertencias de calidad detectadas:</strong>
+                {warningsList.map((warn, wIdx) => (
+                  <div key={wIdx}>{warn}</div>
+                ))}
+              </div>
+            )}
 
             {/* Tarjeta de Advertencia / Leyenda Informativa */}
             <div
@@ -638,30 +825,53 @@ export default function SmartImporter({
             paddingTop: "20px",
           }}
         >
-          <div>
+          {/* Lado izquierdo */}
+          <div style={{ display: "flex", gap: "10px" }}>
             {step > 1 && (
-              <button
-                onClick={handlePrevStep}
-                disabled={isProcessing}
-                style={{
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid var(--glass-border)",
-                  color: "white",
-                  padding: "10px 20px",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  fontWeight: 600,
-                  fontSize: "0.9rem",
-                  transition: "all 0.2s",
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)")}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)")}
-              >
-                Volver
-              </button>
+              <>
+                <button
+                  onClick={handlePrevStep}
+                  disabled={isProcessing}
+                  style={{
+                    background: "rgba(255, 255, 255, 0.05)",
+                    border: "1px solid var(--glass-border)",
+                    color: "white",
+                    padding: "10px 20px",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    fontSize: "0.9rem",
+                    transition: "all 0.2s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)")}
+                >
+                  Volver
+                </button>
+                <button
+                  onClick={handleReset}
+                  disabled={isProcessing}
+                  style={{
+                    background: "rgba(239, 68, 68, 0.1)",
+                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                    color: "#fca5a5",
+                    padding: "10px 20px",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    fontSize: "0.9rem",
+                    transition: "all 0.2s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.2)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.1)")}
+                >
+                  Reiniciar Asistente
+                </button>
+              </>
             )}
           </div>
 
+          {/* Lado derecho */}
           <div style={{ display: "flex", gap: "10px" }}>
             <button
               onClick={onClose}
