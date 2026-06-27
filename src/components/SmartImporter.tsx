@@ -47,6 +47,11 @@ export default function SmartImporter({
   // Paginación de la previsualización final
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Historial de Bitácoras
+  const [viewingHistory, setViewingHistory] = useState(false);
+  const [historyLogs, setHistoryLogs] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
   // Proveedores registrados en base de datos para validar y crear nuevos
   const [dbSuppliers, setDbSuppliers] = useState<string[]>([]);
 
@@ -63,6 +68,24 @@ export default function SmartImporter({
     };
     fetchSuppliers();
   }, []);
+
+  // Cargar registros de bitácora
+  const loadHistoryLogs = async () => {
+    setIsLoadingHistory(true);
+    try {
+      const { data, error } = await supabase
+        .from("import_logs")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      if (data) setHistoryLogs(data);
+    } catch (err) {
+      console.error("Error al cargar bitácoras de importación:", err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
 
   // Función para procesar y limpiar el texto pegado
   const parsePastedText = (text: string) => {
@@ -291,6 +314,24 @@ export default function SmartImporter({
     }
   }
 
+  // Auto-cálculo y aplicación del precio de venta sugerido por el margen de utilidad
+  const applySuggestedPrices = () => {
+    const updatedPrices = prices.map((price, idx) => {
+      const cost = costs[idx] || 0;
+      // Aplicar si no tiene precio o si se vende con pérdidas
+      if (price <= cost || price === 0) {
+        const marginFactor = 1 - avgMargin / 100;
+        if (marginFactor > 0) {
+          const suggested = cost / marginFactor;
+          return Math.round(suggested * 100) / 100;
+        }
+        return Math.round(cost * (1 + avgMargin / 100) * 100) / 100;
+      }
+      return price;
+    });
+    setPrices(updatedPrices);
+  };
+
   // Generar y descargar el reporte de advertencias en archivo de texto (.txt)
   const downloadWarningReport = () => {
     let reportText = "=== REPORTE DE ADVERTENCIAS - CARGA INTELIGENTE ===\n";
@@ -457,6 +498,167 @@ export default function SmartImporter({
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedCodes = codes.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
+  // Renderizar la vista de historial de logs
+  if (viewingHistory) {
+    return (
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(10, 10, 15, 0.85)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+          padding: "20px",
+          fontFamily: "var(--font-main)",
+        }}
+      >
+        <div
+          className="glass-panel"
+          style={{
+            width: "100%",
+            maxWidth: "650px",
+            maxHeight: "90vh",
+            display: "flex",
+            flexDirection: "column",
+            gap: "20px",
+            padding: "30px",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.5), var(--shadow-glow)",
+            background: "rgba(22, 22, 34, 0.95)",
+            border: "1px solid var(--glass-border)",
+            borderRadius: "16px",
+            overflowY: "auto",
+          }}
+        >
+          {/* Cabecera */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <h2 style={{ fontSize: "1.6rem", color: "var(--color-primary)", fontWeight: 600 }}>
+                📋 Historial de Cargas Masivas
+              </h2>
+              <p style={{ color: "rgba(255, 255, 255, 0.6)", fontSize: "0.9rem", marginTop: "4px" }}>
+                Bitácora de las últimas 10 importaciones desde Supabase.
+              </p>
+            </div>
+            <button
+              onClick={() => setViewingHistory(false)}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "rgba(255, 255, 255, 0.5)",
+                fontSize: "1.5rem",
+                cursor: "pointer",
+              }}
+            >
+              &times;
+            </button>
+          </div>
+
+          {/* Listado de Logs */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", overflowY: "auto", maxHeight: "450px" }}>
+            {isLoadingHistory ? (
+              <div style={{ textAlign: "center", color: "rgba(255,255,255,0.5)", padding: "20px" }}>
+                Cargando historial de base de datos...
+              </div>
+            ) : historyLogs.length === 0 ? (
+              <div style={{ textAlign: "center", color: "rgba(255,255,255,0.5)", padding: "20px" }}>
+                No hay registros de importación en el historial.
+              </div>
+            ) : (
+              historyLogs.map((log) => {
+                let suppliersObj: Record<string, number> = {};
+                try {
+                  suppliersObj = typeof log.suppliers_breakdown === "string"
+                    ? JSON.parse(log.suppliers_breakdown)
+                    : log.suppliers_breakdown || {};
+                } catch {
+                  suppliersObj = {};
+                }
+                const sups = Object.keys(suppliersObj);
+
+                return (
+                  <div
+                    key={log.id}
+                    style={{
+                      background: "rgba(255,255,255,0.02)",
+                      border: "1px solid var(--glass-border)",
+                      borderRadius: "10px",
+                      padding: "15px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: "0.9rem", color: "white", fontWeight: 600 }}>
+                        📅 {new Date(log.created_at).toLocaleString()}
+                      </span>
+                      <span style={{ fontSize: "0.85rem", color: "#34d399", fontWeight: "bold" }}>
+                        {log.total_count} artículos
+                      </span>
+                    </div>
+                    <div style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.7)" }}>
+                      Nuevos agregados: <strong style={{ color: "white" }}>{log.new_count}</strong> | Actualizados: <strong style={{ color: "white" }}>{log.update_count}</strong>
+                    </div>
+                    {sups.length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" }}>
+                        <span style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.4)" }}>Proveedores:</span>
+                        {sups.slice(0, 5).map((s) => (
+                          <span
+                            key={s}
+                            style={{
+                              background: "rgba(139, 92, 246, 0.15)",
+                              color: "#c084fc",
+                              padding: "2px 6px",
+                              borderRadius: "10px",
+                              fontSize: "0.72rem",
+                            }}
+                          >
+                            {s} ({suppliersObj[s]})
+                          </span>
+                        ))}
+                        {sups.length > 5 && (
+                          <span style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.5)" }}>
+                            +{sups.length - 5} más
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Footer del Historial */}
+          <div style={{ borderTop: "1px solid var(--glass-border)", paddingTop: "15px", textAlign: "right" }}>
+            <button
+              onClick={() => setViewingHistory(false)}
+              style={{
+                background: "linear-gradient(135deg, var(--color-primary), var(--color-accent))",
+                border: "none",
+                color: "white",
+                padding: "8px 20px",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontWeight: 600,
+                fontSize: "0.9rem",
+              }}
+            >
+              Regresar al Asistente
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{
@@ -512,23 +714,48 @@ export default function SmartImporter({
               Asistente de carga masiva de datos directos desde Excel.
             </p>
           </div>
-          <button
-            onClick={onClose}
-            disabled={isProcessing}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "rgba(255, 255, 255, 0.5)",
-              fontSize: "1.5rem",
-              cursor: "pointer",
-              transition: "color 0.2s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--color-primary)")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255, 255, 255, 0.5)")}
-            title="Cerrar modal"
-          >
-            &times;
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+            {step < 7 && !isProcessing && (
+              <button
+                onClick={() => {
+                  loadHistoryLogs();
+                  setViewingHistory(true);
+                }}
+                style={{
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid var(--glass-border)",
+                  color: "rgba(255,255,255,0.85)",
+                  padding: "6px 12px",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                  transition: "background 0.2s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.08)")}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)")}
+              >
+                📋 Ver Historial
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              disabled={isProcessing}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "rgba(255, 255, 255, 0.5)",
+                fontSize: "1.5rem",
+                cursor: "pointer",
+                transition: "color 0.2s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--color-primary)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255, 255, 255, 0.5)")}
+              title="Cerrar modal"
+            >
+              &times;
+            </button>
+          </div>
         </div>
 
         {/* Indicador de pasos visuales */}
@@ -741,6 +968,20 @@ export default function SmartImporter({
                       const isCostErr = cost <= 0 || (cost >= price && cost > 0 && price > 0);
                       const isPriceErr = price <= 0 || (cost >= price && cost > 0 && price > 0);
 
+                      // Alertas de duplicados
+                      const nameLower = name.trim().toLowerCase();
+                      const isDuplicateInBatch =
+                        nameLower !== "" &&
+                        names.filter((n) => n.trim().toLowerCase() === nameLower).length > 1;
+
+                      const dbMatch = existingItems.find(
+                        (i) =>
+                          normalizeString(i.name) === normalizeString(name) &&
+                          i.code &&
+                          code &&
+                          i.code.trim().toUpperCase() !== code.trim().toUpperCase()
+                      );
+
                       return (
                         <tr
                           key={absoluteIdx}
@@ -774,6 +1015,19 @@ export default function SmartImporter({
                             title={isNameErr ? "Nombre vacío" : ""}
                           >
                             {name || "Producto sin nombre"}
+                            {isDuplicateInBatch && (
+                              <span style={{ display: "block", fontSize: "0.72rem", color: "#fb923c", marginTop: "2px" }}>
+                                ⚠️ Duplicado en el lote
+                              </span>
+                            )}
+                            {dbMatch && (
+                              <span
+                                style={{ display: "block", fontSize: "0.72rem", color: "#fbbf24", marginTop: "2px" }}
+                                title={`Este producto ya existe con el código "${dbMatch.code}". Si continúas, se actualizará su código en la BD por "${code}".`}
+                              >
+                                ⚠️ Existe en BD con código: {dbMatch.code}
+                              </span>
+                            )}
                           </td>
                           <td style={{ padding: "8px 15px" }}>
                             <span
@@ -909,25 +1163,48 @@ export default function SmartImporter({
                     <div key={wIdx}>{warn}</div>
                   ))}
                 </div>
-                <button
-                  onClick={downloadWarningReport}
-                  style={{
-                    background: "rgba(245, 158, 11, 0.15)",
-                    border: "1px solid #fbbf24",
-                    color: "#fde047",
-                    padding: "6px 12px",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                    fontSize: "0.78rem",
-                    fontWeight: 600,
-                    whiteSpace: "nowrap",
-                    transition: "background 0.2s",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(245, 158, 11, 0.25)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(245, 158, 11, 0.15)")}
-                >
-                  📥 Descargar Reporte
-                </button>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {(lossCount > 0 || zeroOrNegativeMoneyCount > 0) && (
+                    <button
+                      onClick={applySuggestedPrices}
+                      style={{
+                        background: "rgba(52, 211, 153, 0.15)",
+                        border: "1px solid #34d399",
+                        color: "#34d399",
+                        padding: "6px 12px",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        fontSize: "0.78rem",
+                        fontWeight: 600,
+                        whiteSpace: "nowrap",
+                        transition: "background 0.2s",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(52, 211, 153, 0.25)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(52, 211, 153, 0.15)")}
+                    >
+                      ⚡ Aplicar Margen Sugerido ({avgMargin.toFixed(1)}%)
+                    </button>
+                  )}
+                  <button
+                    onClick={downloadWarningReport}
+                    style={{
+                      background: "rgba(245, 158, 11, 0.15)",
+                      border: "1px solid #fbbf24",
+                      color: "#fde047",
+                      padding: "6px 12px",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      fontSize: "0.78rem",
+                      fontWeight: 600,
+                      whiteSpace: "nowrap",
+                      transition: "background 0.2s",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(245, 158, 11, 0.25)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(245, 158, 11, 0.15)")}
+                  >
+                    📥 Descargar Reporte
+                  </button>
+                </div>
               </div>
             )}
 
