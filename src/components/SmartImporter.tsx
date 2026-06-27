@@ -44,6 +44,9 @@ export default function SmartImporter({
   const [costs, setCosts] = useState<number[]>([]);
   const [prices, setPrices] = useState<number[]>([]);
 
+  // Paginación de la previsualización final
+  const [currentPage, setCurrentPage] = useState(1);
+
   // Proveedores registrados en base de datos para validar y crear nuevos
   const [dbSuppliers, setDbSuppliers] = useState<string[]>([]);
 
@@ -65,7 +68,8 @@ export default function SmartImporter({
   const parsePastedText = (text: string) => {
     if (!text) return [];
     const lines = text.split(/\r?\n/);
-    if (lines.length > 0 && lines[lines.length - 1].trim() === "") {
+    // Remover todas las líneas vacías consecutivas al final
+    while (lines.length > 0 && lines[lines.length - 1].trim() === "") {
       lines.pop();
     }
     return lines.map((line) => {
@@ -171,6 +175,7 @@ export default function SmartImporter({
         });
         setPrices(parsedNums);
         setInputText("");
+        setCurrentPage(1); // Reiniciar paginación al entrar a la vista previa
         setStep(7);
       }
     }
@@ -216,6 +221,7 @@ export default function SmartImporter({
       setPrices([]);
       setInputText("");
       setErrorMsg("");
+      setCurrentPage(1);
       setStep(1);
     }
   };
@@ -284,6 +290,59 @@ export default function SmartImporter({
       );
     }
   }
+
+  // Generar y descargar el reporte de advertencias en archivo de texto (.txt)
+  const downloadWarningReport = () => {
+    let reportText = "=== REPORTE DE ADVERTENCIAS - CARGA INTELIGENTE ===\n";
+    reportText += `Fecha: ${new Date().toLocaleString()}\n`;
+    reportText += `Artículos totales en el lote: ${codes.length}\n\n`;
+
+    let itemWarningCount = 0;
+
+    codes.forEach((code, idx) => {
+      const name = names[idx] || "Producto sin nombre";
+      const stock = stocks[idx] || 0;
+      const cost = costs[idx] || 0;
+      const price = prices[idx] || 0;
+      const supplier = suppliers[idx] || "Pendiente";
+
+      const warnings = [];
+      if (!code) warnings.push("Código vacío");
+      if (!names[idx]) warnings.push("Nombre vacío");
+      if (stock < 0) warnings.push(`Stock negativo (${stock})`);
+      if (cost <= 0) warnings.push(`Costo menor o igual a cero ($${cost})`);
+      if (price <= 0) warnings.push(`Precio menor o igual a cero ($${price})`);
+      if (cost >= price && cost > 0 && price > 0) {
+        warnings.push(`Sin margen de ganancia (Costo: $${cost} >= Precio: $${price})`);
+      }
+
+      if (warnings.length > 0) {
+        itemWarningCount++;
+        reportText += `Fila ${idx + 1}:\n`;
+        reportText += `  - Código: ${code || "S/C"}\n`;
+        reportText += `  - Producto: ${name}\n`;
+        reportText += `  - Proveedor: ${supplier}\n`;
+        reportText += `  - Alertas:\n`;
+        warnings.forEach((w) => {
+          reportText += `    * ${w}\n`;
+        });
+        reportText += "\n";
+      }
+    });
+
+    if (itemWarningCount === 0) {
+      reportText += "No se encontraron advertencias en el lote.\n";
+    }
+
+    const blob = new Blob([reportText], { type: "text/plain;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `reporte_advertencias_carga_${Date.now()}.txt`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Guardado final e inserción de datos
   const handleImport = async () => {
@@ -391,6 +450,12 @@ export default function SmartImporter({
   ];
 
   const config = getStepConfig();
+
+  // Paginación en tabla (Paso 7)
+  const ITEMS_PER_PAGE = 10;
+  const totalPages = Math.ceil(codes.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedCodes = codes.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   return (
     <div
@@ -628,139 +693,196 @@ export default function SmartImporter({
             {/* Contenedor de la Tabla */}
             <div
               style={{
-                overflowX: "auto",
-                maxHeight: "260px",
                 border: "1px solid var(--glass-border)",
                 borderRadius: "10px",
                 backgroundColor: "rgba(0,0,0,0.15)",
+                display: "flex",
+                flexDirection: "column",
               }}
             >
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  fontSize: "0.85rem",
-                  textAlign: "left",
-                }}
-              >
-                <thead>
-                  <tr
-                    style={{
-                      borderBottom: "2px solid var(--glass-border)",
-                      backgroundColor: "rgba(255, 255, 255, 0.02)",
-                    }}
-                  >
-                    <th style={{ padding: "10px 15px", color: "rgba(255,255,255,0.5)" }}>#</th>
-                    <th style={{ padding: "10px 15px", color: "white" }}>Código</th>
-                    <th style={{ padding: "10px 15px", color: "white" }}>Producto</th>
-                    <th style={{ padding: "10px 15px", color: "white" }}>Proveedor</th>
-                    <th style={{ padding: "10px 15px", color: "white" }}>Ubicación</th>
-                    <th style={{ padding: "10px 15px", color: "white" }}>Stock</th>
-                    <th style={{ padding: "10px 15px", color: "white" }}>Costo</th>
-                    <th style={{ padding: "10px 15px", color: "white" }}>Precio Venta</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {codes.map((code, idx) => {
-                    const name = names[idx] || "";
-                    const stock = stocks[idx] || 0;
-                    const cost = costs[idx] || 0;
-                    const price = prices[idx] || 0;
+              <div style={{ overflowX: "auto", maxHeight: "250px" }}>
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    fontSize: "0.85rem",
+                    textAlign: "left",
+                  }}
+                >
+                  <thead>
+                    <tr
+                      style={{
+                        borderBottom: "2px solid var(--glass-border)",
+                        backgroundColor: "rgba(255, 255, 255, 0.02)",
+                      }}
+                    >
+                      <th style={{ padding: "10px 15px", color: "rgba(255,255,255,0.5)" }}>#</th>
+                      <th style={{ padding: "10px 15px", color: "white" }}>Código</th>
+                      <th style={{ padding: "10px 15px", color: "white" }}>Producto</th>
+                      <th style={{ padding: "10px 15px", color: "white" }}>Proveedor</th>
+                      <th style={{ padding: "10px 15px", color: "white" }}>Ubicación</th>
+                      <th style={{ padding: "10px 15px", color: "white" }}>Stock</th>
+                      <th style={{ padding: "10px 15px", color: "white" }}>Costo</th>
+                      <th style={{ padding: "10px 15px", color: "white" }}>Precio Venta</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedCodes.map((code, idx) => {
+                      const absoluteIdx = startIndex + idx;
+                      const name = names[absoluteIdx] || "";
+                      const stock = stocks[absoluteIdx] || 0;
+                      const cost = costs[absoluteIdx] || 0;
+                      const price = prices[absoluteIdx] || 0;
 
-                    // Lógica de alerta por celda
-                    const isCodeErr = !code;
-                    const isNameErr = !name;
-                    const isStockErr = stock < 0;
-                    const isCostErr = cost <= 0 || (cost >= price && cost > 0 && price > 0);
-                    const isPriceErr = price <= 0 || (cost >= price && cost > 0 && price > 0);
+                      // Lógica de alerta por celda
+                      const isCodeErr = !code;
+                      const isNameErr = !name;
+                      const isStockErr = stock < 0;
+                      const isCostErr = cost <= 0 || (cost >= price && cost > 0 && price > 0);
+                      const isPriceErr = price <= 0 || (cost >= price && cost > 0 && price > 0);
 
-                    return (
-                      <tr
-                        key={idx}
-                        style={{
-                          borderBottom: "1px solid rgba(255, 255, 255, 0.03)",
-                          transition: "background 0.2s",
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.02)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                      >
-                        <td style={{ padding: "8px 15px", color: "rgba(255,255,255,0.4)" }}>
-                          {idx + 1}
-                        </td>
-                        <td
+                      return (
+                        <tr
+                          key={absoluteIdx}
                           style={{
-                            padding: "8px 15px",
-                            fontWeight: "bold",
-                            color: isCodeErr ? "#fca5a5" : "#fca5a5",
-                            backgroundColor: isCodeErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
+                            borderBottom: "1px solid rgba(255, 255, 255, 0.03)",
+                            transition: "background 0.2s",
                           }}
-                          title={isCodeErr ? "Código vacío o inválido" : ""}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.02)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                         >
-                          {code || "---"}
-                        </td>
-                        <td
-                          style={{
-                            padding: "8px 15px",
-                            color: "white",
-                            backgroundColor: isNameErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
-                          }}
-                          title={isNameErr ? "Nombre vacío" : ""}
-                        >
-                          {name || "Producto sin nombre"}
-                        </td>
-                        <td style={{ padding: "8px 15px" }}>
-                          <span
+                          <td style={{ padding: "8px 15px", color: "rgba(255,255,255,0.4)" }}>
+                            {absoluteIdx + 1}
+                          </td>
+                          <td
                             style={{
-                              background: "rgba(16, 185, 129, 0.15)",
-                              color: "#34d399",
-                              padding: "3px 8px",
-                              borderRadius: "12px",
-                              fontSize: "0.75rem",
+                              padding: "8px 15px",
+                              fontWeight: "bold",
+                              color: "#fca5a5",
+                              backgroundColor: isCodeErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
                             }}
+                            title={isCodeErr ? "Código vacío o inválido" : ""}
                           >
-                            {suppliers[idx] || "Pendiente"}
-                          </span>
-                        </td>
-                        <td style={{ padding: "8px 15px", color: "#fb923c" }}>
-                          {autoLocations[idx]}
-                        </td>
-                        <td
-                          style={{
-                            padding: "8px 15px",
-                            fontWeight: 600,
-                            color: isStockErr ? "#ef4444" : "white",
-                            backgroundColor: isStockErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
-                          }}
-                          title={isStockErr ? "Stock negativo" : ""}
-                        >
-                          {stock}
-                        </td>
-                        <td
-                          style={{
-                            padding: "8px 15px",
-                            color: isCostErr ? "#ef4444" : "rgba(255,255,255,0.8)",
-                            backgroundColor: isCostErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
-                          }}
-                          title={cost >= price ? "Costo es mayor o igual al precio de venta" : cost <= 0 ? "Costo es $0 o negativo" : ""}
-                        >
-                          ${cost.toFixed(2)}
-                        </td>
-                        <td
-                          style={{
-                            padding: "8px 15px",
-                            fontWeight: 600,
-                            color: isPriceErr ? "#ef4444" : "#34d399",
-                            backgroundColor: isPriceErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
-                          }}
-                          title={cost >= price ? "Precio de venta es menor o igual al costo" : price <= 0 ? "Precio es $0 o negativo" : ""}
-                        >
-                          ${price.toFixed(2)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                            {code || "---"}
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px 15px",
+                              color: "white",
+                              backgroundColor: isNameErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
+                            }}
+                            title={isNameErr ? "Nombre vacío" : ""}
+                          >
+                            {name || "Producto sin nombre"}
+                          </td>
+                          <td style={{ padding: "8px 15px" }}>
+                            <span
+                              style={{
+                                background: "rgba(16, 185, 129, 0.15)",
+                                color: "#34d399",
+                                padding: "3px 8px",
+                                borderRadius: "12px",
+                                fontSize: "0.75rem",
+                              }}
+                            >
+                              {suppliers[absoluteIdx] || "Pendiente"}
+                            </span>
+                          </td>
+                          <td style={{ padding: "8px 15px", color: "#fb923c" }}>
+                            {autoLocations[absoluteIdx]}
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px 15px",
+                              fontWeight: 600,
+                              color: isStockErr ? "#ef4444" : "white",
+                              backgroundColor: isStockErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
+                            }}
+                            title={isStockErr ? "Stock negativo" : ""}
+                          >
+                            {stock}
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px 15px",
+                              color: isCostErr ? "#ef4444" : "rgba(255,255,255,0.8)",
+                              backgroundColor: isCostErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
+                            }}
+                            title={cost >= price ? "Costo es mayor o igual al precio de venta" : cost <= 0 ? "Costo es $0 o negativo" : ""}
+                          >
+                            ${cost.toFixed(2)}
+                          </td>
+                          <td
+                            style={{
+                              padding: "8px 15px",
+                              fontWeight: 600,
+                              color: isPriceErr ? "#ef4444" : "#34d399",
+                              backgroundColor: isPriceErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
+                            }}
+                            title={cost >= price ? "Precio de venta es menor o igual al costo" : price <= 0 ? "Precio es $0 o negativo" : ""}
+                          >
+                            ${price.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Controles de Paginación */}
+              {totalPages > 1 && (
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "10px 15px",
+                    background: "rgba(255, 255, 255, 0.02)",
+                    borderTop: "1px solid var(--glass-border)",
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  <span style={{ color: "rgba(255,255,255,0.5)" }}>
+                    Mostrando del {startIndex + 1} al {Math.min(startIndex + ITEMS_PER_PAGE, codes.length)} de {codes.length} artículos
+                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                      disabled={currentPage === 1}
+                      onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                      style={{
+                        background: currentPage === 1 ? "rgba(255,255,255,0.02)" : "rgba(255, 255, 255, 0.05)",
+                        border: "1px solid var(--glass-border)",
+                        color: currentPage === 1 ? "rgba(255,255,255,0.2)" : "white",
+                        padding: "5px 12px",
+                        borderRadius: "6px",
+                        cursor: currentPage === 1 ? "not-allowed" : "pointer",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Anterior
+                    </button>
+                    <span style={{ color: "white" }}>
+                      Página {currentPage} de {totalPages}
+                    </span>
+                    <button
+                      disabled={currentPage === totalPages}
+                      onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                      style={{
+                        background: currentPage === totalPages ? "rgba(255,255,255,0.02)" : "rgba(255, 255, 255, 0.05)",
+                        border: "1px solid var(--glass-border)",
+                        color: currentPage === totalPages ? "rgba(255,255,255,0.2)" : "white",
+                        padding: "5px 12px",
+                        borderRadius: "6px",
+                        cursor: currentPage === totalPages ? "not-allowed" : "pointer",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Alertas de Validación / Advertencias */}
@@ -770,18 +892,42 @@ export default function SmartImporter({
                   background: "rgba(245, 158, 11, 0.08)",
                   border: "1px solid rgba(245, 158, 11, 0.4)",
                   borderRadius: "8px",
-                  padding: "12px 16px",
+                  padding: "16px 20px",
                   color: "#fde047",
                   fontSize: "0.85rem",
                   display: "flex",
-                  flexDirection: "column",
-                  gap: "6px",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  gap: "15px",
                 }}
               >
-                <strong style={{ color: "#fbbf24" }}>⚠️ Advertencias de calidad detectadas:</strong>
-                {warningsList.map((warn, wIdx) => (
-                  <div key={wIdx}>{warn}</div>
-                ))}
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <strong style={{ color: "#fbbf24", fontSize: "0.9rem" }}>
+                    ⚠️ Advertencias de calidad detectadas:
+                  </strong>
+                  {warningsList.map((warn, wIdx) => (
+                    <div key={wIdx}>{warn}</div>
+                  ))}
+                </div>
+                <button
+                  onClick={downloadWarningReport}
+                  style={{
+                    background: "rgba(245, 158, 11, 0.15)",
+                    border: "1px solid #fbbf24",
+                    color: "#fde047",
+                    padding: "6px 12px",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "0.78rem",
+                    fontWeight: 600,
+                    whiteSpace: "nowrap",
+                    transition: "background 0.2s",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(245, 158, 11, 0.25)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(245, 158, 11, 0.15)")}
+                >
+                  📥 Descargar Reporte
+                </button>
               </div>
             )}
 
