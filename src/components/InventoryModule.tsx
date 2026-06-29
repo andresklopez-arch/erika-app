@@ -922,7 +922,21 @@ export default function InventoryModule() {
 
     return (
       <div
-        onClick={() => {
+        onClick={async () => {
+          if (currentUser?.role !== "admin") {
+            const pass = window.prompt("🔒 CONTROL DE SEGURIDAD: Ingrese PIN de Administrador para editar:");
+            if (!pass) return;
+            const { data: admin } = await supabase
+              .from("users")
+              .select("*")
+              .eq("pin", pass)
+              .eq("role", "admin")
+              .single();
+            if (!admin) {
+              alert("❌ PIN incorrecto o sin privilegios de administrador.");
+              return;
+            }
+          }
           setEditingCell({ itemId: item.id, field });
           setEditValue(value);
         }}
