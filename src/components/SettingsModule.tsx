@@ -673,6 +673,7 @@ export default function SettingsModule() {
     const showRfc = printerFields.includes("rfc") && businessRfc;
     const showPhone = printerFields.includes("phone") && businessPhone;
     const showAddress = printerFields.includes("address") && businessAddress;
+    const showBilling = printerFields.includes("billing");
     const showFooter = printerFields.includes("footer");
 
     const html = `
@@ -701,6 +702,12 @@ export default function SettingsModule() {
           <div style="font-size: 0.9em; margin-bottom: 5px;">Letra: ${printerFontFamily} (${printerFontSize})</div>
           <div class="divider"></div>
           
+          ${showBilling ? `
+          <div class="center" style="margin-top: 10px; font-size: 0.9em;">
+            <strong>Auto-Facturación Express</strong><br>
+            <span>Entra a ${window.location.origin}/facturacion/test para facturar.</span>
+          </div>
+          ` : ""}
           ${showFooter ? `<div class="center bold" style="margin-top: 10px;">${printerFooterMsg}</div>` : ""}
         </body>
       </html>
@@ -1224,6 +1231,7 @@ export default function SettingsModule() {
                   { key: "rfc", label: "🧾 RFC Fiscal" },
                   { key: "phone", label: "📱 Teléfono" },
                   { key: "address", label: "📍 Dirección" },
+                  { key: "billing", label: "🧾 Facturación Express" },
                   { key: "footer", label: "💬 Mensaje de Pie" },
                 ].map((field) => {
                   const isChecked = printerFields.includes(field.key);

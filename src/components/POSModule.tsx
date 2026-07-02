@@ -998,6 +998,12 @@ export default function POSModule() {
         } catch (printErr) {
           console.error("Error al disparar la impresion:", printErr);
         }
+
+        // WhatsApp option (Sugerencia 3)
+        const sendWpp = confirm("¿Deseas enviar el comprobante de compra digital por WhatsApp al cliente?");
+        if (sendWpp) {
+          sendWhatsApp("receipt");
+        }
       }
 
       // Proceso de éxito: limpiar tickets y cerrar modal
@@ -1116,6 +1122,7 @@ export default function POSModule() {
     const showRfc = fields.includes("rfc") && (businessProfile.rfc || config.business_rfc);
     const showPhone = fields.includes("phone") && (businessProfile.phone || config.business_phone);
     const showAddress = fields.includes("address") && (businessProfile.address || config.business_address);
+    const showBilling = fields.includes("billing");
     const showFooter = fields.includes("footer");
 
     const printWindow = window.open("", "_blank", `width=${paperSize === "58mm" ? 300 : 400},height=500`);
@@ -1159,6 +1166,14 @@ export default function POSModule() {
             <div class="divider"></div>` : ''}
             <div style="display:flex; justify-content:space-between; font-size: 1.1em;"><strong>TOTAL:</strong><strong>$${Math.round(finalTotal)}</strong></div>
             <div class="divider"></div>
+            ${showBilling ? `
+            <div class="center" style="margin-top: 15px; font-size: 0.9em;">
+              <strong>Auto-Facturación Express</strong><br>
+              <span>Entra a ${window.location.origin}/facturacion/${realTicketId} para facturar.</span>
+            </div>
+            ` : ""}
+            ${showFooter ? `<div class="center bold" style="margin-top: 15px;">${footerMsg}</div>` : ""}
+            <div style="height: 25px;"></div>
           </body>
         </html>
       `;
@@ -1307,7 +1322,11 @@ export default function POSModule() {
       ? `*SUBTOTAL: $${subtotalNeto.toFixed(2)}*\n*IVA (16%): $${iva.toFixed(2)}*\n*TOTAL: $${finalTotal.toFixed(2)}*` 
       : `*TOTAL: $${finalTotal.toFixed(2)}*`;
     
-    const rawMsg = `${title}\n\n${itemsText}\n\n${totalText}\n\n¡Gracias por su preferencia!`;
+    const billingText = type === "receipt" 
+      ? `\n\n📄 Auto-Facturación Express:\nEntra a: ${window.location.origin}/facturacion/${invoiceToken} para facturar.` 
+      : "";
+    
+    const rawMsg = `${title}\n\n${itemsText}\n\n${totalText}${billingText}\n\n¡Gracias por su preferencia!`;
     const msg = encodeURIComponent(rawMsg);
     
     window.open(`https://wa.me/${cleanPhone}?text=${msg}`, "_blank");
@@ -1331,6 +1350,11 @@ export default function POSModule() {
     : (selectedCustomerId && customers.find(c => c.id === selectedCustomerId) ? customers.find(c => c.id === selectedCustomerId).name : "");
   const printDownPayment = isPrintingJob ? receiptToPrint.downPayment : 0;
   const printBalance = isPrintingJob ? receiptToPrint.balance : 0;
+
+  const previewFields = businessSettings?.config?.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"];
+  const showPreviewBilling = previewFields.includes("billing");
+  const showPreviewFooter = previewFields.includes("footer");
+  const previewFooterMsg = businessSettings?.config?.printer_footer_msg || "¡Gracias por su compra!";
 
   return (
     <div
@@ -2417,7 +2441,19 @@ export default function POSModule() {
           </div>
         </div>
         
-        <div style={{ borderTop: "1px dashed #000", marginTop: "15px" }} />
+        <div style={{ borderTop: "1px dashed #000", marginTop: "15px", paddingBottom: "25px" }}>
+          {showPreviewBilling && (
+            <div style={{ marginTop: "15px", textAlign: "center", color: "#000", fontSize: "11px" }}>
+              <p style={{ fontWeight: "bold", margin: "0 0 5px 0" }}>Auto-Facturación Express</p>
+              <p style={{ margin: "5px 0" }}>Entra a: erika-app.vercel.app/facturacion para facturar</p>
+            </div>
+          )}
+          {showPreviewFooter && (
+            <div style={{ marginTop: "15px", textAlign: "center", color: "#000", fontSize: "11px", fontWeight: "bold" }}>
+              <p>{previewFooterMsg}</p>
+            </div>
+          )}
+        </div>
       </div>
 
 
