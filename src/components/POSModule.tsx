@@ -1161,8 +1161,7 @@ export default function POSModule() {
             <div class="divider"></div>
             <div class="center" style="margin-top: 15px; font-size: 0.9em;">
               <strong>Auto-Facturación Express</strong><br>
-              <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${window.location.origin}/facturacion/${realTicketId}" style="width:100px; height:100px; margin: 10px 0;" /><br>
-              <span>Escanea el QR o entra a ${window.location.origin}/facturacion/${realTicketId} para facturar.</span>
+              <span>Entra a ${window.location.origin}/facturacion/${realTicketId} para facturar.</span>
             </div>
             ${showFooter ? `<div class="center bold" style="margin-top: 15px;">${footerMsg}</div>` : ""}
           </body>
@@ -2425,8 +2424,7 @@ export default function POSModule() {
         
         <div style={{ marginTop: "30px", textAlign: "center", color: "#000", fontSize: "11px", borderTop: "1px dashed #000", paddingTop: "15px" }}>
           <p style={{ fontWeight: "bold", margin: "0 0 5px 0" }}>Auto-Facturación Express</p>
-          <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://erika-app.vercel.app/facturacion/${printInvoiceToken || "express"}`} alt="QR Code" style={{ width: "90px", height: "90px", margin: "5px auto", display: "block" }} />
-          <p style={{ margin: "5px 0" }}>Escanea este código para facturar o entra a: erika-app.vercel.app/facturacion</p>
+          <p style={{ margin: "5px 0" }}>Entra a: erika-app.vercel.app/facturacion para facturar</p>
           <p style={{ marginTop: "15px", fontWeight: "bold" }}>¡Gracias por su preferencia!</p>
         </div>
       </div>
