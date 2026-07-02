@@ -1159,11 +1159,6 @@ export default function POSModule() {
             <div class="divider"></div>` : ''}
             <div style="display:flex; justify-content:space-between; font-size: 1.1em;"><strong>TOTAL:</strong><strong>$${Math.round(finalTotal)}</strong></div>
             <div class="divider"></div>
-            <div class="center" style="margin-top: 15px; font-size: 0.9em;">
-              <strong>Auto-Facturación Express</strong><br>
-              <span>Entra a ${window.location.origin}/facturacion/${realTicketId} para facturar.</span>
-            </div>
-            ${showFooter ? `<div class="center bold" style="margin-top: 15px;">${footerMsg}</div>` : ""}
           </body>
         </html>
       `;
@@ -2422,11 +2417,7 @@ export default function POSModule() {
           </div>
         </div>
         
-        <div style={{ marginTop: "30px", textAlign: "center", color: "#000", fontSize: "11px", borderTop: "1px dashed #000", paddingTop: "15px" }}>
-          <p style={{ fontWeight: "bold", margin: "0 0 5px 0" }}>Auto-Facturación Express</p>
-          <p style={{ margin: "5px 0" }}>Entra a: erika-app.vercel.app/facturacion para facturar</p>
-          <p style={{ marginTop: "15px", fontWeight: "bold" }}>¡Gracias por su preferencia!</p>
-        </div>
+        <div style={{ borderTop: "1px dashed #000", marginTop: "15px" }} />
       </div>
 
 
