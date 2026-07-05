@@ -153,11 +153,11 @@ export const saveTransactionOffline = async (
   transaction: any,
 ): Promise<void> => {
   const db = await initDB();
+  const encryptedPayload = await encryptData(transaction);
   return new Promise((resolve, reject) => {
     try {
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
-      const encryptedPayload = await encryptData(transaction);
       const request = store.add({
         payload: encryptedPayload,
         offline_created_at: new Date().toISOString(),
