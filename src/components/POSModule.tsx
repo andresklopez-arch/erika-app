@@ -278,15 +278,28 @@ export default function POSModule() {
      setIsLoadingCustomerHistory(true);
      setHistorySearchTerm("");
      try {
-       const { data, error } = await supabase
+       // Query quotes with notes column fallback
+       let { data, error } = await supabase
          .from("quotes")
-         .select("id, created_at, total, items")
+         .select("id, created_at, total, items, notes")
          .eq("customer_id", customerId)
          .eq("status", "ticket")
          .order("created_at", { ascending: false })
          .limit(5);
        
-       if (error) throw error;
+       if (error) {
+         console.warn("Falla al seleccionar notes, reintentando con fallback...");
+         const fallback = await supabase
+           .from("quotes")
+           .select("id, created_at, total, items")
+           .eq("customer_id", customerId)
+           .eq("status", "ticket")
+           .order("created_at", { ascending: false })
+           .limit(5);
+         if (fallback.error) throw fallback.error;
+         data = fallback.data;
+       }
+       
        setCustomerHistoryTickets(data || []);
        setShowCustomerHistoryModal(true);
      } catch (err: any) {
@@ -307,18 +320,42 @@ export default function POSModule() {
      
      if (ticketItems.length === 0) return alert("Este ticket no contiene productos válidos.");
      
-     setTickets(tickets.map(t => {
-       if (t.id === activeTicketId) {
-         const newItems = ticketItems.map((item: any) => ({
+     let adjustedMsg = [];
+     const newItems = [];
+     
+     // Validación de Stock en tiempo real al clonar (Sugerencia 1)
+     for (const item of ticketItems) {
+        const invItem = globalCatalog.find(i => i.name === item.name || (i.code && i.code === item.code));
+        let qtyToLoad = item.qty;
+        
+        if (invItem) {
+           if (invItem.stock <= 0) {
+              adjustedMsg.push(`⚠️ "${item.name}" no tiene existencias (sin stock). No se agregó.`);
+              continue;
+           } else if (invItem.stock < item.qty) {
+              adjustedMsg.push(`⚠️ "${item.name}" ajustado de ${item.qty} a ${invItem.stock} unidades (límite de stock).`);
+              qtyToLoad = invItem.stock;
+           }
+        }
+        
+        newItems.push({
            id: `${item.id || "cloned"}-${Date.now()}-${Math.random()}`,
            code: item.code || "",
            name: item.name,
            price: item.price,
            cost: item.cost || 0,
-           qty: item.qty,
+           qty: qtyToLoad,
            unit: item.unit || "PZA",
            discountPct: item.discountPct || 0
-         }));
+        });
+     }
+     
+     if (newItems.length === 0) {
+        return alert("❌ Ningún producto del ticket histórico tiene existencias disponibles para ser agregado.");
+     }
+     
+     setTickets(tickets.map(t => {
+       if (t.id === activeTicketId) {
          return {
            ...t,
            items: [...t.items, ...newItems]
@@ -327,8 +364,58 @@ export default function POSModule() {
        return t;
      }));
      
-     toast.success("🛒 Productos cargados al ticket actual.");
+     if (adjustedMsg.length > 0) {
+        alert(`🛒 Productos cargados con ajustes de stock:\n\n${adjustedMsg.join("\n")}`);
+     } else {
+        toast.success("🛒 Productos cargados al ticket actual.");
+     }
      setShowCustomerHistoryModal(false);
+  };
+
+  const handleReprintHistoryTicket = (ticket: any) => {
+     let ticketItems = [];
+     if (typeof ticket.items === "string") {
+        try { ticketItems = JSON.parse(ticket.items); } catch { ticketItems = []; }
+     } else {
+        ticketItems = Array.isArray(ticket.items) ? ticket.items : [];
+     }
+     
+     triggerPrint({
+        type: "ticket",
+        data: {
+           realTicketId: ticket.id,
+           items: ticketItems,
+           finalTotal: ticket.total
+        }
+     });
+     toast.success(`🖨️ Reenviando Ticket #${ticket.id} a la cola de impresión.`);
+  };
+
+  const handleSaveTicketNote = async (ticketId: number, currentNotes: string) => {
+     const newNotes = window.prompt("Escribe una nota para este ticket:", currentNotes || "");
+     if (newNotes === null) return;
+     
+     const { error } = await supabase
+       .from("quotes")
+       .update({ notes: newNotes.trim() })
+       .eq("id", ticketId);
+       
+     if (error) {
+       console.warn("Falla al guardar nota en quotes, reintentando con description...");
+       const { error: fallbackError } = await supabase
+         .from("quotes")
+         .update({ description: newNotes.trim() })
+         .eq("id", ticketId);
+         
+       if (fallbackError) {
+         return alert("❌ Error al guardar nota: " + fallbackError.message);
+       }
+     }
+     
+     setCustomerHistoryTickets(prev => 
+       prev.map(t => t.id === ticketId ? { ...t, notes: newNotes.trim() } : t)
+     );
+     toast.success("✅ Nota de ticket actualizada.");
   };
 
   const requestPin = (title: string, message: string, callback: (pin: string) => void) => {
@@ -3742,6 +3829,12 @@ export default function POSModule() {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem", color: hasWarranty ? "#10b981" : "#ef4444" }}>
                         <span>🛡️ {hasWarranty ? `Garantía activa (${remainingDays} días rest.)` : "Garantía vencida"}</span>
                       </div>
+
+                      {ticket.notes && (
+                        <div style={{ fontSize: "0.8rem", background: "rgba(245,158,11,0.1)", borderLeft: "3px solid #f59e0b", padding: "5px 10px", borderRadius: "4px", color: "#f59e0b", textAlign: "left" }}>
+                          <strong>Nota:</strong> {ticket.notes}
+                        </div>
+                      )}
                       
                       <div style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "0.85rem", paddingLeft: "10px", borderLeft: "2px solid var(--color-primary)" }}>
                         {ticketItems.map((item: any, idx: number) => (
@@ -3752,15 +3845,33 @@ export default function POSModule() {
                         ))}
                       </div>
 
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px dashed rgba(255,255,255,0.1)", paddingTop: "8px" }}>
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          onClick={() => cloneTicketItems(ticket.items)}
-                          style={{ padding: "5px 10px", fontSize: "0.8rem", background: "transparent", border: "1px solid var(--color-primary)", color: "var(--color-primary)" }}
-                        >
-                          🔄 Reordenar / Clonar
-                        </button>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px dashed rgba(255,255,255,0.1)", paddingTop: "8px", gap: "8px" }}>
+                        <div style={{ display: "flex", gap: "5px" }}>
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => cloneTicketItems(ticket.items)}
+                            style={{ padding: "5px 10px", fontSize: "0.8rem", background: "transparent", border: "1px solid var(--color-primary)", color: "var(--color-primary)" }}
+                          >
+                            🔄 Clonar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => handleReprintHistoryTicket(ticket)}
+                            style={{ padding: "5px 10px", fontSize: "0.8rem", background: "transparent", border: "1px solid #10b981", color: "#10b981" }}
+                          >
+                            🖨️ Imprimir
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => handleSaveTicketNote(ticket.id, ticket.notes)}
+                            style={{ padding: "5px 10px", fontSize: "0.8rem", background: "transparent", border: "1px solid #f59e0b", color: "#f59e0b" }}
+                          >
+                            📝 Nota
+                          </button>
+                        </div>
                         <span style={{ fontWeight: "bold", fontSize: "0.95rem", color: "var(--color-secondary)" }}>Total: ${ticket.total.toFixed(2)}</span>
                       </div>
                     </div>
