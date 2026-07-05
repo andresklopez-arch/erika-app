@@ -716,6 +716,41 @@ export default function POSModule() {
     );
   };
 
+  const applyItemDiscount = async (itemId: string) => {
+     const ticket = tickets.find(t => t.id === activeTicketId);
+     if (!ticket) return;
+     const item = ticket.items.find(i => i.id === itemId);
+     if (!item) return;
+     
+     const pctStr = window.prompt(`Ingresa el % de descuento para "${item.name}":`, String(item.discountPct || ""));
+     if (pctStr === null) return;
+     const pct = parseFloat(pctStr) || 0;
+     if (isNaN(pct) || pct < 0 || pct > 100) return alert("Porcentaje no válido");
+     
+     // PIN Override for discount > 5%
+     if (pct > 5) {
+       if (currentUser?.role !== "admin") {
+          const pin = await getPinAsync(
+            "⚠️ AUTORIZACIÓN DE DESCUENTO",
+            `El descuento del ${pct}% para "${item.name}" supera el 5% permitido.\nIngresa el PIN de Administrador para autorizar:`
+          );
+          if (!pin) return;
+          const { data: admin } = await supabase.from("users").select("*").eq("pin", pin).eq("role", "admin").single();
+          if (!admin) return alert("❌ PIN incorrecto. Descuento denegado.");
+       }
+     }
+     
+     setTickets(tickets.map(t => {
+       if (t.id === activeTicketId) {
+         return {
+           ...t,
+           items: t.items.map(i => i.id === itemId ? { ...i, discountPct: pct } : i)
+         };
+       }
+       return t;
+     }));
+  };
+
   const applyDiscount = async (mode: "percent" | "fixed") => {
     if (activeTicket.items.length === 0) return;
     const currentRawTotal = activeTicket.items.reduce((sum, item) => {
@@ -1189,6 +1224,9 @@ export default function POSModule() {
     if (item.qty >= wholesaleRules.minQty) {
       p = item.price * (1 - wholesaleRules.discountPct / 100);
     }
+    if (item.discountPct) {
+      p = p * (1 - item.discountPct / 100);
+    }
     return sum + p * item.qty;
   }, 0);
   
@@ -1206,7 +1244,10 @@ export default function POSModule() {
       if (job.type === "ticket") {
         const { realTicketId, items, finalTotal } = job.data;
         const subtotalVal = items.reduce((sum: number, item: any) => {
-           const p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
+           let p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
+           if (item.discountPct) {
+              p = p * (1 - item.discountPct / 100);
+           }
            return sum + (p * item.qty);
         }, 0);
         const discountPct = activeTicket.discountPct || 0;
@@ -1229,7 +1270,10 @@ export default function POSModule() {
       } else if (job.type === "layaway") {
         const { customer, items, finalTotal, downPayment } = job.data;
         const subtotalVal = items.reduce((sum: number, item: any) => {
-           const p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
+           let p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
+           if (item.discountPct) {
+              p = p * (1 - item.discountPct / 100);
+           }
            return sum + (p * item.qty);
         }, 0);
         const discountPct = activeTicket.discountPct || 0;
@@ -1279,13 +1323,25 @@ export default function POSModule() {
 
     if (job.type === "ticket") {
       const { realTicketId, items, finalTotal } = job.data;
-      const itemsHtml = items.map((i: any) => `
+      const itemsHtml = items.map((i: any) => {
+        let p = i.qty >= wholesaleRules.minQty ? i.price * (1 - wholesaleRules.discountPct/100) : i.price;
+        if (i.discountPct) p = p * (1 - i.discountPct / 100);
+        return `
         <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
-          <span>${i.qty}x ${i.name}</span>
-          <span>$${Math.round(i.price * i.qty)}</span>
-        </div>
-      `).join("");
+          <span>${i.qty}x ${i.name} ${i.discountPct > 0 ? `(-${i.discountPct}%)` : ''}</span>
+          <span>$${Math.round(p * i.qty)}</span>
+        </div>`;
+      }).join("");
       
+      const subtotalVal = items.reduce((sum: number, i: any) => {
+         let p = i.qty >= wholesaleRules.minQty ? i.price * (1 - wholesaleRules.discountPct/100) : i.price;
+         if (i.discountPct) p = p * (1 - i.discountPct / 100);
+         return sum + (p * i.qty);
+      }, 0);
+      const discountVal = subtotalVal * (activeTicket.discountPct / 100);
+      const subtotalNeto = subtotalVal - discountVal;
+      const iva = applyIva ? subtotalNeto * 0.16 : 0;
+
       const html = `
         <html>
           <head>
@@ -1331,12 +1387,15 @@ export default function POSModule() {
       setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
     } else if (job.type === "layaway") {
       const { customer, items, finalTotal, downPayment } = job.data;
-      const itemsHtml = items.map((item: any) => `
+      const itemsHtml = items.map((item: any) => {
+        let p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
+        if (item.discountPct) p = p * (1 - item.discountPct / 100);
+        return `
         <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
           <div style="flex: 2;">${item.qty}x ${item.name}</div>
-          <div style="flex: 1; text-align: right;">$${Math.round(item.price * item.qty)}</div>
-        </div>
-      `).join("");
+          <div style="flex: 1; text-align: right;">$${Math.round(p * item.qty)}</div>
+        </div>`;
+      }).join("");
       
       const ticketHtml = `
         <html>
@@ -1363,15 +1422,6 @@ export default function POSModule() {
             <div class="divider"></div>
             ${itemsHtml}
             <div class="divider"></div>
-            ${applyIva ? `
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-              <div>Subtotal:</div>
-              <div>$${Math.round(subtotalNeto)}</div>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-              <div>IVA (16%):</div>
-              <div>$${Math.round(iva)}</div>
-            </div>` : ''}
             <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
               <div>Total Mercancía:</div>
               <div class="bold">$${Math.round(finalTotal)}</div>
@@ -2024,14 +2074,30 @@ export default function POSModule() {
                         </span>
                       )}
                     </div>
-                    <strong
-                      style={{
-                        color: "var(--color-secondary)",
-                        fontSize: "1.1rem",
-                      }}
-                    >
-                      ${((item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price) * item.qty).toFixed(2)}
-                    </strong>
+                    <div>
+                      <strong
+                        style={{
+                          color: "var(--color-secondary)",
+                          fontSize: "1.1rem",
+                        }}
+                      >
+                        ${(() => {
+                          let p = item.price;
+                          if (item.qty >= wholesaleRules.minQty) {
+                            p = item.price * (1 - wholesaleRules.discountPct/100);
+                          }
+                          if (item.discountPct) {
+                            p = p * (1 - item.discountPct / 100);
+                          }
+                          return (p * item.qty).toFixed(2);
+                        })()}
+                      </strong>
+                      {item.discountPct > 0 && (
+                        <span style={{ fontSize: "0.75rem", color: "#ef4444", display: "block", textAlign: "right", marginTop: "2px" }}>
+                          Desc. -{item.discountPct}%
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex-between" style={{ alignItems: "center" }}>
@@ -2083,20 +2149,36 @@ export default function POSModule() {
                       +
                     </button>
                   </div>
-                  <button
-                    style={{
-                      background: "transparent",
-                      border: "1px solid var(--color-primary)",
-                      color: "var(--color-primary)",
-                      cursor: "pointer",
-                      padding: "5px 10px",
-                      borderRadius: "6px",
-                      fontSize: "0.8rem",
-                    }}
-                    onClick={() => removeItem(item.id)}
-                  >
-                    🔒 Eliminar
-                  </button>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      style={{
+                        background: "transparent",
+                        border: "1px solid #10b981",
+                        color: "#10b981",
+                        cursor: "pointer",
+                        padding: "5px 10px",
+                        borderRadius: "6px",
+                        fontSize: "0.8rem",
+                      }}
+                      onClick={() => applyItemDiscount(item.id)}
+                    >
+                      🏷️ Desc.
+                    </button>
+                    <button
+                      style={{
+                        background: "transparent",
+                        border: "1px solid var(--color-primary)",
+                        color: "var(--color-primary)",
+                        cursor: "pointer",
+                        padding: "5px 10px",
+                        borderRadius: "6px",
+                        fontSize: "0.8rem",
+                      }}
+                      onClick={() => removeItem(item.id)}
+                    >
+                      🔒 Eliminar
+                    </button>
+                  </div>
                 </div>
               </li>
             );
@@ -2590,11 +2672,21 @@ export default function POSModule() {
           </thead>
           <tbody>
             {printItems.map((item: any) => {
-               const p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
+               let p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
+               if (item.discountPct) {
+                  p = p * (1 - item.discountPct / 100);
+               }
                return (
                   <tr key={item.id} style={{ borderBottom: "1px solid #eee" }}>
                     <td style={{ padding: "5px 0", verticalAlign: "top" }}>{item.qty} {item.unit}</td>
-                    <td style={{ padding: "5px 0", verticalAlign: "top" }}>{item.name}</td>
+                    <td style={{ padding: "5px 0", verticalAlign: "top" }}>
+                      {item.name}
+                      {item.discountPct > 0 && (
+                        <div style={{ fontSize: "10px", color: "#666" }}>
+                          Desc. -{item.discountPct}%
+                        </div>
+                      )}
+                    </td>
                     <td style={{ padding: "5px 0", verticalAlign: "top", textAlign: "right" }}>${Math.round(p)}</td>
                     <td style={{ padding: "5px 0", verticalAlign: "top", textAlign: "right" }}>${Math.round(p * item.qty)}</td>
                   </tr>
