@@ -728,16 +728,33 @@ export default function POSModule() {
      const pct = parseFloat(pctStr) || 0;
      if (isNaN(pct) || pct < 0 || pct > 100) return alert("Porcentaje no válido");
      
-     // PIN Override for discount > 5%
-     if (pct > 5) {
+     const maxCajeroDiscount = businessSettings?.config?.max_cajero_discount_pct ?? 5;
+     
+     // Calcular precio propuesto y margen de costo + 3% (Sugerencia 3)
+     let basePrice = item.price;
+     if (item.qty >= wholesaleRules.minQty) {
+        basePrice = item.price * (1 - wholesaleRules.discountPct / 100);
+     }
+     const proposedPrice = basePrice * (1 - pct / 100);
+     const minSafePrice = item.cost * 1.03; // Costo + 3% de margen mínimo
+     
+     const requiresPin = pct > maxCajeroDiscount || proposedPrice < minSafePrice;
+     
+     // PIN Override si excede descuento autónomo o el margen mínimo (Sugerencia 3)
+     if (requiresPin) {
        if (currentUser?.role !== "admin") {
+          let reason = `El descuento del ${pct}% para "${item.name}" supera el ${maxCajeroDiscount}% permitido.`;
+          if (proposedPrice < minSafePrice) {
+             reason = `⚠️ MARGEN CRÍTICO DETECTADO: El precio final ($${proposedPrice.toFixed(2)}) es inferior al costo mínimo seguro con utilidad del 3% ($${minSafePrice.toFixed(2)}).`;
+          }
+          
           const pin = await getPinAsync(
-            "⚠️ AUTORIZACIÓN DE DESCUENTO",
-            `El descuento del ${pct}% para "${item.name}" supera el 5% permitido.\nIngresa el PIN de Administrador para autorizar:`
+            "⚠️ AUTORIZACIÓN REQUERIDA",
+            `${reason}\n\nIngresa el PIN de Administrador para autorizar:`
           );
           if (!pin) return;
           const { data: admin } = await supabase.from("users").select("*").eq("pin", pin).eq("role", "admin").single();
-          if (!admin) return alert("❌ PIN incorrecto. Descuento denegado.");
+          if (!admin) return alert("❌ PIN incorrecto o sin privilegios de administrador. Descuento denegado.");
        }
      }
      
@@ -1232,6 +1249,19 @@ export default function POSModule() {
   }, 0);
   
   const totalCost = activeTicket.items.reduce((sum, item) => sum + (item.cost * item.qty), 0);
+  
+  // Ahorro por productos individual con descuento (Sugerencia 2)
+  const itemDiscountsSavings = activeTicket.items.reduce((sum, item) => {
+    let pNormal = item.price;
+    if (item.qty >= wholesaleRules.minQty) {
+      pNormal = item.price * (1 - wholesaleRules.discountPct / 100);
+    }
+    let pDiscounted = pNormal;
+    if (item.discountPct) {
+      pDiscounted = pNormal * (1 - item.discountPct / 100);
+    }
+    return sum + (pNormal - pDiscounted) * item.qty;
+  }, 0);
   
   const discountAmount = rawTotal * (activeTicket.discountPct / 100);
   const subtotalNeto = rawTotal - discountAmount;
@@ -2240,6 +2270,13 @@ export default function POSModule() {
             <span>${formatPrice(subtotal)}</span>
           </div>
           
+          {itemDiscountsSavings > 0 && (
+             <div className="flex-between" style={{ marginBottom: "10px", color: "#10b981" }}>
+               <span>Ahorro por productos:</span>
+               <span>-${formatPrice(itemDiscountsSavings)}</span>
+             </div>
+          )}
+
           {activeTicket.discountPct > 0 && (
              <div className="flex-between" style={{ marginBottom: "10px", color: "#10b981" }}>
                <span>Descuento ({activeTicket.discountPct}%):</span>

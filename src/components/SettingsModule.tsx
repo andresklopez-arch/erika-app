@@ -22,6 +22,7 @@ export default function SettingsModule() {
   const [wholesaleMinQty, setWholesaleMinQty] = useState("10");
   const [wholesaleDiscount, setWholesaleDiscount] = useState("10");
   const [lowStockThreshold, setLowStockThreshold] = useState("5");
+  const [maxCajeroDiscountPct, setMaxCajeroDiscountPct] = useState("5");
 
   const [targetUtility, setTargetUtility] = useState("30");
   const [monthlyGoals, setMonthlyGoals] = useState("0");
@@ -328,6 +329,7 @@ export default function SettingsModule() {
       setPrinterFields(businessSettings.config.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"]);
       setPrinterFooterMsg(businessSettings.config.printer_footer_msg || "¡Gracias por su compra!");
       setLowStockThreshold(String(businessSettings.config.low_stock_threshold || 5));
+      setMaxCajeroDiscountPct(String(businessSettings.config.max_cajero_discount_pct || 5));
       /* eslint-enable react-hooks/set-state-in-effect */
 
       // Pre-cargar lista de impresoras escaneadas si ya hay una guardada
@@ -399,10 +401,11 @@ export default function SettingsModule() {
     const success = await updateBusinessSettings({
       config: {
         low_stock_threshold: Number(lowStockThreshold) || 5,
+        max_cajero_discount_pct: Number(maxCajeroDiscountPct) || 5,
       }
     });
     if (success) {
-      alert("✅ Umbral de existencias críticas actualizado.");
+      alert("✅ Umbral de existencias y límite de descuento autónomo actualizados.");
     }
   };
 
@@ -1102,17 +1105,21 @@ export default function SettingsModule() {
 
           <div className="glass-panel" style={{ border: "1px solid #ef4444" }}>
             <h3 style={{ margin: "0 0 20px 0", color: "#ef4444", display: "flex", alignItems: "center", gap: "10px" }}>
-              ⚠️ Alertas de Inventario
+              ⚠️ Inventario y Límites de Descuento
             </h3>
             <div style={{ marginBottom: "15px" }}>
               <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Umbral de Alerta de Existencias Bajas:</label>
               <input type="number" value={lowStockThreshold} onChange={e => setLowStockThreshold(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
             </div>
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Descuento Autónomo Máximo de Cajero (%):</label>
+              <input type="number" value={maxCajeroDiscountPct} onChange={e => setMaxCajeroDiscountPct(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
+            </div>
             <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "20px" }}>
-              Define el stock crítico para avisar en el POS cuando un producto tenga pocas existencias.
+              Define el stock de alerta en POS y el descuento máximo por artículo que un cajero puede aplicar sin requerir PIN de administrador.
             </p>
             <button className="btn-primary" onClick={saveInventoryAlertConfig} style={{ width: "100%", background: "transparent", border: "1px solid #ef4444", color: "#ef4444" }}>
-              💾 Guardar Alerta de Existencias
+              💾 Guardar Configuración
             </button>
           </div>
 

@@ -49,6 +49,7 @@ const AuthContext = createContext<AuthContextType>({
       printer_fields: ["name", "rfc", "phone", "address", "logo", "footer"],
       printer_footer_msg: "¡Gracias por su compra!",
       low_stock_threshold: 5,
+      max_cajero_discount_pct: 5,
     },
   },
   updateBusinessSettings: async () => false,
@@ -131,6 +132,7 @@ export default function AuthProvider({
         printer_fields: localStorage.getItem("ERIKA_PRINTER_FIELDS") ? JSON.parse(localStorage.getItem("ERIKA_PRINTER_FIELDS")!) : ["name", "rfc", "phone", "address", "logo", "footer"],
         printer_footer_msg: localStorage.getItem("ERIKA_PRINTER_FOOTER_MSG") || "¡Gracias por su compra!",
         low_stock_threshold: Number(localStorage.getItem("ERIKA_LOW_STOCK_THRESHOLD")) || 5,
+        max_cajero_discount_pct: Number(localStorage.getItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT")) || 5,
       };
 
       return {
@@ -165,6 +167,7 @@ export default function AuthProvider({
         printer_fields: ["name", "rfc", "phone", "address", "logo", "footer"],
         printer_footer_msg: "¡Gracias por su compra!",
         low_stock_threshold: 5,
+        max_cajero_discount_pct: 5,
       },
     };
   });
@@ -285,6 +288,7 @@ export default function AuthProvider({
         localStorage.setItem("ERIKA_PRINTER_FOOTER_MSG", result.settings.config.printer_footer_msg || "¡Gracias por su compra!");
         localStorage.setItem("ERIKA_THEME", result.settings.config.theme);
         localStorage.setItem("ERIKA_LOW_STOCK_THRESHOLD", String(result.settings.config.low_stock_threshold || 5));
+        localStorage.setItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT", String(result.settings.config.max_cajero_discount_pct || 5));
         
         return true;
       } else {
