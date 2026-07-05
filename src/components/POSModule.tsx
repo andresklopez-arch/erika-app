@@ -1381,7 +1381,8 @@ export default function POSModule() {
             data: {
               realTicketId,
               items: [...activeTicket.items],
-              finalTotal: totalAmt
+              finalTotal: totalAmt,
+              paymentMethod: selectedMethod
             }
           });
         } catch (printErr) {
@@ -1471,7 +1472,7 @@ export default function POSModule() {
     // Si la impresora configurada es del sistema, redireccionar al flujo nativo sin popup
     if (printerConnectionType === "system") {
       if (job.type === "ticket") {
-        const { realTicketId, items, finalTotal } = job.data;
+        const { realTicketId, items, finalTotal, paymentMethod } = job.data;
         const subtotalVal = items.reduce((sum: number, item: any) => {
            let p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
            if (item.discountPct) {
@@ -1494,7 +1495,8 @@ export default function POSModule() {
           discountPct,
           discountAmount: discountAmt,
           finalTotal: finalTotal,
-          invoiceToken: realTicketId
+          invoiceToken: realTicketId,
+          paymentMethod
         });
       } else if (job.type === "layaway") {
         const { customer, items, finalTotal, downPayment } = job.data;
@@ -1551,7 +1553,7 @@ export default function POSModule() {
     if (!printWindow) return;
 
     if (job.type === "ticket") {
-      const { realTicketId, items, finalTotal } = job.data;
+      const { realTicketId, items, finalTotal, paymentMethod } = job.data;
       const itemsHtml = items.map((i: any) => {
         let p = i.qty >= wholesaleRules.minQty ? i.price * (1 - wholesaleRules.discountPct/100) : i.price;
         if (i.discountPct) p = p * (1 - i.discountPct / 100);
@@ -1591,6 +1593,7 @@ export default function POSModule() {
             <div class="divider"></div>
             <div class="center bold" style="margin-bottom: 5px;">Ticket: #${realTicketId}</div>
             <div style="font-size: 0.9em; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
+            ${paymentMethod ? `<div style="font-size: 0.95em; margin-bottom: 5px;">Método de Pago: ${paymentMethod.toUpperCase()}</div>` : ""}
             <div class="divider"></div>
             ${itemsHtml}
             <div class="divider"></div>
@@ -1773,6 +1776,7 @@ export default function POSModule() {
   const printFinalTotal = isPrintingJob ? receiptToPrint.finalTotal : finalTotal;
   const printTicketId = isPrintingJob ? receiptToPrint.ticketId : "";
   const printInvoiceToken = isPrintingJob ? receiptToPrint.invoiceToken : invoiceToken;
+  const printPaymentMethod = isPrintingJob ? (receiptToPrint.paymentMethod || "") : "";
   const printCustomerName = isPrintingJob 
     ? receiptToPrint.customerName 
     : (selectedCustomerId && customers.find(c => c.id === selectedCustomerId) ? customers.find(c => c.id === selectedCustomerId).name : "");
@@ -3006,6 +3010,12 @@ export default function POSModule() {
             <p style={{ margin: "2px 0" }}>{new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
           </div>
         </div>
+
+        {printPaymentMethod && (
+          <div style={{ marginBottom: "10px", fontSize: "12px", textAlign: "left" }}>
+            <strong>Método de Pago:</strong> {printPaymentMethod.toUpperCase()}
+          </div>
+        )}
 
         {printCustomerName && (
           <div style={{ marginBottom: "15px", padding: "8px", background: "#f3f4f6", borderRadius: "4px", fontSize: "12px", border: "1px solid #e5e7eb" }}>
