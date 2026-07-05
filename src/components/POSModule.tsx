@@ -1020,7 +1020,7 @@ export default function POSModule() {
                 return { id: invItem ? invItem.id : null, qty: item.qty };
              }).filter(item => item.id !== null),
              ref_id: realTicketId.toString(),
-             user_name: currentUser?.email || "Venta Mostrador",
+             user_name: currentUser?.name || "Venta Mostrador",
              move_type: "sale"
           });
 
@@ -2399,7 +2399,7 @@ export default function POSModule() {
                            return { id: invItem ? invItem.id : null, qty: item.qty };
                         }).filter(item => item.id !== null),
                         ref_id: `LAY-${Date.now()}`,
-                        user_name: currentUser?.email || "Venta Mostrador",
+                        user_name: currentUser?.name || "Venta Mostrador",
                         move_type: "layaway"
                      });
 
