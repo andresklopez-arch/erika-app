@@ -233,10 +233,34 @@ export const syncOfflineTransactions = async (): Promise<number> => {
   if (pending.length > 0) {
     for (const t of pending) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { id, offline_created_at, ...data } = t;
+      const { id, offline_created_at, items, ...data } = t;
       const { error } = await supabase.from("cash_transactions").insert(data);
       if (!error) {
         synced++;
+        // Sincronizar existencias e inventario del Kardex
+        if (items && Array.isArray(items) && items.length > 0) {
+          try {
+            const { error: rpcErr } = await supabase.rpc("reduce_inventory_stock", {
+              items: items.map((item: any) => ({ id: item.id, qty: item.qty })),
+              ref_id: "OFFLINE-SYNC",
+              user_name: "Sincronización Offline",
+              move_type: "sale"
+            });
+            if (rpcErr) {
+              console.warn("Falla al aplicar RPC en sincronización offline, reintentando con manual...", rpcErr);
+              for (const item of items) {
+                if (item.id) {
+                  const { data: invItem } = await supabase.from("inventory").select("stock").eq("id", item.id).single();
+                  if (invItem) {
+                    await supabase.from("inventory").update({ stock: invItem.stock - item.qty }).eq("id", item.id);
+                  }
+                }
+              }
+            }
+          } catch (invErr) {
+            console.error("Error al sincronizar inventario offline:", invErr);
+          }
+        }
       } else {
         console.error("Error syncing transaction", error);
       }

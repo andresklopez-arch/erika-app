@@ -209,6 +209,29 @@ export default function POSModule() {
   const [pendingOfflineCount, setPendingOfflineCount] = useState(0);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
+  // Estados del Modal del PIN (Sugerencia 2)
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinValue, setPinValue] = useState("");
+  const [pinModalCallback, setPinModalCallback] = useState<((pin: string) => void) | null>(null);
+  const [pinModalTitle, setPinModalTitle] = useState("AUTORIZACIÓN REQUERIDA");
+  const [pinModalMessage, setPinModalMessage] = useState("");
+
+  const requestPin = (title: string, message: string, callback: (pin: string) => void) => {
+    setPinModalTitle(title);
+    setPinModalMessage(message);
+    setPinValue("");
+    setPinModalCallback(() => callback);
+    setShowPinModal(true);
+  };
+
+  const getPinAsync = (title: string, message: string): Promise<string> => {
+    return new Promise((resolve) => {
+      requestPin(title, message, (pin) => {
+        resolve(pin);
+      });
+    });
+  };
+
   // Printer Connection States
   const [isPrinterConnected, setIsPrinterConnected] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -857,7 +880,10 @@ export default function POSModule() {
       if (itemsExceedingStock.length > 0) {
          const itemNames = itemsExceedingStock.map(i => `• ${i.name} (Venta: ${i.qty}, Stock: ${globalCatalog.find(cat => cat.name === i.name)?.stock || 0})`).join("\n");
          
-         const pin = window.prompt(`⚠️ STOCK INSUFICIENTE:\nLos siguientes artículos superan las existencias físicas en inventario:\n${itemNames}\n\nIngresa el PIN de Administrador para autorizar la venta en negativo:`);
+         const pin = await getPinAsync(
+           "⚠️ STOCK INSUFICIENTE",
+           `Los siguientes artículos superan las existencias físicas en inventario:\n${itemNames}\n\nIngresa el PIN de Administrador para autorizar:`
+         );
          if (!pin) {
             setIsProcessingPayment(false);
             return;
@@ -886,6 +912,10 @@ export default function POSModule() {
           amount: totalAmt,
           description: `Venta Offline Ticket #${activeTicket.id} [Método: ${selectedMethod}]`,
           device_info: navigator.userAgent,
+          items: activeTicket.items.map(item => {
+             const invItem = globalCatalog.find(i => i.name === item.name);
+             return { id: invItem ? invItem.id : null, qty: item.qty };
+          }).filter(item => item.id !== null)
         });
         alert(
           `⚠️ ¡Cobro Exitoso en ${selectedMethod.toUpperCase()} (Modo Offline)!\nSe sincronizará con la nube cuando regrese el Internet.`,
@@ -1892,17 +1922,22 @@ export default function POSModule() {
           }}
         >
           <ul style={{ listStyle: "none" }}>
-            {activeTicket.items.map((item) => (
-              <li
-                key={item.id}
-                style={{
-                  padding: "15px 10px",
-                  borderBottom: "1px solid rgba(255,255,255,0.05)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "10px",
-                }}
-              >
+            {activeTicket.items.map((item) => {
+              const invItem = globalCatalog.find(i => i.name === item.name);
+              const hasInsufficientStock = invItem && item.qty > invItem.stock;
+              return (
+                <li
+                  key={item.id}
+                  style={{
+                    padding: "15px 10px",
+                    borderBottom: "1px solid rgba(255,255,255,0.05)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "10px",
+                    borderLeft: hasInsufficientStock ? "3px solid #ef4444" : "3px solid transparent",
+                    background: hasInsufficientStock ? "rgba(239, 68, 68, 0.05)" : "transparent",
+                  }}
+                >
                 <div
                   style={{ display: "flex", alignItems: "center", gap: "10px" }}
                 >
@@ -1968,6 +2003,11 @@ export default function POSModule() {
                     <span>
                       {item.qty} {item.unit}
                     </span>
+                    {hasInsufficientStock && (
+                      <span style={{ color: "#ef4444", fontSize: "0.8rem", fontWeight: "bold", marginLeft: "10px" }}>
+                        ⚠️ Excede stock ({invItem.stock})
+                      </span>
+                    )}
                     <button
                       style={{
                         background: "transparent",
@@ -1997,7 +2037,8 @@ export default function POSModule() {
                   </button>
                 </div>
               </li>
-            ))}
+            );
+            })}
           </ul>
         </div>
 
@@ -2896,6 +2937,84 @@ export default function POSModule() {
                 style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", fontSize: "0.8rem", padding: "6px 12px" }}
               >
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPinModal && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0,0,0,0.75)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          backdropFilter: "blur(5px)"
+        }}>
+          <div className="glass-panel" style={{
+            padding: "25px",
+            width: "350px",
+            textAlign: "center",
+            display: "flex",
+            flexDirection: "column",
+            gap: "15px",
+            background: "rgba(22, 22, 34, 0.95)",
+            border: "1px solid var(--glass-border)",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.5)"
+          }}>
+            <h3 style={{ color: "var(--color-primary)", margin: 0 }}>{pinModalTitle}</h3>
+            <p style={{ fontSize: "0.85rem", opacity: 0.9, whiteSpace: "pre-line" }}>{pinModalMessage}</p>
+            <input
+              type="password"
+              placeholder="PIN de 4 dígitos"
+              maxLength={6}
+              value={pinValue}
+              onChange={(e) => setPinValue(e.target.value.replace(/\D/g, ""))}
+              style={{
+                width: "100%",
+                padding: "12px",
+                textAlign: "center",
+                fontSize: "1.2rem",
+                borderRadius: "6px",
+                border: "1px solid var(--glass-border)",
+                background: "rgba(0,0,0,0.3)",
+                color: "white",
+                letterSpacing: "4px"
+              }}
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  if (pinModalCallback) pinModalCallback(pinValue);
+                  setShowPinModal(false);
+                }
+              }}
+            />
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                className="btn-primary inactive"
+                style={{ flex: 1, padding: "10px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "white" }}
+                onClick={() => {
+                  setShowPinModal(false);
+                  if (pinModalCallback) pinModalCallback("");
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn-primary"
+                style={{ flex: 1, padding: "10px" }}
+                onClick={() => {
+                  if (pinModalCallback) pinModalCallback(pinValue);
+                  setShowPinModal(false);
+                }}
+              >
+                Autorizar
               </button>
             </div>
           </div>
