@@ -220,6 +220,53 @@ export default function POSModule() {
   // Bitácora de Sincronización (Sugerencia 3)
   const [showSyncLogModal, setShowSyncLogModal] = useState(false);
 
+  // Estados del Buscador y Registro de Clientes (Sugerencia 1 y 3)
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [showQuickCustomerModal, setShowQuickCustomerModal] = useState(false);
+  const [quickCustomerName, setQuickCustomerName] = useState("");
+  const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
+  const [isSavingQuickCustomer, setIsSavingQuickCustomer] = useState(false);
+
+  useEffect(() => {
+    if (selectedCustomerId) {
+       const c = customers.find(cust => cust.id === selectedCustomerId);
+       if (c) {
+          setCustomerSearch(`${c.name} (Pts: ${c.points || 0})`);
+       }
+    } else {
+       setCustomerSearch("");
+    }
+  }, [selectedCustomerId, customers]);
+
+  const handleSaveQuickCustomer = async () => {
+    if (!quickCustomerName.trim()) return alert("El nombre del cliente es obligatorio.");
+    setIsSavingQuickCustomer(true);
+    try {
+      const { data, error } = await supabase.from("customers").insert({
+        name: quickCustomerName.trim().toUpperCase(),
+        phone: quickCustomerPhone.trim() || null,
+        points: 0
+      }).select().single();
+      
+      if (error) throw error;
+      
+      setCustomers(prev => [...prev, data]);
+      setSelectedCustomerId(data.id);
+      setCustomerSearch(`${data.name} (Pts: 0)`);
+      
+      toast.success("✅ Cliente registrado y seleccionado con éxito.");
+      setShowQuickCustomerModal(false);
+      setQuickCustomerName("");
+      setQuickCustomerPhone("");
+    } catch (err: any) {
+      console.error("Error creating quick customer:", err);
+      alert("❌ Error al crear cliente: " + err.message);
+    } finally {
+      setIsSavingQuickCustomer(false);
+    }
+  };
+
   const requestPin = (title: string, message: string, callback: (pin: string) => void) => {
     setPinModalTitle(title);
     setPinModalMessage(message);
@@ -2307,6 +2354,118 @@ export default function POSModule() {
             </span>
           </div>
 
+          <div style={{ marginBottom: "15px", position: "relative" }}>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <div style={{ flex: 1, position: "relative" }}>
+                <input
+                  type="text"
+                  placeholder="🔍 Buscar cliente por nombre o teléfono..."
+                  value={customerSearch}
+                  onChange={(e) => {
+                    setCustomerSearch(e.target.value);
+                    setShowCustomerDropdown(true);
+                    if (!e.target.value) {
+                       setSelectedCustomerId("");
+                    }
+                  }}
+                  onFocus={() => setShowCustomerDropdown(true)}
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    borderRadius: "8px",
+                    background: "white",
+                    color: "black",
+                    border: "1px solid var(--color-primary)",
+                  }}
+                />
+                
+                {showCustomerDropdown && (
+                  <div 
+                    onClick={() => setShowCustomerDropdown(false)}
+                    style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }}
+                  />
+                )}
+
+                {showCustomerDropdown && (
+                  <div style={{
+                    position: "absolute",
+                    top: "100%",
+                    left: 0,
+                    right: 0,
+                    background: "white",
+                    color: "black",
+                    borderRadius: "8px",
+                    boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
+                    zIndex: 1000,
+                    maxHeight: "200px",
+                    overflowY: "auto",
+                    border: "1px solid var(--glass-border)",
+                    marginTop: "5px"
+                  }}>
+                    <div
+                      onClick={() => {
+                        setSelectedCustomerId("");
+                        setCustomerSearch("");
+                        setShowCustomerDropdown(false);
+                      }}
+                      style={{
+                        padding: "10px",
+                        cursor: "pointer",
+                        borderBottom: "1px solid rgba(0,0,0,0.05)",
+                        fontWeight: "bold",
+                        background: selectedCustomerId === "" ? "#f3f4f6" : "transparent",
+                        textAlign: "left"
+                      }}
+                    >
+                      -- Cliente de Mostrador (Sin Puntos) --
+                    </div>
+                    {customers
+                      .filter(c => 
+                        c.name.toLowerCase().includes(customerSearch.toLowerCase()) || 
+                        (c.phone && c.phone.includes(customerSearch))
+                      )
+                      .map((c) => (
+                        <div
+                          key={c.id}
+                          onClick={() => {
+                            setSelectedCustomerId(c.id);
+                            setCustomerSearch(`${c.name} (Pts: ${c.points || 0})`);
+                            setShowCustomerDropdown(false);
+                          }}
+                          style={{
+                            padding: "10px",
+                            cursor: "pointer",
+                            borderBottom: "1px solid rgba(0,0,0,0.05)",
+                            background: selectedCustomerId === c.id ? "#e5e7eb" : "transparent",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center"
+                          }}
+                        >
+                          <span style={{ textAlign: "left" }}>
+                            {c.points > 0 ? "⭐ " : ""}{c.name}
+                          </span>
+                          <strong style={{ fontSize: "0.85rem", color: c.points > 0 ? "#b45309" : "#4b5563" }}>
+                            Pts: {c.points || 0}
+                          </strong>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+              
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => setShowQuickCustomerModal(true)}
+                style={{ padding: "0 15px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.2rem" }}
+                title="Registrar nuevo cliente"
+              >
+                ➕
+              </button>
+            </div>
+          </div>
+
           <div style={{ marginBottom: "15px", display: "flex", justifyContent: "flex-end" }}>
             <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.9rem", color: applyIva ? "#3b82f6" : "var(--color-secondary)" }}>
               <input type="checkbox" checked={applyIva} onChange={(e) => setApplyIva(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#3b82f6" }} />
@@ -2314,26 +2473,7 @@ export default function POSModule() {
             </label>
           </div>
 
-          <div style={{ marginBottom: "15px" }}>
-            <select
-              value={selectedCustomerId}
-              onChange={(e) => setSelectedCustomerId(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px",
-                borderRadius: "8px",
-                background: "white",
-                color: "black",
-                border: "1px solid var(--color-primary)",
-              }}
-            >
-              <option value="" style={{ background: "white", color: "black" }}>-- Cliente de Mostrador (Sin Puntos) --</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id} style={{ background: "white", color: "black" }}>
-                  {c.name} (Pts: {c.points || 0})
-                </option>
-              ))}
-            </select>
+
             {selectedCustomerId && customers.find(c => c.id === selectedCustomerId)?.points > 0 && (
               <button 
                 onClick={async () => {
@@ -3297,6 +3437,96 @@ export default function POSModule() {
                 onClick={() => setShowSyncLogModal(false)}
               >
                 Aceptar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showQuickCustomerModal && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0,0,0,0.75)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          backdropFilter: "blur(5px)"
+        }}>
+          <div className="glass-panel" style={{
+            padding: "25px",
+            width: "350px",
+            background: "rgba(22, 22, 34, 0.95)",
+            border: "1px solid var(--glass-border)",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "15px"
+          }}>
+            <h3 style={{ color: "var(--color-primary)", margin: 0, textAlign: "center" }}>➕ Registro Rápido de Cliente</h3>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+              <label style={{ fontSize: "0.85rem", opacity: 0.9, textAlign: "left" }}>Nombre Completo:</label>
+              <input
+                type="text"
+                placeholder="Nombre del cliente"
+                value={quickCustomerName}
+                onChange={(e) => setQuickCustomerName(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  borderRadius: "6px",
+                  border: "1px solid var(--glass-border)",
+                  background: "rgba(0,0,0,0.3)",
+                  color: "white"
+                }}
+                autoFocus
+              />
+            </div>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+              <label style={{ fontSize: "0.85rem", opacity: 0.9, textAlign: "left" }}>Teléfono (Opcional):</label>
+              <input
+                type="text"
+                placeholder="10 dígitos"
+                maxLength={10}
+                value={quickCustomerPhone}
+                onChange={(e) => setQuickCustomerPhone(e.target.value.replace(/\D/g, ""))}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  borderRadius: "6px",
+                  border: "1px solid var(--glass-border)",
+                  background: "rgba(0,0,0,0.3)",
+                  color: "white"
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+              <button
+                className="btn-primary inactive"
+                style={{ flex: 1, padding: "10px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "white" }}
+                onClick={() => {
+                  setShowQuickCustomerModal(false);
+                  setQuickCustomerName("");
+                  setQuickCustomerPhone("");
+                }}
+                disabled={isSavingQuickCustomer}
+              >
+                Cancelar
+              </button>
+              <button
+                className="btn-primary"
+                style={{ flex: 1, padding: "10px" }}
+                onClick={handleSaveQuickCustomer}
+                disabled={isSavingQuickCustomer}
+              >
+                {isSavingQuickCustomer ? "Guardando..." : "Guardar"}
               </button>
             </div>
           </div>
