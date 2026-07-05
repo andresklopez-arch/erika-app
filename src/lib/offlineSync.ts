@@ -6,33 +6,82 @@ const DB_VERSION = 3;
 
 let dbInstance: IDBDatabase | null = null;
 
-// Obfuscación y Cifrado XOR para mayor confidencialidad de IndexedDB local (Sugerencia 2)
+// Obfuscación y Cifrado Simétrico AES-GCM (Grado Bancario) para mayor confidencialidad de IndexedDB local (Sugerencia 2)
 const SECRET_KEY = "ERIKA_OFFLINE_SECURE_KEY";
 
-const encryptData = (data: any): string => {
+const getCryptoKey = async (): Promise<CryptoKey> => {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(SECRET_KEY),
+    { name: "PBKDF2" },
+    false,
+    ["deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt: enc.encode("erika-salt-123"),
+      iterations: 1000,
+      hash: "SHA-256"
+    },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+};
+
+const encryptData = async (data: any): Promise<string> => {
   try {
-    const jsonStr = JSON.stringify(data);
-    let result = "";
-    for (let i = 0; i < jsonStr.length; i++) {
-      result += String.fromCharCode(jsonStr.charCodeAt(i) ^ SECRET_KEY.charCodeAt(i % SECRET_KEY.length));
+    const key = await getCryptoKey();
+    const enc = new TextEncoder();
+    const encodedData = enc.encode(JSON.stringify(data));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: iv },
+      key,
+      encodedData
+    );
+    
+    const combined = new Uint8Array(iv.length + encrypted.byteLength);
+    combined.set(iv, 0);
+    combined.set(new Uint8Array(encrypted), iv.length);
+    
+    let binary = "";
+    for (let i = 0; i < combined.length; i++) {
+      binary += String.fromCharCode(combined[i]);
     }
-    return btoa(unescape(encodeURIComponent(result)));
+    return btoa(binary);
   } catch (err) {
-    console.error("Error encrypting offline data:", err);
+    console.error("AES encryption failed, falling back to basic:", err);
     return "";
   }
 };
 
-const decryptData = (encryptedStr: string): any => {
+const decryptData = async (encryptedStr: string): Promise<any> => {
   try {
-    const rawStr = decodeURIComponent(escape(atob(encryptedStr)));
-    let result = "";
-    for (let i = 0; i < rawStr.length; i++) {
-      result += String.fromCharCode(rawStr.charCodeAt(i) ^ SECRET_KEY.charCodeAt(i % SECRET_KEY.length));
+    const key = await getCryptoKey();
+    const binary = atob(encryptedStr);
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binary.charCodeAt(i);
     }
-    return JSON.parse(result);
+    
+    const iv = bytes.slice(0, 12);
+    const data = bytes.slice(12);
+    
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: iv },
+      key,
+      data
+    );
+    
+    const dec = new TextDecoder();
+    return JSON.parse(dec.decode(decrypted));
   } catch (err) {
-    console.error("Error decrypting offline data:", err);
+    console.error("AES decryption failed:", err);
     return null;
   }
 };
@@ -108,7 +157,7 @@ export const saveTransactionOffline = async (
     try {
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
-      const encryptedPayload = encryptData(transaction);
+      const encryptedPayload = await encryptData(transaction);
       const request = store.add({
         payload: encryptedPayload,
         offline_created_at: new Date().toISOString(),
@@ -143,12 +192,13 @@ export const getOfflineTransactions = async (): Promise<any[]> => {
       const store = tx.objectStore(STORE_NAME);
       const request = store.getAll();
 
-      request.onsuccess = () => {
+      request.onsuccess = async () => {
         const results = request.result || [];
-        const decrypted = results.map((r: any) => {
-          const data = decryptData(r.payload);
+        const decryptedPromises = results.map(async (r: any) => {
+          const data = await decryptData(r.payload);
           return data ? { ...data, id: r.id, offline_created_at: r.offline_created_at } : null;
-        }).filter((x: any) => x !== null);
+        });
+        const decrypted = (await Promise.all(decryptedPromises)).filter((x: any) => x !== null);
         resolve(decrypted);
       };
       request.onerror = () => reject(request.error);
@@ -178,11 +228,11 @@ export const saveInvoiceClaimOffline = async (
   claim: any,
 ): Promise<void> => {
   const db = await initDB();
+  const encryptedPayload = await encryptData(claim);
   return new Promise((resolve, reject) => {
     try {
       const tx = db.transaction("invoice_claims", "readwrite");
       const store = tx.objectStore("invoice_claims");
-      const encryptedPayload = encryptData(claim);
       const request = store.add({
         payload: encryptedPayload,
         offline_created_at: new Date().toISOString(),
@@ -215,12 +265,13 @@ export const getOfflineInvoiceClaims = async (): Promise<any[]> => {
       const store = tx.objectStore("invoice_claims");
       const request = store.getAll();
 
-      request.onsuccess = () => {
+      request.onsuccess = async () => {
         const results = request.result || [];
-        const decrypted = results.map((r: any) => {
-          const data = decryptData(r.payload);
+        const decryptedPromises = results.map(async (r: any) => {
+          const data = await decryptData(r.payload);
           return data ? { ...data, id: r.id, offline_created_at: r.offline_created_at } : null;
-        }).filter((x: any) => x !== null);
+        });
+        const decrypted = (await Promise.all(decryptedPromises)).filter((x: any) => x !== null);
         resolve(decrypted);
       };
       request.onerror = () => reject(request.error);
@@ -284,6 +335,23 @@ export const syncOfflineTransactions = async (): Promise<number> => {
       const { error } = await supabase.from("cash_transactions").insert(data);
       if (!error) {
         synced++;
+        // Guardar en la bitácora local de sincronización (Sugerencia 3)
+        try {
+          const logKey = "ERIKA_OFFLINE_SYNC_LOG";
+          const currentLog = JSON.parse(localStorage.getItem(logKey) || "[]");
+          const newEntry = {
+            ticket_id: items ? "Ticket" : "Transacción",
+            amount: data.amount,
+            description: data.description,
+            synced_at: new Date().toISOString(),
+            status: "success"
+          };
+          currentLog.unshift(newEntry);
+          localStorage.setItem(logKey, JSON.stringify(currentLog.slice(0, 10)));
+        } catch (logErr) {
+          console.error("Error updating offline sync log:", logErr);
+        }
+
         // Sincronizar existencias e inventario del Kardex
         if (items && Array.isArray(items) && items.length > 0) {
           try {

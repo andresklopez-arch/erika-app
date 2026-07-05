@@ -215,6 +215,9 @@ export default function POSModule() {
   const [pinModalCallback, setPinModalCallback] = useState<((pin: string) => void) | null>(null);
   const [pinModalTitle, setPinModalTitle] = useState("AUTORIZACIÓN REQUERIDA");
   const [pinModalMessage, setPinModalMessage] = useState("");
+  
+  // Bitácora de Sincronización (Sugerencia 3)
+  const [showSyncLogModal, setShowSyncLogModal] = useState(false);
 
   const requestPin = (title: string, message: string, callback: (pin: string) => void) => {
     setPinModalTitle(title);
@@ -597,8 +600,12 @@ export default function POSModule() {
   ) => {
     // Check stock warning when adding product (Sugerencia 1)
     const invItem = globalCatalog.find(i => i.name === productName);
-    if (invItem && addedQty > invItem.stock) {
-       toast.error(`⚠️ Existencias insuficientes para "${productName}". Se requerirá PIN de Administrador para cobrar.`);
+    if (invItem) {
+       if (addedQty > invItem.stock) {
+          toast.error(`⚠️ Existencias insuficientes para "${productName}". Se requerirá PIN de Administrador para cobrar.`);
+       } else if (invItem.stock > 0 && invItem.stock <= 5) {
+          toast(`⚠️ Stock bajo para "${productName}": quedan sólo ${invItem.stock} unidades.`, { icon: '⚠️' });
+       }
     }
 
     // Client price history logic
@@ -650,8 +657,12 @@ export default function POSModule() {
       const item = currentTicket.items.find(i => i.id === itemId);
       if (item) {
         const invItem = globalCatalog.find(i => i.name === item.name);
-        if (invItem && newQty > invItem.stock && newQty > item.qty) {
-           toast.error(`⚠️ Existencias insuficientes para "${item.name}". Se requerirá PIN de Administrador para cobrar.`);
+        if (invItem) {
+           if (newQty > invItem.stock && newQty > item.qty) {
+              toast.error(`⚠️ Existencias insuficientes para "${item.name}". Se requerirá PIN de Administrador para cobrar.`);
+           } else if (invItem.stock > 0 && invItem.stock <= 5 && newQty > item.qty) {
+              toast(`⚠️ Stock bajo para "${item.name}": quedan sólo ${invItem.stock} unidades.`, { icon: '⚠️' });
+           }
         }
       }
     }
@@ -1567,6 +1578,13 @@ export default function POSModule() {
               Terminal de Ventas {isOffline ? "(⚠️ MODO OFFLINE)" : "(☁️ Nube)"}
             </h2>
             <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={() => setShowSyncLogModal(true)}
+                className="btn-primary"
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "white" }}
+              >
+                📋 Historial Sync
+              </button>
               {pendingOfflineCount > 0 && (
                 <span
                   style={{
@@ -1963,6 +1981,7 @@ export default function POSModule() {
             {activeTicket.items.map((item) => {
               const invItem = globalCatalog.find(i => i.name === item.name);
               const hasInsufficientStock = invItem && item.qty > invItem.stock;
+              const isLowStock = invItem && invItem.stock > 0 && invItem.stock <= 5;
               return (
                 <li
                   key={item.id}
@@ -1972,8 +1991,8 @@ export default function POSModule() {
                     display: "flex",
                     flexDirection: "column",
                     gap: "10px",
-                    borderLeft: hasInsufficientStock ? "3px solid #ef4444" : "3px solid transparent",
-                    background: hasInsufficientStock ? "rgba(239, 68, 68, 0.05)" : "transparent",
+                    borderLeft: hasInsufficientStock ? "3px solid #ef4444" : isLowStock ? "3px solid #f59e0b" : "3px solid transparent",
+                    background: hasInsufficientStock ? "rgba(239, 68, 68, 0.05)" : isLowStock ? "rgba(245, 158, 11, 0.03)" : "transparent",
                   }}
                 >
                 <div
@@ -2044,6 +2063,11 @@ export default function POSModule() {
                     {hasInsufficientStock && (
                       <span style={{ color: "#ef4444", fontSize: "0.8rem", fontWeight: "bold", marginLeft: "10px" }}>
                         ⚠️ Excede stock ({invItem.stock})
+                      </span>
+                    )}
+                    {!hasInsufficientStock && isLowStock && (
+                      <span style={{ color: "#f59e0b", fontSize: "0.8rem", fontWeight: "bold", marginLeft: "10px" }}>
+                        ⚠️ Stock bajo ({invItem.stock} disp.)
                       </span>
                     )}
                     <button
@@ -3053,6 +3077,96 @@ export default function POSModule() {
                 }}
               >
                 Autorizar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSyncLogModal && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0,0,0,0.75)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          backdropFilter: "blur(5px)"
+        }}>
+          <div className="glass-panel" style={{
+            padding: "25px",
+            width: "550px",
+            background: "rgba(22, 22, 34, 0.95)",
+            border: "1px solid var(--glass-border)",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "15px"
+          }}>
+            <div className="flex-between">
+              <h3 style={{ color: "var(--color-primary)", margin: 0 }}>📋 Bitácora de Sincronización Offline</h3>
+              <button
+                onClick={() => setShowSyncLogModal(false)}
+                style={{ background: "transparent", border: "none", color: "white", fontSize: "1.2rem", cursor: "pointer" }}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <p style={{ fontSize: "0.85rem", opacity: 0.8 }}>
+              Listado de las últimas 10 ventas/reclamos que fueron cobradas en modo offline y sincronizadas exitosamente en la nube.
+            </p>
+
+            <div style={{ maxHeight: "300px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "10px" }}>
+              {(() => {
+                if (typeof window === "undefined") return null;
+                const logs = JSON.parse(localStorage.getItem("ERIKA_OFFLINE_SYNC_LOG") || "[]");
+                if (logs.length === 0) {
+                  return (
+                    <div style={{ padding: "20px", textAlign: "center", opacity: 0.5, fontSize: "0.9rem" }}>
+                      No hay registros de sincronización recientes.
+                    </div>
+                  );
+                }
+                return logs.map((log: any, idx: number) => (
+                  <div key={idx} style={{
+                    padding: "10px 15px",
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(255,255,255,0.05)",
+                    borderRadius: "6px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "10px"
+                  }}>
+                    <div style={{ flex: 1, textAlign: "left" }}>
+                      <strong style={{ fontSize: "0.9rem", color: "var(--color-secondary)" }}>{log.description}</strong>
+                      <span style={{ display: "block", fontSize: "0.75rem", opacity: 0.6, marginTop: "2px" }}>
+                        Sincronizado: {new Date(log.synced_at).toLocaleString()}
+                      </span>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <strong style={{ fontSize: "0.95rem" }}>${parseFloat(log.amount).toFixed(2)}</strong>
+                      <span style={{ display: "block", color: "#10b981", fontSize: "0.75rem", fontWeight: "bold", marginTop: "2px" }}>
+                        ✓ {log.status.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "10px" }}>
+              <button
+                className="btn-primary"
+                style={{ padding: "8px 20px" }}
+                onClick={() => setShowSyncLogModal(false)}
+              >
+                Aceptar
               </button>
             </div>
           </div>
