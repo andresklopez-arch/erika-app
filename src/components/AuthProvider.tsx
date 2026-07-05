@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { BusinessSettings, BusinessSettingsSchema, BusinessConfig } from "../lib/settingsSchema";
+import { setOfflineSessionKey } from "../lib/offlineSync";
 
 interface User {
   id: string;
@@ -303,8 +304,9 @@ export default function AuthProvider({
 
     const saved = localStorage.getItem("ERIKA_USER");
     if (saved) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCurrentUser(JSON.parse(saved));
+      const user = JSON.parse(saved);
+      setCurrentUser(user);
+      setOfflineSessionKey(user.id, user.pin);
     }
     setIsLoading(false);
 
@@ -323,6 +325,7 @@ export default function AuthProvider({
 
     if (user) {
       setCurrentUser(user);
+      setOfflineSessionKey(user.id, user.pin);
       localStorage.setItem("ERIKA_USER", JSON.stringify(user));
       setPinInput("");
     } else {
@@ -332,6 +335,7 @@ export default function AuthProvider({
 
   const logout = () => {
     setCurrentUser(null);
+    setOfflineSessionKey("", "");
     localStorage.removeItem("ERIKA_USER");
   };
 

@@ -7,13 +7,21 @@ const DB_VERSION = 3;
 let dbInstance: IDBDatabase | null = null;
 
 // Obfuscación y Cifrado Simétrico AES-GCM (Grado Bancario) para mayor confidencialidad de IndexedDB local (Sugerencia 2)
-const SECRET_KEY = "ERIKA_OFFLINE_SECURE_KEY";
+let dynamicSessionKey = "ERIKA_OFFLINE_SECURE_KEY";
+
+export const setOfflineSessionKey = (userId: string, userPin: string) => {
+  if (userId && userPin) {
+     dynamicSessionKey = `ERIKA_OFFLINE_${userId}_${userPin}`;
+  } else {
+     dynamicSessionKey = "ERIKA_OFFLINE_SECURE_KEY";
+  }
+};
 
 const getCryptoKey = async (): Promise<CryptoKey> => {
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
-    enc.encode(SECRET_KEY),
+    enc.encode(dynamicSessionKey),
     { name: "PBKDF2" },
     false,
     ["deriveKey"]
@@ -378,6 +386,23 @@ export const syncOfflineTransactions = async (): Promise<number> => {
         }
       } else {
         console.error("Error syncing transaction", error);
+        // Guardar error en la bitácora de sincronización (Sugerencia 2)
+        try {
+          const logKey = "ERIKA_OFFLINE_SYNC_LOG";
+          const currentLog = JSON.parse(localStorage.getItem(logKey) || "[]");
+          const newEntry = {
+            ticket_id: items ? "Ticket" : "Transacción",
+            amount: data.amount,
+            description: `FALLA: ${data.description || "Cobro Offline"}`,
+            synced_at: new Date().toISOString(),
+            status: "error",
+            error_details: error.message || "Error desconocido"
+          };
+          currentLog.unshift(newEntry);
+          localStorage.setItem(logKey, JSON.stringify(currentLog.slice(0, 10)));
+        } catch (logErr) {
+          console.error("Error updating offline sync log with error details:", logErr);
+        }
       }
     }
     if (synced === pending.length) {

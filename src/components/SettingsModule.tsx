@@ -21,6 +21,7 @@ export default function SettingsModule() {
   const [theme, setTheme] = useState("dark");
   const [wholesaleMinQty, setWholesaleMinQty] = useState("10");
   const [wholesaleDiscount, setWholesaleDiscount] = useState("10");
+  const [lowStockThreshold, setLowStockThreshold] = useState("5");
 
   const [targetUtility, setTargetUtility] = useState("30");
   const [monthlyGoals, setMonthlyGoals] = useState("0");
@@ -326,6 +327,7 @@ export default function SettingsModule() {
       setPrinterFontFamily(businessSettings.config.printer_font_family || "monospace");
       setPrinterFields(businessSettings.config.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"]);
       setPrinterFooterMsg(businessSettings.config.printer_footer_msg || "¡Gracias por su compra!");
+      setLowStockThreshold(String(businessSettings.config.low_stock_threshold || 5));
       /* eslint-enable react-hooks/set-state-in-effect */
 
       // Pre-cargar lista de impresoras escaneadas si ya hay una guardada
@@ -389,6 +391,18 @@ export default function SettingsModule() {
     });
     if (success) {
       alert("✅ Configuración de Mayoreo Automático guardada.");
+    }
+  };
+
+  const saveInventoryAlertConfig = async () => {
+    if (!checkAdmin()) return;
+    const success = await updateBusinessSettings({
+      config: {
+        low_stock_threshold: Number(lowStockThreshold) || 5,
+      }
+    });
+    if (success) {
+      alert("✅ Umbral de existencias críticas actualizado.");
     }
   };
 
@@ -1083,6 +1097,22 @@ export default function SettingsModule() {
             </div>
             <button className="btn-primary" onClick={saveWholesaleConfig} style={{ width: "100%", background: "transparent", border: "1px solid #3b82f6", color: "#3b82f6" }}>
               💾 Guardar Reglas de Mayoreo
+            </button>
+          </div>
+
+          <div className="glass-panel" style={{ border: "1px solid #ef4444" }}>
+            <h3 style={{ margin: "0 0 20px 0", color: "#ef4444", display: "flex", alignItems: "center", gap: "10px" }}>
+              ⚠️ Alertas de Inventario
+            </h3>
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Umbral de Alerta de Existencias Bajas:</label>
+              <input type="number" value={lowStockThreshold} onChange={e => setLowStockThreshold(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
+            </div>
+            <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "20px" }}>
+              Define el stock crítico para avisar en el POS cuando un producto tenga pocas existencias.
+            </p>
+            <button className="btn-primary" onClick={saveInventoryAlertConfig} style={{ width: "100%", background: "transparent", border: "1px solid #ef4444", color: "#ef4444" }}>
+              💾 Guardar Alerta de Existencias
             </button>
           </div>
 
