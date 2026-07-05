@@ -24,6 +24,7 @@ interface POSItem {
   qty: number;
   unit: string;
   image_url?: string;
+  discountPct?: number;
 }
 
 interface Ticket {
