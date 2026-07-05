@@ -232,6 +232,7 @@ export default function POSModule() {
   const [showCustomerHistoryModal, setShowCustomerHistoryModal] = useState(false);
   const [customerHistoryTickets, setCustomerHistoryTickets] = useState<any[]>([]);
   const [isLoadingCustomerHistory, setIsLoadingCustomerHistory] = useState(false);
+  const [historySearchTerm, setHistorySearchTerm] = useState("");
 
   useEffect(() => {
     if (selectedCustomerId) {
@@ -275,6 +276,7 @@ export default function POSModule() {
   const fetchCustomerHistory = async (customerId: string) => {
      if (!customerId) return;
      setIsLoadingCustomerHistory(true);
+     setHistorySearchTerm("");
      try {
        const { data, error } = await supabase
          .from("quotes")
@@ -293,6 +295,40 @@ export default function POSModule() {
      } finally {
        setIsLoadingCustomerHistory(false);
      }
+  };
+
+  const cloneTicketItems = (itemsJson: any) => {
+     let ticketItems = [];
+     if (typeof itemsJson === "string") {
+        try { ticketItems = JSON.parse(itemsJson); } catch { ticketItems = []; }
+     } else {
+        ticketItems = Array.isArray(itemsJson) ? itemsJson : [];
+     }
+     
+     if (ticketItems.length === 0) return alert("Este ticket no contiene productos válidos.");
+     
+     setTickets(tickets.map(t => {
+       if (t.id === activeTicketId) {
+         const newItems = ticketItems.map((item: any) => ({
+           id: `${item.id || "cloned"}-${Date.now()}-${Math.random()}`,
+           code: item.code || "",
+           name: item.name,
+           price: item.price,
+           cost: item.cost || 0,
+           qty: item.qty,
+           unit: item.unit || "PZA",
+           discountPct: item.discountPct || 0
+         }));
+         return {
+           ...t,
+           items: [...t.items, ...newItems]
+         };
+       }
+       return t;
+     }));
+     
+     toast.success("🛒 Productos cargados al ticket actual.");
+     setShowCustomerHistoryModal(false);
   };
 
   const requestPin = (title: string, message: string, callback: (pin: string) => void) => {
@@ -3633,19 +3669,57 @@ export default function POSModule() {
               Últimas 5 compras de <strong>{customers.find(c => c.id === selectedCustomerId)?.name}</strong>:
             </p>
 
+            <input
+              type="text"
+              placeholder="🔍 Filtrar por nombre de producto..."
+              value={historySearchTerm}
+              onChange={e => setHistorySearchTerm(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "10px",
+                borderRadius: "6px",
+                border: "1px solid var(--glass-border)",
+                background: "rgba(0,0,0,0.3)",
+                color: "white",
+                marginBottom: "5px"
+              }}
+            />
+
             <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-              {customerHistoryTickets.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "20px", opacity: 0.6 }}>
-                  No se encontraron compras registradas para este cliente.
-                </div>
-              ) : (
-                customerHistoryTickets.map((ticket) => {
+              {(() => {
+                const filtered = customerHistoryTickets.filter(ticket => {
+                  if (!historySearchTerm) return true;
                   let ticketItems = [];
                   if (typeof ticket.items === "string") {
                     try { ticketItems = JSON.parse(ticket.items); } catch { ticketItems = []; }
                   } else {
                     ticketItems = Array.isArray(ticket.items) ? ticket.items : [];
                   }
+                  return ticketItems.some((item: any) => 
+                    item.name.toLowerCase().includes(historySearchTerm.toLowerCase())
+                  );
+                });
+                
+                if (filtered.length === 0) {
+                  return (
+                    <div style={{ textAlign: "center", padding: "20px", opacity: 0.6 }}>
+                      No se encontraron compras que coincidan con la búsqueda.
+                    </div>
+                  );
+                }
+
+                return filtered.map((ticket) => {
+                  let ticketItems = [];
+                  if (typeof ticket.items === "string") {
+                    try { ticketItems = JSON.parse(ticket.items); } catch { ticketItems = []; }
+                  } else {
+                    ticketItems = Array.isArray(ticket.items) ? ticket.items : [];
+                  }
+
+                  const purchaseDate = new Date(ticket.created_at);
+                  const diffDays = Math.ceil((Date.now() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24));
+                  const remainingDays = 30 - diffDays;
+                  const hasWarranty = remainingDays >= 0;
 
                   return (
                     <div 
@@ -3665,6 +3739,10 @@ export default function POSModule() {
                         <span>{new Date(ticket.created_at).toLocaleDateString()} {new Date(ticket.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                       </div>
                       
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem", color: hasWarranty ? "#10b981" : "#ef4444" }}>
+                        <span>🛡️ {hasWarranty ? `Garantía activa (${remainingDays} días rest.)` : "Garantía vencida"}</span>
+                      </div>
+                      
                       <div style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "0.85rem", paddingLeft: "10px", borderLeft: "2px solid var(--color-primary)" }}>
                         {ticketItems.map((item: any, idx: number) => (
                           <div key={idx} style={{ display: "flex", justifyContent: "space-between" }}>
@@ -3674,13 +3752,21 @@ export default function POSModule() {
                         ))}
                       </div>
 
-                      <div style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px dashed rgba(255,255,255,0.1)", paddingTop: "8px", fontWeight: "bold", fontSize: "0.95rem" }}>
-                        <span style={{ color: "var(--color-secondary)" }}>Total: ${ticket.total.toFixed(2)}</span>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px dashed rgba(255,255,255,0.1)", paddingTop: "8px" }}>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={() => cloneTicketItems(ticket.items)}
+                          style={{ padding: "5px 10px", fontSize: "0.8rem", background: "transparent", border: "1px solid var(--color-primary)", color: "var(--color-primary)" }}
+                        >
+                          🔄 Reordenar / Clonar
+                        </button>
+                        <span style={{ fontWeight: "bold", fontSize: "0.95rem", color: "var(--color-secondary)" }}>Total: ${ticket.total.toFixed(2)}</span>
                       </div>
                     </div>
                   );
-                })
-              )}
+                });
+              })()}
             </div>
 
             <button
