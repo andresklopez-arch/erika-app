@@ -228,6 +228,11 @@ export default function POSModule() {
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
   const [isSavingQuickCustomer, setIsSavingQuickCustomer] = useState(false);
 
+  // Estados para historial de compras del cliente (Sugerencia 1)
+  const [showCustomerHistoryModal, setShowCustomerHistoryModal] = useState(false);
+  const [customerHistoryTickets, setCustomerHistoryTickets] = useState<any[]>([]);
+  const [isLoadingCustomerHistory, setIsLoadingCustomerHistory] = useState(false);
+
   useEffect(() => {
     if (selectedCustomerId) {
        const c = customers.find(cust => cust.id === selectedCustomerId);
@@ -265,6 +270,29 @@ export default function POSModule() {
     } finally {
       setIsSavingQuickCustomer(false);
     }
+  };
+
+  const fetchCustomerHistory = async (customerId: string) => {
+     if (!customerId) return;
+     setIsLoadingCustomerHistory(true);
+     try {
+       const { data, error } = await supabase
+         .from("quotes")
+         .select("id, created_at, total, items")
+         .eq("customer_id", customerId)
+         .eq("status", "ticket")
+         .order("created_at", { ascending: false })
+         .limit(5);
+       
+       if (error) throw error;
+       setCustomerHistoryTickets(data || []);
+       setShowCustomerHistoryModal(true);
+     } catch (err: any) {
+       console.error("Error fetching customer history:", err);
+       alert("❌ Error al cargar historial: " + err.message);
+     } finally {
+       setIsLoadingCustomerHistory(false);
+     }
   };
 
   const requestPin = (title: string, message: string, callback: (pin: string) => void) => {
@@ -2466,6 +2494,29 @@ export default function POSModule() {
             </div>
           </div>
 
+          {selectedCustomerId && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "-10px", marginBottom: "15px" }}>
+              <span style={{ fontSize: "0.85rem", opacity: 0.8 }}>
+                Cliente seleccionado
+              </span>
+              <button
+                type="button"
+                onClick={() => fetchCustomerHistory(selectedCustomerId)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#3b82f6",
+                  cursor: "pointer",
+                  fontSize: "0.85rem",
+                  textDecoration: "underline",
+                  padding: 0
+                }}
+              >
+                {isLoadingCustomerHistory ? "⌛ Cargando historial..." : "📅 Ver últimas compras"}
+              </button>
+            </div>
+          )}
+
           <div style={{ marginBottom: "15px", display: "flex", justifyContent: "flex-end" }}>
             <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.9rem", color: applyIva ? "#3b82f6" : "var(--color-secondary)" }}>
               <input type="checkbox" checked={applyIva} onChange={(e) => setApplyIva(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#3b82f6" }} />
@@ -3529,6 +3580,116 @@ export default function POSModule() {
                 {isSavingQuickCustomer ? "Guardando..." : "Guardar"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showCustomerHistoryModal && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0,0,0,0.75)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          backdropFilter: "blur(5px)"
+        }}>
+          <div className="glass-panel" style={{
+            padding: "25px",
+            width: "500px",
+            maxWidth: "90%",
+            maxHeight: "85vh",
+            overflowY: "auto",
+            background: "rgba(22, 22, 34, 0.95)",
+            border: "1px solid var(--glass-border)",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "20px"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ color: "var(--color-primary)", margin: 0 }}>
+                📅 Historial de Compras
+              </h3>
+              <button
+                onClick={() => setShowCustomerHistoryModal(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#ef4444",
+                  fontSize: "1.2rem",
+                  cursor: "pointer"
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <p style={{ margin: 0, fontSize: "0.9rem", opacity: 0.8, textAlign: "left" }}>
+              Últimas 5 compras de <strong>{customers.find(c => c.id === selectedCustomerId)?.name}</strong>:
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+              {customerHistoryTickets.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "20px", opacity: 0.6 }}>
+                  No se encontraron compras registradas para este cliente.
+                </div>
+              ) : (
+                customerHistoryTickets.map((ticket) => {
+                  let ticketItems = [];
+                  if (typeof ticket.items === "string") {
+                    try { ticketItems = JSON.parse(ticket.items); } catch { ticketItems = []; }
+                  } else {
+                    ticketItems = Array.isArray(ticket.items) ? ticket.items : [];
+                  }
+
+                  return (
+                    <div 
+                      key={ticket.id} 
+                      style={{
+                        padding: "15px",
+                        borderRadius: "8px",
+                        background: "rgba(255,255,255,0.05)",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "10px"
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", opacity: 0.9 }}>
+                        <span><strong>Ticket:</strong> #{ticket.id}</span>
+                        <span>{new Date(ticket.created_at).toLocaleDateString()} {new Date(ticket.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                      </div>
+                      
+                      <div style={{ display: "flex", flexDirection: "column", gap: "5px", fontSize: "0.85rem", paddingLeft: "10px", borderLeft: "2px solid var(--color-primary)" }}>
+                        {ticketItems.map((item: any, idx: number) => (
+                          <div key={idx} style={{ display: "flex", justifyContent: "space-between" }}>
+                            <span style={{ textAlign: "left" }}>{item.qty} {item.unit || "PZA"} x {item.name}</span>
+                            <span>${((item.price || 0) * (item.qty || 1)).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px dashed rgba(255,255,255,0.1)", paddingTop: "8px", fontWeight: "bold", fontSize: "0.95rem" }}>
+                        <span style={{ color: "var(--color-secondary)" }}>Total: ${ticket.total.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <button
+              className="btn-primary"
+              style={{ width: "100%", padding: "10px", marginTop: "10px" }}
+              onClick={() => setShowCustomerHistoryModal(false)}
+            >
+              Cerrar Historial
+            </button>
           </div>
         </div>
       )}
