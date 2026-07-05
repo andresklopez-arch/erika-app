@@ -321,7 +321,7 @@ export default function POSModule() {
      if (ticketItems.length === 0) return alert("Este ticket no contiene productos válidos.");
      
      let adjustedMsg = [];
-     const newItems = [];
+     const newItems: POSItem[] = [];
      
      // Validación de Stock en tiempo real al clonar (Sugerencia 1)
      for (const item of ticketItems) {
