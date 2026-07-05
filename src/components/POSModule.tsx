@@ -1329,7 +1329,7 @@ export default function POSModule() {
         if (i.discountPct) p = p * (1 - i.discountPct / 100);
         return `
         <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
-          <span>${i.qty}x ${i.name} ${i.discountPct > 0 ? `(-${i.discountPct}%)` : ''}</span>
+          <span>${i.qty}x ${i.name} ${(i.discountPct || 0) > 0 ? `(-${i.discountPct}%)` : ''}</span>
           <span>$${Math.round(p * i.qty)}</span>
         </div>`;
       }).join("");
@@ -2093,7 +2093,7 @@ export default function POSModule() {
                           return (p * item.qty).toFixed(2);
                         })()}
                       </strong>
-                      {item.discountPct > 0 && (
+                      {(item.discountPct || 0) > 0 && (
                         <span style={{ fontSize: "0.75rem", color: "#ef4444", display: "block", textAlign: "right", marginTop: "2px" }}>
                           Desc. -{item.discountPct}%
                         </span>
@@ -2682,7 +2682,7 @@ export default function POSModule() {
                     <td style={{ padding: "5px 0", verticalAlign: "top" }}>{item.qty} {item.unit}</td>
                     <td style={{ padding: "5px 0", verticalAlign: "top" }}>
                       {item.name}
-                      {item.discountPct > 0 && (
+                      {(item.discountPct || 0) > 0 && (
                         <div style={{ fontSize: "10px", color: "#666" }}>
                           Desc. -{item.discountPct}%
                         </div>
