@@ -981,6 +981,24 @@ export default function POSModule() {
            }
         }
 
+        // Reduce Inventory (Descontar existencias de Supabase)
+        try {
+          for (const item of activeTicket.items) {
+             const invItem = globalCatalog.find(i => i.name === item.name);
+             if (invItem) {
+                const { error: invErr } = await supabase
+                  .from("inventory")
+                  .update({ stock: invItem.stock - item.qty })
+                  .eq("id", invItem.id);
+                if (invErr) {
+                  console.error("Error al actualizar inventario para", item.name, ":", invErr);
+                }
+             }
+          }
+        } catch (invErr) {
+          console.error("Error crítico al actualizar inventario:", invErr);
+        }
+
         alert(
           `✅ ¡Cobro Exitoso por $${totalAmt.toFixed(2)} [Método: ${selectedMethod.toUpperCase()}]!\nEl dinero ha sido ingresado a la Caja.`,
         );
@@ -1005,6 +1023,17 @@ export default function POSModule() {
           sendWhatsApp("receipt");
         }
       }
+
+      // Update local state globalCatalog (Descontar existencias localmente)
+      setGlobalCatalog(prevCatalog =>
+        prevCatalog.map(invItem => {
+           const soldItem = activeTicket.items.find(item => item.name === invItem.name);
+           if (soldItem) {
+              return { ...invItem, stock: invItem.stock - soldItem.qty };
+           }
+           return invItem;
+        })
+      );
 
       // Proceso de éxito: limpiar tickets y cerrar modal
       setTickets(
@@ -2323,11 +2352,22 @@ export default function POSModule() {
 
                  // Reduce Inventory
                  for (const item of activeTicket.items) {
-                    const invItem = globalCatalog.find(i => i.id === item.id); // note item.id from POS is sometimes random, should match properly by code or name
+                    const invItem = globalCatalog.find(i => i.name === item.name);
                     if (invItem) {
-                       await supabase.from("inventory").update({ stock: invItem.stock - item.qty }).eq("name", item.name);
+                       await supabase.from("inventory").update({ stock: invItem.stock - item.qty }).eq("id", invItem.id);
                     }
                  }
+
+                 // Update local state globalCatalog
+                 setGlobalCatalog(prevCatalog =>
+                    prevCatalog.map(invItem => {
+                       const soldItem = activeTicket.items.find(item => item.name === invItem.name);
+                       if (soldItem) {
+                          return { ...invItem, stock: invItem.stock - soldItem.qty };
+                       }
+                       return invItem;
+                    })
+                 );
 
                  // Print Thermal Ticket for Layaway
                   triggerPrint({

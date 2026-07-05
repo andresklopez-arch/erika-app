@@ -12,6 +12,7 @@ export default function QuotesModule() {
     const { data } = await supabase
       .from("quotes")
       .select("*")
+      .neq("status", "ticket")
       .order("created_at", { ascending: false });
     if (data) setQuotes(data);
   };
