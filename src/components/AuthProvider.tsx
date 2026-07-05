@@ -48,6 +48,7 @@ const AuthContext = createContext<AuthContextType>({
       printer_font_family: "monospace",
       printer_fields: ["name", "rfc", "phone", "address", "logo", "footer"],
       printer_footer_msg: "¡Gracias por su compra!",
+      low_stock_threshold: 5,
     },
   },
   updateBusinessSettings: async () => false,
@@ -129,6 +130,7 @@ export default function AuthProvider({
         printer_font_family: localStorage.getItem("ERIKA_PRINTER_FONT_FAMILY") || "monospace",
         printer_fields: localStorage.getItem("ERIKA_PRINTER_FIELDS") ? JSON.parse(localStorage.getItem("ERIKA_PRINTER_FIELDS")!) : ["name", "rfc", "phone", "address", "logo", "footer"],
         printer_footer_msg: localStorage.getItem("ERIKA_PRINTER_FOOTER_MSG") || "¡Gracias por su compra!",
+        low_stock_threshold: Number(localStorage.getItem("ERIKA_LOW_STOCK_THRESHOLD")) || 5,
       };
 
       return {
@@ -162,6 +164,7 @@ export default function AuthProvider({
         printer_font_family: "monospace",
         printer_fields: ["name", "rfc", "phone", "address", "logo", "footer"],
         printer_footer_msg: "¡Gracias por su compra!",
+        low_stock_threshold: 5,
       },
     };
   });
@@ -281,6 +284,7 @@ export default function AuthProvider({
         localStorage.setItem("ERIKA_PRINTER_FIELDS", JSON.stringify(result.settings.config.printer_fields));
         localStorage.setItem("ERIKA_PRINTER_FOOTER_MSG", result.settings.config.printer_footer_msg || "¡Gracias por su compra!");
         localStorage.setItem("ERIKA_THEME", result.settings.config.theme);
+        localStorage.setItem("ERIKA_LOW_STOCK_THRESHOLD", String(result.settings.config.low_stock_threshold || 5));
         
         return true;
       } else {
