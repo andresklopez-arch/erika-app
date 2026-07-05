@@ -2322,14 +2322,14 @@ export default function POSModule() {
                 width: "100%",
                 padding: "10px",
                 borderRadius: "8px",
-                background: "rgba(0,0,0,0.3)",
-                color: "white",
+                background: "white",
+                color: "black",
                 border: "1px solid var(--color-primary)",
               }}
             >
-              <option value="">-- Cliente de Mostrador (Sin Puntos) --</option>
+              <option value="" style={{ background: "white", color: "black" }}>-- Cliente de Mostrador (Sin Puntos) --</option>
               {customers.map((c) => (
-                <option key={c.id} value={c.id}>
+                <option key={c.id} value={c.id} style={{ background: "white", color: "black" }}>
                   {c.name} (Pts: {c.points || 0})
                 </option>
               ))}
