@@ -6,6 +6,37 @@ const DB_VERSION = 3;
 
 let dbInstance: IDBDatabase | null = null;
 
+// Obfuscación y Cifrado XOR para mayor confidencialidad de IndexedDB local (Sugerencia 2)
+const SECRET_KEY = "ERIKA_OFFLINE_SECURE_KEY";
+
+const encryptData = (data: any): string => {
+  try {
+    const jsonStr = JSON.stringify(data);
+    let result = "";
+    for (let i = 0; i < jsonStr.length; i++) {
+      result += String.fromCharCode(jsonStr.charCodeAt(i) ^ SECRET_KEY.charCodeAt(i % SECRET_KEY.length));
+    }
+    return btoa(unescape(encodeURIComponent(result)));
+  } catch (err) {
+    console.error("Error encrypting offline data:", err);
+    return "";
+  }
+};
+
+const decryptData = (encryptedStr: string): any => {
+  try {
+    const rawStr = decodeURIComponent(escape(atob(encryptedStr)));
+    let result = "";
+    for (let i = 0; i < rawStr.length; i++) {
+      result += String.fromCharCode(rawStr.charCodeAt(i) ^ SECRET_KEY.charCodeAt(i % SECRET_KEY.length));
+    }
+    return JSON.parse(result);
+  } catch (err) {
+    console.error("Error decrypting offline data:", err);
+    return null;
+  }
+};
+
 export const initDB = (): Promise<IDBDatabase> => {
   if (dbInstance) return Promise.resolve(dbInstance);
 
@@ -77,8 +108,9 @@ export const saveTransactionOffline = async (
     try {
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
+      const encryptedPayload = encryptData(transaction);
       const request = store.add({
-        ...transaction,
+        payload: encryptedPayload,
         offline_created_at: new Date().toISOString(),
       });
 
@@ -111,7 +143,14 @@ export const getOfflineTransactions = async (): Promise<any[]> => {
       const store = tx.objectStore(STORE_NAME);
       const request = store.getAll();
 
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        const results = request.result || [];
+        const decrypted = results.map((r: any) => {
+          const data = decryptData(r.payload);
+          return data ? { ...data, id: r.id, offline_created_at: r.offline_created_at } : null;
+        }).filter((x: any) => x !== null);
+        resolve(decrypted);
+      };
       request.onerror = () => reject(request.error);
     } catch (err) {
       reject(err);
@@ -143,8 +182,9 @@ export const saveInvoiceClaimOffline = async (
     try {
       const tx = db.transaction("invoice_claims", "readwrite");
       const store = tx.objectStore("invoice_claims");
+      const encryptedPayload = encryptData(claim);
       const request = store.add({
-        ...claim,
+        payload: encryptedPayload,
         offline_created_at: new Date().toISOString(),
       });
 
@@ -175,7 +215,14 @@ export const getOfflineInvoiceClaims = async (): Promise<any[]> => {
       const store = tx.objectStore("invoice_claims");
       const request = store.getAll();
 
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        const results = request.result || [];
+        const decrypted = results.map((r: any) => {
+          const data = decryptData(r.payload);
+          return data ? { ...data, id: r.id, offline_created_at: r.offline_created_at } : null;
+        }).filter((x: any) => x !== null);
+        resolve(decrypted);
+      };
       request.onerror = () => reject(request.error);
     } catch (err) {
       reject(err);

@@ -337,9 +337,28 @@ export default function POSModule() {
     updateOfflineStatus();
     window.addEventListener("online", updateOfflineStatus);
     window.addEventListener("offline", updateOfflineStatus);
+
+    const handleSWMessage = async (event: MessageEvent) => {
+      if (event.data && event.data.type === "SYNC_SALES") {
+         console.log("Service Worker solicitó sincronización de ventas...");
+         const synced = await syncOfflineTransactions();
+         if (synced > 0) {
+            toast.success(`✅ ${synced} ventas offline sincronizadas con éxito.`);
+            updateOfflineStatus();
+         }
+      }
+    };
+
+    if ("serviceWorker" in navigator) {
+       navigator.serviceWorker.addEventListener("message", handleSWMessage);
+    }
+
     return () => {
       window.removeEventListener("online", updateOfflineStatus);
       window.removeEventListener("offline", updateOfflineStatus);
+      if ("serviceWorker" in navigator) {
+         navigator.serviceWorker.removeEventListener("message", handleSWMessage);
+      }
     };
   }, []);
 
@@ -576,6 +595,12 @@ export default function POSModule() {
     addedQty: number = 1,
     image_url: string = "",
   ) => {
+    // Check stock warning when adding product (Sugerencia 1)
+    const invItem = globalCatalog.find(i => i.name === productName);
+    if (invItem && addedQty > invItem.stock) {
+       toast.error(`⚠️ Existencias insuficientes para "${productName}". Se requerirá PIN de Administrador para cobrar.`);
+    }
+
     // Client price history logic
     if (selectedCustomerId) {
        const historyStr = localStorage.getItem(`ERIKA_CLIENT_HISTORY_${selectedCustomerId}`) || "{}";
@@ -618,6 +643,19 @@ export default function POSModule() {
 
   const updateItemQty = (itemId: string, newQty: number) => {
     if (newQty <= 0) return;
+
+    // Check if increasing qty exceeds stock to show toast warning (Sugerencia 1)
+    const currentTicket = tickets.find(t => t.id === activeTicketId);
+    if (currentTicket) {
+      const item = currentTicket.items.find(i => i.id === itemId);
+      if (item) {
+        const invItem = globalCatalog.find(i => i.name === item.name);
+        if (invItem && newQty > invItem.stock && newQty > item.qty) {
+           toast.error(`⚠️ Existencias insuficientes para "${item.name}". Se requerirá PIN de Administrador para cobrar.`);
+        }
+      }
+    }
+
     setTickets(
       tickets.map((t) => {
         if (t.id === activeTicketId)
