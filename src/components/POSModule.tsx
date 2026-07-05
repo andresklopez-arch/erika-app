@@ -2473,7 +2473,7 @@ export default function POSModule() {
             </label>
           </div>
 
-
+          <div>
             {selectedCustomerId && customers.find(c => c.id === selectedCustomerId)?.points > 0 && (
               <button 
                 onClick={async () => {
