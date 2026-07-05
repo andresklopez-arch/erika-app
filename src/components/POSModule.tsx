@@ -847,6 +847,37 @@ export default function POSModule() {
     const totalAmt = finalTotal;
     setIsProcessingPayment(true);
 
+    // 3. Validación de Stock Estricta
+    if (!isOffline) {
+      const itemsExceedingStock = activeTicket.items.filter(item => {
+         const invItem = globalCatalog.find(i => i.name === item.name);
+         return invItem && item.qty > invItem.stock;
+      });
+
+      if (itemsExceedingStock.length > 0) {
+         const itemNames = itemsExceedingStock.map(i => `• ${i.name} (Venta: ${i.qty}, Stock: ${globalCatalog.find(cat => cat.name === i.name)?.stock || 0})`).join("\n");
+         
+         const pin = window.prompt(`⚠️ STOCK INSUFICIENTE:\nLos siguientes artículos superan las existencias físicas en inventario:\n${itemNames}\n\nIngresa el PIN de Administrador para autorizar la venta en negativo:`);
+         if (!pin) {
+            setIsProcessingPayment(false);
+            return;
+         }
+         
+         const { data: admin, error: adminErr } = await supabase
+           .from("users")
+           .select("*")
+           .eq("pin", pin)
+           .eq("role", "admin")
+           .single();
+           
+         if (adminErr || !admin) {
+            alert("❌ PIN incorrecto o sin privilegios de administrador. Cobro cancelado.");
+            setIsProcessingPayment(false);
+            return;
+         }
+      }
+    }
+
     try {
       if (isOffline) {
         await saveTransactionOffline({
@@ -981,17 +1012,27 @@ export default function POSModule() {
            }
         }
 
-        // Reduce Inventory (Descontar existencias de Supabase)
+        // Reduce Inventory (Descontar existencias de Supabase mediante RPC o manual)
         try {
-          for (const item of activeTicket.items) {
-             const invItem = globalCatalog.find(i => i.name === item.name);
-             if (invItem) {
-                const { error: invErr } = await supabase
-                  .from("inventory")
-                  .update({ stock: invItem.stock - item.qty })
-                  .eq("id", invItem.id);
-                if (invErr) {
-                  console.error("Error al actualizar inventario para", item.name, ":", invErr);
+          const { error: rpcErr } = await supabase.rpc("reduce_inventory_stock", {
+             items: activeTicket.items.map(item => {
+                const invItem = globalCatalog.find(i => i.name === item.name);
+                return { id: invItem ? invItem.id : null, qty: item.qty };
+             }).filter(item => item.id !== null),
+             ref_id: realTicketId.toString(),
+             user_name: currentUser?.email || "Venta Mostrador",
+             move_type: "sale"
+          });
+
+          if (rpcErr) {
+             console.warn("Falla al llamar RPC reduce_inventory_stock, reintentando con fallback manual...", rpcErr);
+             for (const item of activeTicket.items) {
+                const invItem = globalCatalog.find(i => i.name === item.name);
+                if (invItem) {
+                   await supabase
+                     .from("inventory")
+                     .update({ stock: invItem.stock - item.qty })
+                     .eq("id", invItem.id);
                 }
              }
           }
@@ -2350,13 +2391,30 @@ export default function POSModule() {
                  });
                  if (error) return alert("Error al crear apartado: " + error.message);
 
-                 // Reduce Inventory
-                 for (const item of activeTicket.items) {
-                    const invItem = globalCatalog.find(i => i.name === item.name);
-                    if (invItem) {
-                       await supabase.from("inventory").update({ stock: invItem.stock - item.qty }).eq("id", invItem.id);
-                    }
-                 }
+                  // Reduce Inventory
+                  try {
+                     const { error: rpcErr } = await supabase.rpc("reduce_inventory_stock", {
+                        items: activeTicket.items.map(item => {
+                           const invItem = globalCatalog.find(i => i.name === item.name);
+                           return { id: invItem ? invItem.id : null, qty: item.qty };
+                        }).filter(item => item.id !== null),
+                        ref_id: `LAY-${Date.now()}`,
+                        user_name: currentUser?.email || "Venta Mostrador",
+                        move_type: "layaway"
+                     });
+
+                     if (rpcErr) {
+                        console.warn("Falla al llamar RPC reduce_inventory_stock en layaway, reintentando con fallback manual...", rpcErr);
+                        for (const item of activeTicket.items) {
+                           const invItem = globalCatalog.find(i => i.name === item.name);
+                           if (invItem) {
+                              await supabase.from("inventory").update({ stock: invItem.stock - item.qty }).eq("id", invItem.id);
+                           }
+                        }
+                     }
+                  } catch (invErr) {
+                     console.error("Error crítico al actualizar inventario en layaway:", invErr);
+                  }
 
                  // Update local state globalCatalog
                  setGlobalCatalog(prevCatalog =>
