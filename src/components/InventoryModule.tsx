@@ -632,6 +632,14 @@ export default function InventoryModule() {
         setEditingCell(null);
         return;
       }
+    } else if (field === "discount_pct") {
+      finalValue = parseInt(value);
+      if (isNaN(finalValue)) finalValue = 0;
+      if (finalValue < 0 || finalValue > 100) {
+        alert("⚠️ El descuento debe estar entre 0% y 100%.");
+        setEditingCell(null);
+        return;
+      }
     } else if (field === "name") {
       finalValue = String(value).trim();
       if (!finalValue) {
