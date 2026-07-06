@@ -462,6 +462,9 @@ export default function SettingsModule() {
     if (!checkAdmin()) return;
     const paddingNum = parseInt(printerPadding, 10);
     const validatedPadding = isNaN(paddingNum) ? "8" : String(Math.max(0, Math.min(50, paddingNum)));
+    const sanitizedFooterMsg = printerFooterMsg.trim().slice(0, 150);
+    setPrinterFooterMsg(sanitizedFooterMsg);
+    
     const success = await updateBusinessSettings({
       config: {
         printer_connected: isConnected,
@@ -471,7 +474,7 @@ export default function SettingsModule() {
         printer_font_size: printerFontSize,
         printer_font_family: printerFontFamily,
         printer_fields: printerFields,
-        printer_footer_msg: printerFooterMsg,
+        printer_footer_msg: sanitizedFooterMsg,
         printer_align: printerAlign,
         printer_padding: validatedPadding,
       }
