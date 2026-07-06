@@ -1747,6 +1747,17 @@ export default function InventoryModule() {
           >
             📥 Exportar
           </button>
+          <button
+            className="btn-primary"
+            onClick={() => setShowBulkPromoModal(true)}
+            style={{
+              background: "rgba(244, 63, 94, 0.15)",
+              border: "1px solid var(--color-primary)",
+              color: "var(--color-primary)",
+            }}
+          >
+            🏷️ Descuento Masivo
+          </button>
           {undoStack && undoStack.length > 0 && (
             <button
               className="btn-primary"
