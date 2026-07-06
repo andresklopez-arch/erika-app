@@ -22,6 +22,8 @@ export const BusinessConfigSchema = z.object({
   printer_font_family: z.string().default("monospace"),
   printer_fields: z.array(z.string()).default(["name", "rfc", "phone", "address", "logo", "footer"]),
   printer_footer_msg: z.string().default("¡Gracias por su compra!"),
+  printer_align: z.string().default("center"),
+  printer_padding: z.string().default("8"),
   low_stock_threshold: z.number().default(5),
   max_cajero_discount_pct: z.number().default(5),
 });
@@ -51,6 +53,8 @@ export const BusinessSettingsSchema = z.object({
     printer_font_family: "monospace",
     printer_fields: ["name", "rfc", "phone", "address", "logo", "footer"],
     printer_footer_msg: "¡Gracias por su compra!",
+    printer_align: "center",
+    printer_padding: "8",
     low_stock_threshold: 5,
     max_cajero_discount_pct: 5,
   }),
