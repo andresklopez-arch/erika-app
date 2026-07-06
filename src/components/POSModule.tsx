@@ -3068,6 +3068,7 @@ export default function POSModule() {
                   });
 
                  alert(`✅ Apartado creado con éxito. Enganche de $${downPayment.toFixed(2)} registrado.\nTiene 30 días para liquidar el saldo de $${(finalTotal - downPayment).toFixed(2)}.`);
+                 setSelectedCustomerId("");
                  setTickets(tickets.map(t => t.id === activeTicketId ? { ...t, items: [], discountPct: 0 } : t));
               };
               makeLayaway();
