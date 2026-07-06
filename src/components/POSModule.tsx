@@ -1338,19 +1338,23 @@ export default function POSModule() {
         
         // Registrar en quotes (completamente aislado)
         try {
-          const insertObj = {
+          const insertObj: any = {
              customer_name: selectedCustomerId ? (customers.find(c => c.id === selectedCustomerId)?.name || "Venta Registrada") : "Venta Mostrador",
              customer_id: selectedCustomerId || null,
              items: activeTicket.items,
              total: totalAmt,
              status: "ticket",
+             discount_pct: activeTicket.discountPct || 0,
+             apply_iva: applyIva,
              notes: `Pago: ${selectedMethod.toUpperCase()}${reference ? ` (Ref: ${reference})` : ""}`
           };
           const { data: quoteData, error: quoteErr } = await supabase.from("quotes").insert(insertObj).select("id").single();
 
           if (quoteErr) {
-             console.warn("Falla al insertar quotes con notes, reintentando con fallback...");
-             delete (insertObj as any).notes;
+             console.warn("Falla al insertar quotes con columnas de descuento, reintentando con fallback...");
+             delete insertObj.discount_pct;
+             delete insertObj.apply_iva;
+             delete insertObj.notes;
              const fallback = await supabase.from("quotes").insert(insertObj).select("id").single();
              if (fallback.data) {
                 realTicketId = fallback.data.id;
