@@ -1724,7 +1724,7 @@ export default function POSModule() {
       printWindow.document.close();
       setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
       } else if (job.type === "layaway") {
-      const { customer, items, finalTotal, downPayment } = job.data;
+      const { customer, items, finalTotal, downPayment, discountPct = 0, applyIva = false } = job.data;
       const itemsHtml = items.map((item: any) => {
         const p = getItemFinalPrice(item, wholesaleRules);
         return `
@@ -1733,6 +1733,14 @@ export default function POSModule() {
           <div style="flex: 1; text-align: right;">$${Math.round(p * item.qty)}</div>
         </div>`;
       }).join("");
+      
+      const subtotalVal = items.reduce((sum: number, item: any) => {
+         const p = getItemFinalPrice(item, wholesaleRules);
+         return sum + (p * item.qty);
+      }, 0);
+      const discountVal = subtotalVal * (discountPct / 100);
+      const subtotalNeto = subtotalVal - discountVal;
+      const iva = applyIva ? subtotalNeto * 0.16 : 0;
       
       const ticketHtml = `
         <html>
@@ -1773,8 +1781,25 @@ export default function POSModule() {
               ${itemsHtml}
               <div class="divider"></div>
               <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                <div>Total Mercancía:</div>
-                <div class="bold">$${Math.round(finalTotal)}</div>
+                <div>Subtotal:</div>
+                <div>$${Math.round(subtotalVal)}</div>
+              </div>
+              ${discountPct > 0 ? `
+              <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: red;">
+                <div>Desc. (${discountPct}%):</div>
+                <div>-$${Math.round(discountVal)}</div>
+              </div>
+              ` : ""}
+              ${applyIva ? `
+              <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                <div>IVA (16%):</div>
+                <div>$${Math.round(iva)}</div>
+              </div>
+              ` : ""}
+              <div class="divider"></div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 1.1em;">
+                <strong>TOTAL:</strong>
+                <strong class="bold">$${Math.round(finalTotal)}</strong>
               </div>
               <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                 <div>Enganche Dado:</div>
