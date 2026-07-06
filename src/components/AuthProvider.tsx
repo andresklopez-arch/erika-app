@@ -48,6 +48,8 @@ const AuthContext = createContext<AuthContextType>({
       printer_font_family: "monospace",
       printer_fields: ["name", "rfc", "phone", "address", "logo", "footer"],
       printer_footer_msg: "¡Gracias por su compra!",
+      printer_align: "center",
+      printer_padding: "8",
       low_stock_threshold: 5,
       max_cajero_discount_pct: 5,
     },
