@@ -1172,6 +1172,25 @@ export default function InventoryModule() {
   }, [showImporter, showDuplicates, showCritical]);
 
   useEffect(() => {
+    if (editingDiscountItem) {
+      setPromoDiscountPct(String(editingDiscountItem.discount_pct || ""));
+      const toDatetimeLocal = (isoStr: string | null | undefined) => {
+        if (!isoStr) return "";
+        try {
+          const date = new Date(isoStr);
+          const offset = date.getTimezoneOffset();
+          const localDate = new Date(date.getTime() - offset * 60 * 1000);
+          return localDate.toISOString().slice(0, 16);
+        } catch {
+          return "";
+        }
+      };
+      setPromoStartAt(toDatetimeLocal(editingDiscountItem.discount_start_at));
+      setPromoEndAt(toDatetimeLocal(editingDiscountItem.discount_end_at));
+    }
+  }, [editingDiscountItem]);
+
+  useEffect(() => {
     if (tab && tab !== "criticos") {
       document.body.style.overflow = "hidden";
     } else {
