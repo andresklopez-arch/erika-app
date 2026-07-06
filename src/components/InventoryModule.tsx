@@ -481,6 +481,77 @@ export default function InventoryModule() {
     }
   };
 
+  const handleApplyBulkPromo = async () => {
+    const pct = parseInt(bulkPromoPct, 10) || 0;
+    if (isNaN(pct) || pct < 0 || pct > 100) {
+      alert("⚠️ El descuento debe estar entre 0% y 100%.");
+      return;
+    }
+
+    const startVal = bulkPromoStartAt ? new Date(bulkPromoStartAt).toISOString() : null;
+    const endVal = bulkPromoEndAt ? new Date(bulkPromoEndAt).toISOString() : null;
+
+    if (startVal && endVal && new Date(startVal) > new Date(endVal)) {
+      alert("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.");
+      return;
+    }
+
+    let dbQuery = supabase.from("inventory").update({
+      discount_pct: pct,
+      discount_start_at: startVal,
+      discount_end_at: endVal,
+    });
+
+    let itemsToLog: InventoryItem[] = [];
+
+    if (bulkTargetMode === "supplier") {
+      if (!bulkSelectedSupplier) {
+        alert("⚠️ Por favor selecciona un proveedor.");
+        return;
+      }
+      dbQuery = dbQuery.eq("supplier", bulkSelectedSupplier);
+      itemsToLog = allItems.filter(i => i.supplier === bulkSelectedSupplier);
+    } else {
+      const ids = items.map(i => i.id);
+      if (ids.length === 0) {
+        alert("⚠️ No hay productos visibles para actualizar.");
+        return;
+      }
+      dbQuery = dbQuery.in("id", ids);
+      itemsToLog = [...items];
+    }
+
+    setIsReverting(true);
+    const { error } = await dbQuery;
+    setIsReverting(false);
+
+    if (error) {
+      alert("❌ Error al aplicar descuento masivo: " + error.message);
+    } else {
+      const auditRecords = itemsToLog.map(i => ({
+        inventory_id: i.id,
+        field: "discount_pct",
+        old_value: String(i.discount_pct || "0"),
+        new_value: String(pct),
+        changed_by: currentUser?.name || "Administrador"
+      }));
+
+      if (auditRecords.length > 0) {
+        supabase.from("inventory_audit_logs").insert(auditRecords).then(({ error: logErr }: any) => {
+          if (logErr) console.warn("Fallo al registrar bitácora masiva:", logErr);
+        });
+      }
+
+      alert(`✅ Descuento masivo del ${pct}% aplicado a ${itemsToLog.length} productos con éxito.`);
+      setShowBulkPromoModal(false);
+      setBulkPromoPct("");
+      setBulkPromoStartAt("");
+      setBulkPromoEndAt("");
+      fetchInventory(0, debouncedSearchQuery, true, true);
+      loadAllItems();
+    }
+  };
+
   const levenshteinDistance = (s1: string, s2: string): number => {
     const len1 = s1.length;
     const len2 = s2.length;
