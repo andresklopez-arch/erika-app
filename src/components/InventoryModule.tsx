@@ -1163,6 +1163,11 @@ export default function InventoryModule() {
                 return (
                   <span style={{ color: "var(--color-primary)", fontWeight: "bold" }} title="Descuento activo">
                     🏷️ {item.discount_pct}%
+                    {isExpiringSoon(item.discount_end_at) && (
+                      <span style={{ color: "#f59e0b", marginLeft: "6px", display: "inline-block", animation: "pulseWarning 1.5s infinite" }} title="¡Expira pronto! Menos de 24 horas restantes">
+                        ⚠️
+                      </span>
+                    )}
                   </span>
                 );
               } else {
@@ -2576,6 +2581,10 @@ export default function InventoryModule() {
             @keyframes bounceScroll {
               0%, 100% { transform: translateY(0); }
               50% { transform: translateY(-6px); }
+            }
+            @keyframes pulseWarning {
+              0%, 100% { opacity: 1; }
+              50% { opacity: 0.3; }
             }
           `}</style>
           <div 
