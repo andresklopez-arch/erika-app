@@ -405,6 +405,67 @@ export default function InventoryModule() {
     }
   };
 
+  const handleSavePromoDiscount = async () => {
+    if (!editingDiscountItem) return;
+    const pct = parseInt(promoDiscountPct, 10) || 0;
+    if (isNaN(pct) || pct < 0 || pct > 100) {
+      alert("⚠️ El descuento debe estar entre 0% y 100%.");
+      return;
+    }
+
+    const startVal = promoStartAt ? new Date(promoStartAt).toISOString() : null;
+    const endVal = promoEndAt ? new Date(promoEndAt).toISOString() : null;
+
+    if (startVal && endVal && new Date(startVal) > new Date(endVal)) {
+      alert("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("inventory")
+      .update({
+        discount_pct: pct,
+        discount_start_at: startVal,
+        discount_end_at: endVal,
+      })
+      .eq("id", editingDiscountItem.id);
+
+    if (error) {
+      alert("❌ Error al guardar descuento promocional: " + error.message);
+    } else {
+      supabase.from("inventory_audit_logs").insert([
+        {
+          inventory_id: editingDiscountItem.id,
+          field: "discount_pct",
+          old_value: String(editingDiscountItem.discount_pct || "0"),
+          new_value: String(pct),
+          changed_by: currentUser?.name || "Administrador",
+        },
+        {
+          inventory_id: editingDiscountItem.id,
+          field: "discount_start_at",
+          old_value: String(editingDiscountItem.discount_start_at || ""),
+          new_value: String(startVal || ""),
+          changed_by: currentUser?.name || "Administrador",
+        },
+        {
+          inventory_id: editingDiscountItem.id,
+          field: "discount_end_at",
+          old_value: String(editingDiscountItem.discount_end_at || ""),
+          new_value: String(endVal || ""),
+          changed_by: currentUser?.name || "Administrador",
+        }
+      ]).then(({ error: logErr }) => {
+        if (logErr) console.warn("Fallo al registrar bitácora de auditoría:", logErr);
+      });
+
+      alert("✅ Descuento promocional configurado con éxito.");
+      setEditingDiscountItem(null);
+      fetchInventory(0, debouncedSearchQuery, true, true);
+      loadAllItems();
+    }
+  };
+
   const levenshteinDistance = (s1: string, s2: string): number => {
     const len1 = s1.length;
     const len2 = s2.length;
