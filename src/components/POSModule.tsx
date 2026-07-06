@@ -808,6 +808,8 @@ export default function POSModule() {
        }
     }
 
+    const itemDiscountPct = invItem ? (invItem.discount_pct || 0) : 0;
+
     // Client price history logic
     if (selectedCustomerId) {
        const historyStr = localStorage.getItem(`ERIKA_CLIENT_HISTORY_${selectedCustomerId}`) || "{}";
@@ -839,6 +841,7 @@ export default function POSModule() {
                 qty: addedQty,
                 unit,
                 image_url,
+                discountPct: itemDiscountPct,
               },
             ],
           };
