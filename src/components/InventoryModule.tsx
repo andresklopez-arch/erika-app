@@ -2837,6 +2837,191 @@ export default function InventoryModule() {
         </div>
       )}
 
+      {showBulkPromoModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(6px)",
+            zIndex: 99999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px"
+          }}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              width: "480px",
+              padding: "30px",
+              position: "relative",
+              border: "1px solid var(--glass-border)",
+              boxShadow: "0 8px 32px rgba(244, 63, 94, 0.15)",
+              color: "white"
+            }}
+          >
+            <h2 style={{ color: "var(--color-primary)", marginBottom: "5px", fontSize: "1.4rem" }}>
+              🏷️ Configurar Descuento Masivo
+            </h2>
+            <p style={{ fontSize: "0.85rem", opacity: 0.7, marginBottom: "20px" }}>
+              Aplica un porcentaje de descuento a múltiples productos a la vez.
+            </p>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
+                Aplicar a:
+              </label>
+              <select
+                value={bulkTargetMode}
+                onChange={(e: any) => setBulkTargetMode(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--glass-border)",
+                  background: "rgba(0,0,0,0.5)",
+                  color: "white",
+                  outline: "none",
+                  fontSize: "1rem"
+                }}
+              >
+                <option value="visible" style={{ background: "#1f2937", color: "white" }}>
+                  Productos visibles actualmente en la lista ({items.length})
+                </option>
+                <option value="supplier" style={{ background: "#1f2937", color: "white" }}>
+                  Todos los productos de un Proveedor
+                </option>
+              </select>
+            </div>
+
+            {bulkTargetMode === "supplier" && (
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
+                  Seleccionar Proveedor
+                </label>
+                <select
+                  value={bulkSelectedSupplier}
+                  onChange={(e) => setBulkSelectedSupplier(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--glass-border)",
+                    background: "rgba(0,0,0,0.5)",
+                    color: "white",
+                    outline: "none",
+                    fontSize: "1rem"
+                  }}
+                >
+                  <option value="" style={{ background: "#1f2937", color: "white" }}>-- Selecciona un proveedor --</option>
+                  {Array.from(new Set(allItems.map(i => i.supplier).filter(Boolean))).map(sup => (
+                    <option key={sup} value={sup!} style={{ background: "#1f2937", color: "white" }}>
+                      {sup}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
+                Porcentaje de Descuento (%)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={bulkPromoPct}
+                placeholder="Ej. 10"
+                onChange={(e) => setBulkPromoPct(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--glass-border)",
+                  background: "rgba(0,0,0,0.5)",
+                  color: "white",
+                  outline: "none",
+                  fontSize: "1rem"
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
+                Fecha y Hora de Inicio (Opcional)
+              </label>
+              <input
+                type="datetime-local"
+                value={bulkPromoStartAt}
+                onChange={(e) => setBulkPromoStartAt(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--glass-border)",
+                  background: "rgba(0,0,0,0.5)",
+                  color: "white",
+                  outline: "none",
+                  fontSize: "1rem"
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "25px" }}>
+              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
+                Fecha y Hora de Fin (Opcional)
+              </label>
+              <input
+                type="datetime-local"
+                value={bulkPromoEndAt}
+                onChange={(e) => setBulkPromoEndAt(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--glass-border)",
+                  background: "rgba(0,0,0,0.5)",
+                  color: "white",
+                  outline: "none",
+                  fontSize: "1rem"
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                className="btn-primary"
+                onClick={handleApplyBulkPromo}
+                style={{ flex: 1, padding: "12px", background: "var(--color-primary)", border: "none", color: "black", fontWeight: "bold" }}
+              >
+                ⚡ Aplicar Descuento Masivo
+              </button>
+              <button
+                onClick={() => setShowBulkPromoModal(false)}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  background: "transparent",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  color: "white",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontWeight: "bold"
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {lastManualChange && (
         <div
           style={{
