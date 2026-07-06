@@ -948,12 +948,7 @@ export default function POSModule() {
      
      const maxCajeroDiscount = businessSettings?.config?.max_cajero_discount_pct ?? 5;
      
-     // Calcular precio propuesto y margen de costo + 3% (Sugerencia 3)
-     let basePrice = item.price;
-     if (item.qty >= wholesaleRules.minQty) {
-        basePrice = item.price * (1 - wholesaleRules.discountPct / 100);
-     }
-     const proposedPrice = basePrice * (1 - pct / 100);
+     const proposedPrice = getItemFinalPrice({ ...item, discountPct: pct }, wholesaleRules);
      const minSafePrice = item.cost * 1.03; // Costo + 3% de margen mínimo
      
      const requiresPin = pct > maxCajeroDiscount || proposedPrice < minSafePrice;
