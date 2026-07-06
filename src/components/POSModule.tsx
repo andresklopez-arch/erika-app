@@ -1444,6 +1444,7 @@ export default function POSModule() {
             : t
         )
       );
+      setSelectedCustomerId("");
       setShowCheckoutModal(false);
     } catch (criticalErr: any) {
       console.error("Error crítico inesperado en handleCheckoutSubmit:", criticalErr);
