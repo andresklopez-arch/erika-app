@@ -2914,6 +2914,16 @@ export default function POSModule() {
               }}
               onClick={() => {
                 if (activeTicket.items.length === 0) return alert("El ticket está vacío.");
+                if (!selectedCustomerId && finalTotal >= 1000) {
+                  const confirmNoCust = window.confirm(
+                    `⚠️ VENTA IMPORTANTE DETECTADA: El total es de $${finalTotal.toFixed(2)}.\n¿Deseas registrar o seleccionar un cliente para registrarle puntos antes de proceder?`
+                  );
+                  if (confirmNoCust) {
+                    const inputEl = document.querySelector('input[placeholder*="Buscar cliente"]') as HTMLInputElement;
+                    if (inputEl) inputEl.focus();
+                    return;
+                  }
+                }
                 setPaymentMethod("efectivo");
                 setCashPayAmount(finalTotal.toFixed(2));
                 setCardPayAmount("");
