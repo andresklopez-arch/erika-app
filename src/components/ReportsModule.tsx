@@ -24,7 +24,7 @@ const roundTo50 = (value: number): number => Math.round(value * 2) / 2;
 const formatPrice = (value: number): string => roundTo50(value).toFixed(2);
 
 export default function ReportsModule() {
-  const { businessSettings } = useAuth();
+  const { businessSettings, currentUser } = useAuth();
   const businessProfile = useBusinessProfile();
   const monthlyGoal = businessSettings.monthly_goals;
 
@@ -185,6 +185,58 @@ export default function ReportsModule() {
            setAuditLogs(logs as any[]);
          }
       };
+
+  const handleRevertAuditLog = async (log: AuditLog) => {
+    if (!log.inventory_id || !log.field) return;
+
+    const confirmRevert = window.confirm(
+      `¿Estás seguro de que deseas revertir el campo "${log.field}" al valor anterior "${log.old_value || ''}"?`
+    );
+    if (!confirmRevert) return;
+
+    const { data: item, error: fetchErr } = await supabase
+      .from("inventory")
+      .select("*")
+      .eq("id", log.inventory_id)
+      .single();
+
+    if (fetchErr || !item) {
+      alert("❌ No se pudo encontrar el producto en el inventario. Es posible que haya sido eliminado.");
+      return;
+    }
+
+    const currentValue = item[log.field];
+
+    let parsedValue: any = log.old_value;
+    if (log.field === "discount_pct" || log.field === "stock") {
+      parsedValue = log.old_value ? parseInt(log.old_value, 10) : 0;
+      if (isNaN(parsedValue)) parsedValue = 0;
+    } else if (log.field === "price" || log.field === "cost") {
+      parsedValue = log.old_value ? parseFloat(log.old_value) : 0.0;
+      if (isNaN(parsedValue)) parsedValue = 0.0;
+    }
+
+    const { error: updateErr } = await supabase
+      .from("inventory")
+      .update({ [log.field]: parsedValue })
+      .eq("id", log.inventory_id);
+
+    if (updateErr) {
+      alert("❌ Error al revertir el valor: " + updateErr.message);
+      return;
+    }
+
+    await supabase.from("inventory_audit_logs").insert({
+      inventory_id: log.inventory_id,
+      field: log.field,
+      old_value: String(currentValue ?? ""),
+      new_value: String(log.old_value ?? ""),
+      changed_by: `Reversión por ${currentUser?.name || "Administrador"}`
+    });
+
+    alert("✅ El cambio ha sido revertido exitosamente.");
+    fetchData();
+  };
 
   useEffect(() => {
     fetchData();
