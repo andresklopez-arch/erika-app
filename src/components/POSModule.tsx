@@ -431,7 +431,10 @@ export default function POSModule() {
         data: {
            realTicketId: ticket.id,
            items: ticketItems,
-           finalTotal: ticket.total
+           finalTotal: ticket.total,
+           discountPct: ticket.discount_pct || 0,
+           applyIva: ticket.apply_iva || false,
+           paymentMethod: ticket.notes ? (ticket.notes.toLowerCase().includes("efectivo") ? "efectivo" : ticket.notes.toLowerCase().includes("tarjeta") ? "tarjeta" : ticket.notes.toLowerCase().includes("transferencia") ? "transferencia" : "mixto") : "efectivo"
         }
      });
      toast.success(`🖨️ Reenviando Ticket #${ticket.id} a la cola de impresión.`);
