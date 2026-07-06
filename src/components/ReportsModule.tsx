@@ -687,6 +687,103 @@ export default function ReportsModule() {
           </div>
       </div>
 
+      <div className="glass-panel" style={{ marginTop: "20px" }}>
+        <h2 style={{ color: "var(--color-primary)", marginBottom: "15px" }}>🔍 Bitácora de Auditoría del Inventario</h2>
+        
+        {/* Filtros */}
+        <div style={{ display: "flex", gap: "15px", marginBottom: "20px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "5px", flex: 1, minWidth: "200px" }}>
+            <label style={{ fontSize: "0.85rem", color: "var(--color-secondary)" }}>📦 Buscar por Producto</label>
+            <input
+              type="text"
+              placeholder="Nombre o código del producto..."
+              value={searchAuditProduct}
+              onChange={(e) => setSearchAuditProduct(e.target.value)}
+              style={{
+                padding: "10px",
+                borderRadius: "8px",
+                background: "rgba(0,0,0,0.3)",
+                color: "white",
+                border: "1px solid var(--glass-border)",
+                outline: "none"
+              }}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "5px", width: "200px" }}>
+            <label style={{ fontSize: "0.85rem", color: "var(--color-secondary)" }}>👤 Modificado por</label>
+            <input
+              type="text"
+              placeholder="Nombre del usuario..."
+              value={searchAuditUser}
+              onChange={(e) => setSearchAuditUser(e.target.value)}
+              style={{
+                padding: "10px",
+                borderRadius: "8px",
+                background: "rgba(0,0,0,0.3)",
+                color: "white",
+                border: "1px solid var(--glass-border)",
+                outline: "none"
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--glass-border)" }}>
+                <th style={{ padding: "10px" }}>Fecha/Hora</th>
+                <th style={{ padding: "10px" }}>Producto</th>
+                <th style={{ padding: "10px" }}>Campo</th>
+                <th style={{ padding: "10px" }}>Valor Anterior</th>
+                <th style={{ padding: "10px" }}>Valor Nuevo</th>
+                <th style={{ padding: "10px" }}>Usuario</th>
+              </tr>
+            </thead>
+            <tbody>
+              {auditLogs
+                .filter(log => {
+                  const prodName = log.inventory?.name || "";
+                  const prodCode = log.inventory?.code || "";
+                  const user = log.changed_by || "";
+                  const productMatch = prodName.toLowerCase().includes(searchAuditProduct.toLowerCase()) || 
+                                       prodCode.toLowerCase().includes(searchAuditProduct.toLowerCase());
+                  const userMatch = user.toLowerCase().includes(searchAuditUser.toLowerCase());
+                  return productMatch && userMatch;
+                })
+                .map(log => (
+                  <tr key={log.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", fontSize: "0.9rem" }}>
+                    <td style={{ padding: "10px" }}>{new Date(log.created_at).toLocaleString()}</td>
+                    <td style={{ padding: "10px", fontWeight: "bold" }}>
+                      {log.inventory ? `${log.inventory.name} ${log.inventory.code ? `[${log.inventory.code}]` : ''}` : "Producto Eliminado"}
+                    </td>
+                    <td style={{ padding: "10px", color: "var(--color-primary)", fontWeight: "500" }}>
+                      {log.field === "discount_pct" ? "Porcentaje Descuento" : 
+                       log.field === "discount_start_at" ? "Fecha Inicio Promo" : 
+                       log.field === "discount_end_at" ? "Fecha Fin Promo" : 
+                       log.field}
+                    </td>
+                    <td style={{ padding: "10px", textDecoration: "line-through", opacity: 0.6 }}>
+                      {log.old_value || "-"}
+                    </td>
+                    <td style={{ padding: "10px", color: "#10b981", fontWeight: "500" }}>
+                      {log.new_value || "-"}
+                    </td>
+                    <td style={{ padding: "10px" }}>{log.changed_by || "Sistema"}</td>
+                  </tr>
+                ))}
+              {auditLogs.length === 0 && (
+                <tr>
+                  <td colSpan={6} style={{ padding: "20px", textAlign: "center", color: "rgba(255,255,255,0.4)" }}>
+                    No hay registros de auditoría de inventario.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <div className="glass-panel">
         <h3 style={{ marginBottom: "15px" }}>
           🎟️ Emisión de Cupones y Promociones (Fidelización)
