@@ -1065,13 +1065,25 @@ export default function InventoryModule() {
             </button>
           </div>
         ) : field === "discount_pct" ? (
-          (item.discount_pct || 0) > 0 ? (
-            <span style={{ color: "var(--color-primary)", fontWeight: "bold" }}>
-              🏷️ {item.discount_pct}%
-            </span>
-          ) : (
-            <span style={{ opacity: 0.3 }}>0%</span>
-          )
+          (() => {
+            const activeDisc = getActiveDiscount(item);
+            if ((item.discount_pct || 0) > 0) {
+              if (activeDisc > 0) {
+                return (
+                  <span style={{ color: "var(--color-primary)", fontWeight: "bold" }} title="Descuento activo">
+                    🏷️ {item.discount_pct}%
+                  </span>
+                );
+              } else {
+                return (
+                  <span style={{ color: "rgba(255,255,255,0.4)", textDecoration: "line-through" }} title="Descuento programado o expirado">
+                    ⏳ {item.discount_pct}%
+                  </span>
+                );
+              }
+            }
+            return <span style={{ opacity: 0.3 }}>0%</span>;
+          })()
         ) : field === "cost" ? (
           `$${Number(item.cost).toFixed(2)}`
         ) : field === "price" ? (
