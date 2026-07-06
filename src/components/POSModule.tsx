@@ -1471,13 +1471,7 @@ export default function POSModule() {
   };
 
   const rawTotal = activeTicket.items.reduce((sum, item) => {
-    let p = item.price;
-    if (item.qty >= wholesaleRules.minQty) {
-      p = item.price * (1 - wholesaleRules.discountPct / 100);
-    }
-    if (item.discountPct) {
-      p = p * (1 - item.discountPct / 100);
-    }
+    const p = getItemFinalPrice(item, wholesaleRules);
     return sum + p * item.qty;
   }, 0);
   
@@ -1485,14 +1479,8 @@ export default function POSModule() {
   
   // Ahorro por productos individual con descuento (Sugerencia 2)
   const itemDiscountsSavings = activeTicket.items.reduce((sum, item) => {
-    let pNormal = item.price;
-    if (item.qty >= wholesaleRules.minQty) {
-      pNormal = item.price * (1 - wholesaleRules.discountPct / 100);
-    }
-    let pDiscounted = pNormal;
-    if (item.discountPct) {
-      pDiscounted = pNormal * (1 - item.discountPct / 100);
-    }
+    const pNormal = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct / 100) : item.price;
+    const pDiscounted = getItemFinalPrice(item, wholesaleRules);
     return sum + (pNormal - pDiscounted) * item.qty;
   }, 0);
   
