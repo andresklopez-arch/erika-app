@@ -215,6 +215,7 @@ export default function POSModule() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [showCreditModal, setShowCreditModal] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [customerActiveStats, setCustomerActiveStats] = useState<{ layawaysCount: number; quotesCount: number } | null>(null);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"efectivo" | "tarjeta" | "transferencia" | "mixto" | "credito">("efectivo");
   const [cashPayAmount, setCashPayAmount] = useState("");
