@@ -10,6 +10,16 @@ const UserInputSchema = z.object({
   permissions: z.record(z.string(), z.boolean()).default({}),
 });
 
+function getHelpfulErrorMessage(dbError: any, action: "crear" | "actualizar"): string {
+  if (dbError.code === "23505") {
+    return `El PIN ya está asignado a otro usuario. Por seguridad, cada usuario debe tener un PIN único.`;
+  }
+  if (dbError.code === "23514" && dbError.message?.includes("users_role_check")) {
+    return `El rol seleccionado no está permitido por la base de datos. Debes ejecutar el script SQL en Supabase para permitir roles personalizados.`;
+  }
+  return `Error de base de datos: ${dbError.message}`;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -51,7 +61,7 @@ export async function POST(request: Request) {
       .single();
 
     if (dbError) {
-      return NextResponse.json({ error: "Error al crear usuario. El PIN podría estar duplicado.", details: dbError.message }, { status: 400 });
+      return NextResponse.json({ error: getHelpfulErrorMessage(dbError, "crear"), details: dbError.message }, { status: 400 });
     }
 
     return NextResponse.json({ success: true, user: newUser });
@@ -103,7 +113,7 @@ export async function PUT(request: Request) {
       .single();
 
     if (dbError) {
-      return NextResponse.json({ error: "Error al actualizar usuario. El PIN podría estar duplicado.", details: dbError.message }, { status: 400 });
+      return NextResponse.json({ error: getHelpfulErrorMessage(dbError, "actualizar"), details: dbError.message }, { status: 400 });
     }
 
     return NextResponse.json({ success: true, user: updatedUser });
