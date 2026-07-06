@@ -1496,10 +1496,7 @@ export default function POSModule() {
       if (job.type === "ticket") {
         const { realTicketId, items, finalTotal, paymentMethod } = job.data;
         const subtotalVal = items.reduce((sum: number, item: any) => {
-           let p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
-           if (item.discountPct) {
-              p = p * (1 - item.discountPct / 100);
-           }
+           const p = getItemFinalPrice(item, wholesaleRules);
            return sum + (p * item.qty);
         }, 0);
         const discountPct = activeTicket.discountPct || 0;
@@ -1523,10 +1520,7 @@ export default function POSModule() {
       } else if (job.type === "layaway") {
         const { customer, items, finalTotal, downPayment } = job.data;
         const subtotalVal = items.reduce((sum: number, item: any) => {
-           let p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
-           if (item.discountPct) {
-              p = p * (1 - item.discountPct / 100);
-           }
+           const p = getItemFinalPrice(item, wholesaleRules);
            return sum + (p * item.qty);
         }, 0);
         const discountPct = activeTicket.discountPct || 0;
