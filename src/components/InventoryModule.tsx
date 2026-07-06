@@ -139,6 +139,12 @@ export default function InventoryModule() {
   const [promoDiscountPct, setPromoDiscountPct] = useState<string>("");
   const [promoStartAt, setPromoStartAt] = useState<string>("");
   const [promoEndAt, setPromoEndAt] = useState<string>("");
+  const [showBulkPromoModal, setShowBulkPromoModal] = useState<boolean>(false);
+  const [bulkPromoPct, setBulkPromoPct] = useState<string>("");
+  const [bulkPromoStartAt, setBulkPromoStartAt] = useState<string>("");
+  const [bulkPromoEndAt, setBulkPromoEndAt] = useState<string>("");
+  const [bulkTargetMode, setBulkTargetMode] = useState<"visible" | "supplier">("visible");
+  const [bulkSelectedSupplier, setBulkSelectedSupplier] = useState<string>("");
   const [editValue, setEditValue] = useState<string>("");
   const [hoveredCell, setHoveredCell] = useState<{ itemId: string; field: string } | null>(null);
   const [hoveredHeader, setHoveredHeader] = useState<string | null>(null);
