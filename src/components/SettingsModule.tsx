@@ -535,9 +535,35 @@ export default function SettingsModule() {
     }
   };
 
+  const handleGenerateRandomPin = () => {
+     let randomPin = "";
+     let attempts = 0;
+     do {
+        randomPin = Math.floor(1000 + Math.random() * 9000).toString();
+        attempts++;
+     } while (systemUsers.some(u => u.pin === randomPin) && attempts < 100);
+     setNewUserPin(randomPin);
+  };
+
+  const handleGenerateEditRandomPin = () => {
+     let randomPin = "";
+     let attempts = 0;
+     do {
+        randomPin = Math.floor(1000 + Math.random() * 9000).toString();
+        attempts++;
+     } while (systemUsers.some(u => u.pin === randomPin) && attempts < 100);
+     setEditPin(randomPin);
+  };
+
   const handleCreateUser = async () => {
      if (!checkAdmin()) return;
      if (!newUserName || !newUserPin || newUserPin.length < 4) return alert("Ingresa un nombre y un PIN de 4 dígitos o más.");
+     
+     // Validación de PIN duplicado (Sugerencia 2)
+     if (systemUsers.some(u => u.pin === newUserPin)) {
+        return alert("❌ El PIN ingresado ya pertenece a otro usuario. Por seguridad, cada usuario debe tener un PIN único.");
+     }
+
      const roleToSave = roleType === "custom" ? customRoleName.trim() : roleType;
      if (!roleToSave) return alert("Ingresa o selecciona un rol válido.");
 
@@ -601,9 +627,15 @@ export default function SettingsModule() {
   };
 
   const handleSaveEditUser = async () => {
-    if (!checkAdmin()) return;
-    if (!editName || !editPin || editPin.length < 4) return alert("Ingresa un nombre y un PIN de 4 dígitos o más.");
-    if (!editRole) return alert("El rol no puede estar vacío.");
+     if (!checkAdmin()) return;
+     if (!editName || !editPin || editPin.length < 4) return alert("Ingresa un nombre y un PIN de 4 dígitos o más.");
+     
+     // Validación de PIN duplicado en edición (Sugerencia 2)
+     if (systemUsers.some(u => u.pin === editPin && u.id !== editingUser?.id)) {
+        return alert("❌ El PIN ingresado ya pertenece a otro usuario. Por seguridad, cada usuario debe tener un PIN único.");
+     }
+
+     if (!editRole) return alert("El rol no puede estar vacío.");
 
     try {
       const response = await fetch("/api/admin/users", {
@@ -1495,12 +1527,27 @@ export default function SettingsModule() {
 
             <div>
               <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>PIN (Visible):</label>
-              <input
-                type="text"
-                value={editPin}
-                onChange={(e) => setEditPin(e.target.value)}
-                style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }}
-              />
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input
+                  type="text"
+                  value={editPin}
+                  onChange={(e) => setEditPin(e.target.value)}
+                  style={{ flex: 1, padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: editPin.length >= 4 && systemUsers.some(u => u.pin === editPin && u.id !== editingUser?.id) ? "1px solid #ef4444" : "1px solid var(--glass-border)" }}
+                />
+                <button
+                  type="button"
+                  onClick={handleGenerateEditRandomPin}
+                  className="btn-primary"
+                  style={{ background: "rgba(59, 130, 246, 0.1)", border: "1px solid #3b82f6", color: "#3b82f6", padding: "10px", fontSize: "0.85rem" }}
+                >
+                  🔑 Generar
+                </button>
+              </div>
+              {editPin.length >= 4 && systemUsers.some(u => u.pin === editPin && u.id !== editingUser?.id) && (
+                <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "4px", display: "block" }}>
+                  ⚠️ Este PIN ya está asignado a otro usuario. Elige otro.
+                </span>
+              )}
             </div>
 
             <div>
@@ -1515,6 +1562,33 @@ export default function SettingsModule() {
               <span style={{ fontSize: "0.75rem", opacity: 0.6, marginTop: "4px", display: "block" }}>
                 Ingresa roles predefinidos (&apos;admin&apos;, &apos;cajero&apos;) o cualquier rol personalizado que desees asignarle.
               </span>
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--color-secondary)" }}>Permisos Rápidos (Plantillas):</label>
+              <div style={{ display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => setEditPermissions({ pos: true, dashboard: false, caja: true, servicios: false, inventario: false, reportes: false, configuracion: false })}
+                  style={{ padding: "6px 12px", fontSize: "0.75rem", background: "rgba(59,130,246,0.15)", border: "1px solid #3b82f6", color: "#3b82f6", borderRadius: "4px", cursor: "pointer" }}
+                >
+                  💵 Cajero
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditPermissions({ pos: false, dashboard: false, caja: false, servicios: false, inventario: true, reportes: false, configuracion: false })}
+                  style={{ padding: "6px 12px", fontSize: "0.75rem", background: "rgba(245,158,11,0.15)", border: "1px solid #f59e0b", color: "#f59e0b", borderRadius: "4px", cursor: "pointer" }}
+                >
+                  📦 Almacenista
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditPermissions({ pos: true, dashboard: true, caja: true, servicios: true, inventario: true, reportes: true, configuracion: true })}
+                  style={{ padding: "6px 12px", fontSize: "0.75rem", background: "rgba(16,185,129,0.15)", border: "1px solid #10b981", color: "#10b981", borderRadius: "4px", cursor: "pointer" }}
+                >
+                  👑 Admin
+                </button>
+              </div>
             </div>
 
             <div>
@@ -1601,13 +1675,28 @@ export default function SettingsModule() {
 
             <div>
               <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>PIN (Visible):</label>
-              <input
-                type="text"
-                placeholder="PIN (ej. 4321)"
-                value={newUserPin}
-                onChange={(e) => setNewUserPin(e.target.value)}
-                style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }}
-              />
+              <div style={{ display: "flex", gap: "8px" }}>
+                <input
+                  type="text"
+                  placeholder="PIN (ej. 4321)"
+                  value={newUserPin}
+                  onChange={(e) => setNewUserPin(e.target.value)}
+                  style={{ flex: 1, padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: newUserPin.length >= 4 && systemUsers.some(u => u.pin === newUserPin) ? "1px solid #ef4444" : "1px solid var(--glass-border)" }}
+                />
+                <button
+                  type="button"
+                  onClick={handleGenerateRandomPin}
+                  className="btn-primary"
+                  style={{ background: "rgba(59, 130, 246, 0.1)", border: "1px solid #3b82f6", color: "#3b82f6", padding: "10px", fontSize: "0.85rem" }}
+                >
+                  🔑 Generar
+                </button>
+              </div>
+              {newUserPin.length >= 4 && systemUsers.some(u => u.pin === newUserPin) && (
+                <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "4px", display: "block" }}>
+                  ⚠️ Este PIN ya está asignado a otro usuario. Elige otro.
+                </span>
+              )}
             </div>
 
             <div>
@@ -1630,6 +1719,33 @@ export default function SettingsModule() {
                   style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--color-primary)" }} 
                 />
               )}
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--color-secondary)" }}>Permisos Rápidos (Plantillas):</label>
+              <div style={{ display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => setNewPermissions({ pos: true, dashboard: false, caja: true, servicios: false, inventario: false, reportes: false, configuracion: false })}
+                  style={{ padding: "6px 12px", fontSize: "0.75rem", background: "rgba(59,130,246,0.15)", border: "1px solid #3b82f6", color: "#3b82f6", borderRadius: "4px", cursor: "pointer" }}
+                >
+                  💵 Cajero
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewPermissions({ pos: false, dashboard: false, caja: false, servicios: false, inventario: true, reportes: false, configuracion: false })}
+                  style={{ padding: "6px 12px", fontSize: "0.75rem", background: "rgba(245,158,11,0.15)", border: "1px solid #f59e0b", color: "#f59e0b", borderRadius: "4px", cursor: "pointer" }}
+                >
+                  📦 Almacenista
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewPermissions({ pos: true, dashboard: true, caja: true, servicios: true, inventario: true, reportes: true, configuracion: true })}
+                  style={{ padding: "6px 12px", fontSize: "0.75rem", background: "rgba(16,185,129,0.15)", border: "1px solid #10b981", color: "#10b981", borderRadius: "4px", cursor: "pointer" }}
+                >
+                  👑 Admin
+                </button>
+              </div>
             </div>
 
             <div>
