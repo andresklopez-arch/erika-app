@@ -1997,6 +1997,7 @@ export default function InventoryModule() {
                 {renderHeader("Stock", "stock")}
                 {renderHeader("Costo Prov.", "cost")}
                 {renderHeader("Precio Venta", "price")}
+                {renderHeader("Descuento (%)", "discount_pct")}
                 {renderHeader("Margen (%)", "margin")}
                 <th style={{ padding: "15px", textAlign: "center" }}>Acción</th>
               </tr>
