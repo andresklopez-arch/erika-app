@@ -61,9 +61,8 @@ export default function ReportsModule() {
   const [searchAuditProduct, setSearchAuditProduct] = useState("");
   const [searchAuditUser, setSearchAuditUser] = useState("");
 
-  useEffect(() => {
-     const fetchData = async () => {
-        const today = new Date();
+  const fetchData = async () => {
+    const today = new Date();
         const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
 
         // Ventas brutas y Costos (calculados del historial)
@@ -186,7 +185,9 @@ export default function ReportsModule() {
            setAuditLogs(logs as any[]);
          }
       };
-      fetchData();
+
+  useEffect(() => {
+    fetchData();
   }, []);
 
   useEffect(() => {
