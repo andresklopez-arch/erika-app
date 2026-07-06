@@ -555,6 +555,24 @@ export default function InventoryModule() {
     }
   };
 
+  const loadProductAuditHistory = async (item: InventoryItem) => {
+    setAuditHistoryItem(item);
+    setLoadingHistory(true);
+    const { data, error } = await supabase
+      .from("inventory_audit_logs")
+      .select("*")
+      .eq("inventory_id", item.id)
+      .order("created_at", { ascending: false });
+
+    setLoadingHistory(false);
+    if (!error && data) {
+      setAuditHistoryLogs(data);
+    } else {
+      setAuditHistoryLogs([]);
+      if (error) console.error("Error al cargar historial de auditoría del producto:", error);
+    }
+  };
+
   const levenshteinDistance = (s1: string, s2: string): number => {
     const len1 = s1.length;
     const len2 = s2.length;
