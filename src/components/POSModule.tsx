@@ -1614,7 +1614,7 @@ export default function POSModule() {
     if (!printWindow) return;
 
     if (job.type === "ticket") {
-      const { realTicketId, items, finalTotal, paymentMethod } = job.data;
+      const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = job.data;
       const itemsHtml = items.map((i: any) => {
         const p = getItemFinalPrice(i, wholesaleRules);
         return `
@@ -1628,7 +1628,7 @@ export default function POSModule() {
          const p = getItemFinalPrice(i, wholesaleRules);
          return sum + (p * i.qty);
       }, 0);
-      const discountVal = subtotalVal * (activeTicket.discountPct / 100);
+      const discountVal = subtotalVal * (discountPct / 100);
       const subtotalNeto = subtotalVal - discountVal;
       const iva = applyIva ? subtotalNeto * 0.16 : 0;
 
@@ -1691,10 +1691,14 @@ export default function POSModule() {
               <div class="divider"></div>
               ${itemsHtml}
               <div class="divider"></div>
+              <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span>$${Math.round(subtotalVal)}</span></div>
+              ${discountPct > 0 ? `
+              <div style="display:flex; justify-content:space-between; color: red;"><span>Desc. (${discountPct}%):</span><span>-$${Math.round(discountVal)}</span></div>
+              ` : ""}
               ${applyIva ? `
-              <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span>$${Math.round(subtotalNeto)}</span></div>
               <div style="display:flex; justify-content:space-between;"><span>IVA (16%):</span><span>$${Math.round(iva)}</span></div>
-              <div class="divider"></div>` : ''}
+              ` : ""}
+              <div class="divider"></div>
               <div style="display:flex; justify-content:space-between; font-size: 1.1em;"><strong>TOTAL:</strong><strong>$${Math.round(finalTotal)}</strong></div>
               
               ${showWarranty ? `
