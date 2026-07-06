@@ -1,2 +1,19 @@
--- Ejecuta este script en el SQL Editor de Supabase para habilitar la columna de descuentos en el inventario.
+-- 1. AGREGAR COLUMNAS DE DESCUENTOS Y VIGENCIAS EN LA TABLA INVENTARIO
 ALTER TABLE inventory ADD COLUMN IF NOT EXISTS discount_pct INTEGER DEFAULT 0;
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS discount_start_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE inventory ADD COLUMN IF NOT EXISTS discount_end_at TIMESTAMP WITH TIME ZONE;
+
+-- 2. CREAR TABLA DE BITÁCORA/AUDITORÍA DE CAMBIOS DE INVENTARIO
+CREATE TABLE IF NOT EXISTS inventory_audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  inventory_id UUID NOT NULL REFERENCES inventory(id) ON DELETE CASCADE,
+  field TEXT NOT NULL,
+  old_value TEXT,
+  new_value TEXT,
+  changed_by TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 3. HABILITAR SEGURIDAD RLS EN BITÁCORA
+ALTER TABLE inventory_audit_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir todo a anonimos en auditoria" ON inventory_audit_logs FOR ALL USING (true) WITH CHECK (true);
