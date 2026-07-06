@@ -3056,6 +3056,103 @@ export default function InventoryModule() {
               >
                 Cancelar
               </button>
+          </div>
+        </div>
+      )}
+
+      {auditHistoryItem && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(6px)",
+            zIndex: 99999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px"
+          }}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              width: "600px",
+              padding: "30px",
+              position: "relative",
+              border: "1px solid var(--glass-border)",
+              boxShadow: "0 8px 32px rgba(244, 63, 94, 0.15)",
+              color: "white",
+              display: "flex",
+              flexDirection: "column",
+              maxHeight: "80vh"
+            }}
+          >
+            <h2 style={{ color: "var(--color-primary)", marginBottom: "5px", fontSize: "1.4rem" }}>
+              🔍 Historial de Cambios
+            </h2>
+            <p style={{ fontSize: "0.9rem", opacity: 0.8, marginBottom: "15px", fontWeight: "bold" }}>
+              {auditHistoryItem.name} {auditHistoryItem.code ? `[${auditHistoryItem.code}]` : ''}
+            </p>
+
+            <div style={{ flex: 1, overflowY: "auto", marginBottom: "20px", paddingRight: "5px" }}>
+              {loadingHistory ? (
+                <div style={{ textAlign: "center", padding: "30px", color: "var(--color-secondary)" }}>
+                  ⏳ Cargando historial...
+                </div>
+              ) : auditHistoryLogs.length > 0 ? (
+                <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.85rem" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--glass-border)" }}>
+                      <th style={{ padding: "8px 5px" }}>Fecha</th>
+                      <th style={{ padding: "8px 5px" }}>Campo</th>
+                      <th style={{ padding: "8px 5px" }}>Antes</th>
+                      <th style={{ padding: "8px 5px" }}>Nuevo</th>
+                      <th style={{ padding: "8px 5px" }}>Usuario</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditHistoryLogs.map((log: any) => (
+                      <tr key={log.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                        <td style={{ padding: "8px 5px", whiteSpace: "nowrap" }}>{new Date(log.created_at).toLocaleDateString()} {new Date(log.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
+                        <td style={{ padding: "8px 5px", color: "var(--color-primary)", fontWeight: "500" }}>
+                          {log.field === "discount_pct" ? "Descuento" : 
+                           log.field === "discount_start_at" ? "Inicio Promo" : 
+                           log.field === "discount_end_at" ? "Fin Promo" : 
+                           log.field}
+                        </td>
+                        <td style={{ padding: "8px 5px", textDecoration: "line-through", opacity: 0.5 }}>{log.old_value || "-"}</td>
+                        <td style={{ padding: "8px 5px", color: "#10b981", fontWeight: "500" }}>{log.new_value || "-"}</td>
+                        <td style={{ padding: "8px 5px" }}>{log.changed_by || "Sistema"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{ textAlign: "center", padding: "30px", color: "rgba(255,255,255,0.4)" }}>
+                  No se encontraron registros de modificaciones para este producto.
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setAuditHistoryItem(null)}
+                style={{
+                  padding: "10px 24px",
+                  background: "var(--color-primary)",
+                  border: "none",
+                  color: "black",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontWeight: "bold"
+                }}
+              >
+                Cerrar
+              </button>
             </div>
           </div>
         </div>
