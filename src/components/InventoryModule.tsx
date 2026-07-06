@@ -2602,6 +2602,135 @@ export default function InventoryModule() {
           </div>
         </>
       )}
+      {editingDiscountItem && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(6px)",
+            zIndex: 99999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px"
+          }}
+        >
+          <div
+            className="glass-panel"
+            style={{
+              width: "480px",
+              padding: "30px",
+              position: "relative",
+              border: "1px solid var(--glass-border)",
+              boxShadow: "0 8px 32px rgba(244, 63, 94, 0.15)",
+              color: "white"
+            }}
+          >
+            <h2 style={{ color: "var(--color-primary)", marginBottom: "5px", fontSize: "1.4rem" }}>
+              🏷️ Configurar Descuento Promocional
+            </h2>
+            <p style={{ fontSize: "0.85rem", opacity: 0.7, marginBottom: "20px" }}>
+              {editingDiscountItem.name}
+            </p>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
+                Porcentaje de Descuento (%)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={promoDiscountPct}
+                onChange={(e) => setPromoDiscountPct(e.target.value)}
+                placeholder="Ej. 15"
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--glass-border)",
+                  background: "rgba(0,0,0,0.5)",
+                  color: "white",
+                  outline: "none",
+                  fontSize: "1rem"
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
+                Fecha y Hora de Inicio (Opcional)
+              </label>
+              <input
+                type="datetime-local"
+                value={promoStartAt}
+                onChange={(e) => setPromoStartAt(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--glass-border)",
+                  background: "rgba(0,0,0,0.5)",
+                  color: "white",
+                  outline: "none",
+                  fontSize: "1rem"
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "25px" }}>
+              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
+                Fecha y Hora de Fin (Opcional)
+              </label>
+              <input
+                type="datetime-local"
+                value={promoEndAt}
+                onChange={(e) => setPromoEndAt(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  borderRadius: "8px",
+                  border: "1px solid var(--glass-border)",
+                  background: "rgba(0,0,0,0.5)",
+                  color: "white",
+                  outline: "none",
+                  fontSize: "1rem"
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                className="btn-primary"
+                onClick={handleSavePromoDiscount}
+                style={{ flex: 1, padding: "12px", background: "var(--color-primary)", border: "none", color: "black", fontWeight: "bold" }}
+              >
+                💾 Guardar Configuración
+              </button>
+              <button
+                onClick={() => setEditingDiscountItem(null)}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  background: "transparent",
+                  border: "1px solid rgba(255,255,255,0.2)",
+                  color: "white",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontWeight: "bold"
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {lastManualChange && (
         <div
           style={{
