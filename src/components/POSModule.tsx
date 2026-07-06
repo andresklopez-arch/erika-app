@@ -1579,8 +1579,7 @@ export default function POSModule() {
     if (job.type === "ticket") {
       const { realTicketId, items, finalTotal, paymentMethod } = job.data;
       const itemsHtml = items.map((i: any) => {
-        let p = i.qty >= wholesaleRules.minQty ? i.price * (1 - wholesaleRules.discountPct/100) : i.price;
-        if (i.discountPct) p = p * (1 - i.discountPct / 100);
+        const p = getItemFinalPrice(i, wholesaleRules);
         return `
         <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
           <span>${i.qty}x ${i.name} ${(i.discountPct || 0) > 0 ? `(-${i.discountPct}%)` : ''}</span>
@@ -1589,8 +1588,7 @@ export default function POSModule() {
       }).join("");
       
       const subtotalVal = items.reduce((sum: number, i: any) => {
-         let p = i.qty >= wholesaleRules.minQty ? i.price * (1 - wholesaleRules.discountPct/100) : i.price;
-         if (i.discountPct) p = p * (1 - i.discountPct / 100);
+         const p = getItemFinalPrice(i, wholesaleRules);
          return sum + (p * i.qty);
       }, 0);
       const discountVal = subtotalVal * (activeTicket.discountPct / 100);
