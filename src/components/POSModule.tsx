@@ -321,7 +321,7 @@ export default function POSModule() {
      
      if (ticketItems.length === 0) return alert("Este ticket no contiene productos válidos.");
      
-     let adjustedMsg = [];
+     const adjustedMsg = [];
      const newItems: POSItem[] = [];
      
      // Validación de Stock en tiempo real al clonar (Sugerencia 1)
@@ -1290,7 +1290,7 @@ export default function POSModule() {
         
         // Registrar en quotes (completamente aislado)
         try {
-          let insertObj = {
+          const insertObj = {
              customer_name: selectedCustomerId ? (customers.find(c => c.id === selectedCustomerId)?.name || "Venta Registrada") : "Venta Mostrador",
              customer_id: selectedCustomerId || null,
              items: activeTicket.items,
