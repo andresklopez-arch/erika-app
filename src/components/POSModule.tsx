@@ -72,6 +72,14 @@ const formatPrice = (value: number): string => {
   return roundTo50(value).toFixed(2);
 };
 
+const getItemFinalPrice = (item: any, wholesaleRules: any): number => {
+  const isWholesale = item.qty >= wholesaleRules.minQty;
+  const wholesaleDiscountPct = isWholesale ? (wholesaleRules.discountPct || 0) : 0;
+  const productDiscountPct = item.discountPct || 0;
+  const maxDiscountPct = Math.max(wholesaleDiscountPct, productDiscountPct);
+  return item.price * (1 - maxDiscountPct / 100);
+};
+
 const SYNONYMS: Record<string, string[]> = {
   "pegamento": ["adhesivo", "resistol", "kola loka", "silicon", "cinta"],
   "pinza": ["alicate", "tenaza"],
