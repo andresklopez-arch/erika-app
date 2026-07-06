@@ -2414,16 +2414,7 @@ export default function POSModule() {
                           fontSize: "1.1rem",
                         }}
                       >
-                        ${(() => {
-                          let p = item.price;
-                          if (item.qty >= wholesaleRules.minQty) {
-                            p = item.price * (1 - wholesaleRules.discountPct/100);
-                          }
-                          if (item.discountPct) {
-                            p = p * (1 - item.discountPct / 100);
-                          }
-                          return (p * item.qty).toFixed(2);
-                        })()}
+                        ${(getItemFinalPrice(item, wholesaleRules) * item.qty).toFixed(2)}
                       </strong>
                       {(item.discountPct || 0) > 0 && (
                         <span style={{ fontSize: "0.75rem", color: "#ef4444", display: "block", textAlign: "right", marginTop: "2px" }}>
