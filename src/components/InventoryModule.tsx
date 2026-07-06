@@ -1054,6 +1054,14 @@ export default function InventoryModule() {
               🏷️
             </button>
           </div>
+        ) : field === "discount_pct" ? (
+          (item.discount_pct || 0) > 0 ? (
+            <span style={{ color: "var(--color-primary)", fontWeight: "bold" }}>
+              🏷️ {item.discount_pct}%
+            </span>
+          ) : (
+            <span style={{ opacity: 0.3 }}>0%</span>
+          )
         ) : field === "cost" ? (
           `$${Number(item.cost).toFixed(2)}`
         ) : field === "price" ? (
