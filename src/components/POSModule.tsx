@@ -1549,6 +1549,8 @@ export default function POSModule() {
     const fontFamily = config.printer_font_family || "monospace";
     const fields = config.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"];
     const footerMsg = config.printer_footer_msg || "¡Gracias por su compra!";
+    const marginAlign = config.printer_align || "center";
+    const marginPadding = config.printer_padding || "8";
 
     const widthCss = paperSize === "58mm" ? "58mm" : "80mm";
     const fontSizeCss = fontSize === "small" ? "10px" : fontSize === "large" ? "14px" : "12px";
@@ -1563,6 +1565,12 @@ export default function POSModule() {
     const showAddress = fields.includes("address") && (businessProfile.address || config.business_address);
     const showBilling = fields.includes("billing");
     const showFooter = fields.includes("footer");
+    const showEmail = fields.includes("email") && (businessProfile.email || config.business_email);
+    const showPaymentMethod = fields.includes("payment_method");
+    const showSeller = fields.includes("seller");
+    const showCustomer = fields.includes("customer");
+    const showNotes = fields.includes("notes");
+    const showWarranty = fields.includes("warranty");
 
     const printWindow = window.open("", "_blank", `width=${paperSize === "58mm" ? 300 : 400},height=500`);
     if (!printWindow) return;
@@ -1592,40 +1600,83 @@ export default function POSModule() {
         <html>
           <head>
             <style>
-              body { font-family: ${fontFamilyCss}; font-size: ${fontSizeCss}; margin: 0; padding: 10px; width: ${widthCss}; color: #000; background: #fff; }
+              @page { margin: 0 !important; }
+              body { 
+                font-family: ${fontFamilyCss}; 
+                font-size: ${fontSizeCss}; 
+                margin: 0 auto !important; 
+                padding: ${marginPadding}mm !important; 
+                width: ${widthCss}; 
+                color: #000; 
+                background: #fff; 
+                box-sizing: border-box;
+              }
               .center { text-align: center; }
-              .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
               .bold { font-weight: bold; }
+              .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
             </style>
           </head>
           <body>
-            ${showLogo ? `<div class="center"><img src="${businessProfile.logo || config.business_logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
-            ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name || config.business_name || "FERRETERÍA ERIKA"}</div>` : ""}
-            ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc || config.business_rfc}</div>` : ""}
-            ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address || config.business_address}</div>` : ""}
-            ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessProfile.phone || config.business_phone}</div>` : ""}
-            
-            <div class="divider"></div>
-            <div class="center bold" style="margin-bottom: 5px;">Ticket: #${realTicketId}</div>
-            <div style="font-size: 0.9em; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
-            ${paymentMethod ? `<div style="font-size: 0.95em; margin-bottom: 5px;">Método de Pago: ${paymentMethod.toUpperCase()}</div>` : ""}
-            <div class="divider"></div>
-            ${itemsHtml}
-            <div class="divider"></div>
-            ${applyIva ? `
-            <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span>$${Math.round(subtotalNeto)}</span></div>
-            <div style="display:flex; justify-content:space-between;"><span>IVA (16%):</span><span>$${Math.round(iva)}</span></div>
-            <div class="divider"></div>` : ''}
-            <div style="display:flex; justify-content:space-between; font-size: 1.1em;"><strong>TOTAL:</strong><strong>$${Math.round(finalTotal)}</strong></div>
-            <div class="divider"></div>
-            ${showBilling ? `
-            <div class="center" style="margin-top: 15px; font-size: 0.9em;">
-              <strong>Auto-Facturación Express</strong><br>
-              <span>Entra a ${window.location.origin}/facturacion/${realTicketId} para facturar.</span>
+            <div style="text-align: ${marginAlign}; width: 100%;">
+              ${showLogo ? `<div class="center"><img src="${businessProfile.logo || config.business_logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
+              ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name || config.business_name || "FERRETERÍA ERIKA"}</div>` : ""}
+              ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc || config.business_rfc}</div>` : ""}
+              ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address || config.business_address}</div>` : ""}
+              ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessProfile.phone || config.business_phone}</div>` : ""}
+              ${showEmail ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Email: ${businessProfile.email || config.business_email}</div>` : ""}
+              
+              <div class="divider"></div>
+              <div class="center bold" style="margin-bottom: 5px;">Ticket: #${realTicketId}</div>
+              <div style="font-size: 0.9em; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
+              ${showSeller ? `<div style="font-size: 0.9em; margin-bottom: 5px;">Atendido por: ${currentUser?.name || "Venta Mostrador"}</div>` : ""}
+              
+              ${showCustomer && job.data.customerName ? `
+              <div style="font-size: 0.85rem; margin-bottom: 5px;">
+                <strong>Cliente:</strong> ${job.data.customerName}
+              </div>
+              ` : ""}
+
+              ${showPaymentMethod && paymentMethod ? `<div style="font-size: 0.95em; margin-bottom: 5px;">Método de Pago: ${paymentMethod.toUpperCase()}</div>` : ""}
+              ${showPaymentMethod && job.data.reference ? `<div style="font-size: 0.9em; margin-bottom: 5px;">Ref/Folio: ${job.data.reference}</div>` : ""}
+              ${showPaymentMethod && paymentMethod === "mixto" ? `
+              <div style="font-size: 0.85em; margin-left: 10px; margin-bottom: 5px; opacity: 0.8;">
+                ${job.data.cashAmount > 0 ? `<span>- Efec: $${Math.round(job.data.cashAmount)}</span><br>` : ""}
+                ${job.data.cardAmount > 0 ? `<span>- Tarj: $${Math.round(job.data.cardAmount)}</span><br>` : ""}
+                ${job.data.transferAmount > 0 ? `<span>- Trans: $${Math.round(job.data.transferAmount)}</span>` : ""}
+              </div>
+              ` : ""}
+
+              ${showNotes && job.data.notes ? `
+              <div style="font-size: 0.85em; background: #eee; padding: 5px; margin-bottom: 5px; border-radius: 4px; text-align: left;">
+                <strong>Nota:</strong> ${job.data.notes}
+              </div>
+              ` : ""}
+
+              <div class="divider"></div>
+              ${itemsHtml}
+              <div class="divider"></div>
+              ${applyIva ? `
+              <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span>$${Math.round(subtotalNeto)}</span></div>
+              <div style="display:flex; justify-content:space-between;"><span>IVA (16%):</span><span>$${Math.round(iva)}</span></div>
+              <div class="divider"></div>` : ''}
+              <div style="display:flex; justify-content:space-between; font-size: 1.1em;"><strong>TOTAL:</strong><strong>$${Math.round(finalTotal)}</strong></div>
+              
+              ${showWarranty ? `
+              <div class="center" style="font-size: 0.85em; margin-top: 10px; opacity: 0.8;">
+                🛡️ Garantía de 30 días contra defectos de fábrica.
+              </div>
+              ` : ""}
+
+              <div class="divider"></div>
+              ${showBilling ? `
+              <div class="center" style="margin-top: 15px; font-size: 0.9em;">
+                <strong>Auto-Facturación Express</strong><br>
+                <span>Entra a ${window.location.origin}/facturacion/${realTicketId} para facturar.</span>
+              </div>
+              ` : ""}
+              ${showFooter ? `<div class="center bold" style="margin-top: 15px;">${footerMsg}</div>` : ""}
+              <div style="height: 25px;"></div>
             </div>
-            ` : ""}
-            ${showFooter ? `<div class="center bold" style="margin-top: 15px;">${footerMsg}</div>` : ""}
-            <div style="height: 25px;"></div>
           </body>
         </html>
       `;
@@ -1648,44 +1699,58 @@ export default function POSModule() {
         <html>
           <head>
             <style>
-              body { font-family: ${fontFamilyCss}; font-size: ${fontSizeCss}; margin: 0; padding: 10px; width: ${widthCss}; color: #000; background: #fff; }
+              @page { margin: 0 !important; }
+              body { 
+                font-family: ${fontFamilyCss}; 
+                font-size: ${fontSizeCss}; 
+                margin: 0 auto !important; 
+                padding: ${marginPadding}mm !important; 
+                width: ${widthCss}; 
+                color: #000; 
+                background: #fff; 
+                box-sizing: border-box;
+              }
               .center { text-align: center; }
-              .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
               .bold { font-weight: bold; }
+              .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
             </style>
           </head>
           <body>
-            ${showLogo ? `<div class="center"><img src="${businessProfile.logo || config.business_logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
-            ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name || config.business_name || "FERRETERÍA ERIKA"}</div>` : ""}
-            ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc || config.business_rfc}</div>` : ""}
-            ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address || config.business_address}</div>` : ""}
-            ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessProfile.phone || config.business_phone}</div>` : ""}
-            
-            <div class="divider"></div>
-            <div class="center bold" style="font-size: 1.1em;">Comprobante de Apartado</div>
-            <div class="divider"></div>
-            <div style="margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
-            <div style="margin-bottom: 5px;">Cliente: ${customer?.name || "Desconocido"}</div>
-            <div class="divider"></div>
-            ${itemsHtml}
-            <div class="divider"></div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-              <div>Total Mercancía:</div>
-              <div class="bold">$${Math.round(finalTotal)}</div>
+            <div style="text-align: ${marginAlign}; width: 100%;">
+              ${showLogo ? `<div class="center"><img src="${businessProfile.logo || config.business_logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
+              ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name || config.business_name || "FERRETERÍA ERIKA"}</div>` : ""}
+              ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc || config.business_rfc}</div>` : ""}
+              ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address || config.business_address}</div>` : ""}
+              ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessProfile.phone || config.business_phone}</div>` : ""}
+              ${showEmail ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Email: ${businessProfile.email || config.business_email}</div>` : ""}
+              
+              <div class="divider"></div>
+              <div class="center bold" style="font-size: 1.1em;">Comprobante de Apartado</div>
+              <div class="divider"></div>
+              <div style="margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
+              ${showSeller ? `<div style="font-size: 0.9em; margin-bottom: 5px;">Atendido por: ${currentUser?.name || "Venta Mostrador"}</div>` : ""}
+              <div style="margin-bottom: 5px;">Cliente: ${customer?.name || "Desconocido"}</div>
+              <div class="divider"></div>
+              ${itemsHtml}
+              <div class="divider"></div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                <div>Total Mercancía:</div>
+                <div class="bold">$${Math.round(finalTotal)}</div>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                <div>Enganche Dado:</div>
+                <div class="bold">$${Math.round(downPayment)}</div>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                <div>Saldo Pendiente:</div>
+                <div class="bold">$${Math.round(finalTotal - downPayment)}</div>
+              </div>
+              <div class="divider"></div>
+              <div class="center bold" style="margin-bottom: 5px; color: red;">¡ATENCIÓN!</div>
+              <div class="center">Vence: ${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
+              <div class="center" style="margin-top: 5px; font-size: 0.85em;">Pasando esta fecha, la mercancía regresará a piso de ventas.</div>
+              ${showFooter ? `<div class="center bold" style="margin-top: 15px;">${footerMsg}</div>` : ""}
             </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-              <div>Enganche Dado:</div>
-              <div class="bold">$${Math.round(downPayment)}</div>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-              <div>Saldo Pendiente:</div>
-              <div class="bold">$${Math.round(finalTotal - downPayment)}</div>
-            </div>
-            <div class="divider"></div>
-            <div class="center bold" style="margin-bottom: 5px; color: red;">¡ATENCIÓN!</div>
-            <div class="center">Vence: ${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
-            <div class="center" style="margin-top: 5px; font-size: 0.85em;">Pasando esta fecha, la mercancía regresará a piso de ventas.</div>
-            ${showFooter ? `<div class="center bold" style="margin-top: 15px;">${footerMsg}</div>` : ""}
           </body>
         </html>
       `;
@@ -1792,16 +1857,38 @@ export default function POSModule() {
   const printTicketId = isPrintingJob ? receiptToPrint.ticketId : "";
   const printInvoiceToken = isPrintingJob ? receiptToPrint.invoiceToken : invoiceToken;
   const printPaymentMethod = isPrintingJob ? (receiptToPrint.paymentMethod || "") : "";
+  const printCashAmount = isPrintingJob ? (receiptToPrint.cashAmount || 0) : 0;
+  const printCardAmount = isPrintingJob ? (receiptToPrint.cardAmount || 0) : 0;
+  const printTransferAmount = isPrintingJob ? (receiptToPrint.transferAmount || 0) : 0;
+  const printReference = isPrintingJob ? (receiptToPrint.reference || "") : "";
+  const printNotes = isPrintingJob ? (receiptToPrint.notes || "") : "";
   const printCustomerName = isPrintingJob 
     ? receiptToPrint.customerName 
     : (selectedCustomerId && customers.find(c => c.id === selectedCustomerId) ? customers.find(c => c.id === selectedCustomerId).name : "");
   const printDownPayment = isPrintingJob ? receiptToPrint.downPayment : 0;
   const printBalance = isPrintingJob ? receiptToPrint.balance : 0;
 
-  const previewFields = businessSettings?.config?.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"];
+  const previewConfig = businessSettings?.config || {};
+  const previewFields = previewConfig.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"];
+  
+  const showPreviewLogo = previewFields.includes("logo") && businessProfile.logo;
+  const showPreviewName = previewFields.includes("name");
+  const showPreviewRfc = previewFields.includes("rfc") && businessProfile.rfc;
+  const showPreviewPhone = previewFields.includes("phone") && businessProfile.phone;
+  const showPreviewAddress = previewFields.includes("address") && businessProfile.address;
+  const showPreviewEmail = previewFields.includes("email") && businessProfile.email;
   const showPreviewBilling = previewFields.includes("billing");
   const showPreviewFooter = previewFields.includes("footer");
-  const previewFooterMsg = businessSettings?.config?.printer_footer_msg || "¡Gracias por su compra!";
+  const previewFooterMsg = previewConfig.printer_footer_msg || "¡Gracias por su compra!";
+
+  const showPreviewSeller = previewFields.includes("seller");
+  const showPreviewPaymentMethod = previewFields.includes("payment_method");
+  const showPreviewCustomer = previewFields.includes("customer");
+  const showPreviewNotes = previewFields.includes("notes");
+  const showPreviewWarranty = previewFields.includes("warranty");
+
+  const marginAlign = previewConfig.printer_align || "center";
+  const marginPadding = previewConfig.printer_padding || "8";
 
   return (
     <div
@@ -3006,16 +3093,27 @@ export default function POSModule() {
       </div>
       
       {/* Printable Receipt Area */}
-      <div id="printable-receipt" style={{ padding: "10mm", fontFamily: "monospace", maxWidth: "400px", margin: "0 auto" }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", borderBottom: "1px dashed #000", paddingBottom: "10px", marginBottom: "15px", textAlign: "center" }}>
-          {businessProfile.logo && <img src={businessProfile.logo} alt="Logo" style={{ maxHeight: "60px", marginBottom: "10px" }} />}
-          <h2 style={{ margin: "5px 0", fontSize: "18px", fontWeight: "bold" }}>{businessProfile.name || "FERRETERÍA ERIKA"}</h2>
-          <p style={{ margin: "2px 0", fontSize: "12px" }}>RFC: {businessProfile.rfc}</p>
-          <p style={{ margin: "2px 0", fontSize: "12px", whiteSpace: "pre-line" }}>{businessProfile.address}</p>
-          <p style={{ margin: "2px 0", fontSize: "12px" }}>Tel: {businessProfile.phone}</p>
+      <div 
+        id="printable-receipt" 
+        style={{ 
+          padding: `${marginPadding}mm`, 
+          fontFamily: "monospace", 
+          maxWidth: paperSize === "58mm" ? "58mm" : "80mm", 
+          margin: "0 auto",
+          textAlign: marginAlign as any,
+          boxSizing: "border-box"
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", alignItems: marginAlign === "center" ? "center" : "flex-start", borderBottom: "1px dashed #000", paddingBottom: "10px", marginBottom: "15px", textAlign: marginAlign as any }}>
+          {showPreviewLogo && <img src={businessProfile.logo} alt="Logo" style={{ maxHeight: "60px", marginBottom: "10px" }} />}
+          {showPreviewName && <h2 style={{ margin: "5px 0", fontSize: "18px", fontWeight: "bold" }}>{businessProfile.name || "FERRETERÍA ERIKA"}</h2>}
+          {showPreviewRfc && <p style={{ margin: "2px 0", fontSize: "12px" }}>RFC: {businessProfile.rfc}</p>}
+          {showPreviewAddress && <p style={{ margin: "2px 0", fontSize: "12px", whiteSpace: "pre-line" }}>{businessProfile.address}</p>}
+          {showPreviewPhone && <p style={{ margin: "2px 0", fontSize: "12px" }}>Tel: {businessProfile.phone}</p>}
+          {showPreviewEmail && <p style={{ margin: "2px 0", fontSize: "12px" }}>Email: {businessProfile.email}</p>}
         </div>
         
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px", fontSize: "14px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px", fontSize: "14px", textAlign: "left" }}>
           <div>
             <h3 style={{ margin: 0, fontWeight: "bold", fontSize: "16px" }}>{printTitle}</h3>
             {printTicketId && <p style={{ margin: "2px 0", fontWeight: "bold" }}>Ticket: #{printTicketId}</p>}
@@ -3023,17 +3121,36 @@ export default function POSModule() {
           <div style={{ textAlign: "right" }}>
             <p style={{ margin: "2px 0" }}>{new Date().toLocaleDateString()}</p>
             <p style={{ margin: "2px 0" }}>{new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+            {showPreviewSeller && <p style={{ margin: "2px 0", fontSize: "11px", opacity: 0.8 }}>Vend: {currentUser?.name || "Venta Mostrador"}</p>}
           </div>
         </div>
 
-        {printPaymentMethod && (
-          <div style={{ marginBottom: "10px", fontSize: "12px", textAlign: "left" }}>
+        {showPreviewPaymentMethod && printPaymentMethod && (
+          <div style={{ marginBottom: "10px", fontSize: "12px", textAlign: marginAlign as any }}>
             <strong>Método de Pago:</strong> {printPaymentMethod.toUpperCase()}
+            {printReference && (
+              <div style={{ marginTop: "2px", opacity: 0.9 }}>
+                <strong>Ref/Folio:</strong> {printReference}
+              </div>
+            )}
+            {printPaymentMethod === "mixto" && (
+              <div style={{ marginTop: "3px", fontSize: "11px", color: "#666", paddingLeft: "10px" }}>
+                {printCashAmount > 0 && <div>• Efec: ${Math.round(printCashAmount)}</div>}
+                {printCardAmount > 0 && <div>• Tarj: ${Math.round(printCardAmount)}</div>}
+                {printTransferAmount > 0 && <div>• Trans: ${Math.round(printTransferAmount)}</div>}
+              </div>
+            )}
           </div>
         )}
 
-        {printCustomerName && (
-          <div style={{ marginBottom: "15px", padding: "8px", background: "#f3f4f6", borderRadius: "4px", fontSize: "12px", border: "1px solid #e5e7eb" }}>
+        {showPreviewNotes && printNotes && (
+          <div style={{ marginBottom: "10px", padding: "8px", background: "#f3f4f6", borderRadius: "4px", fontSize: "11px", border: "1px solid #e5e7eb", color: "#000", textAlign: "left" }}>
+            <strong>Nota:</strong> {printNotes}
+          </div>
+        )}
+
+        {showPreviewCustomer && printCustomerName && (
+          <div style={{ marginBottom: "15px", padding: "8px", background: "#f3f4f6", borderRadius: "4px", fontSize: "12px", border: "1px solid #e5e7eb", textAlign: "left" }}>
             <strong>Cliente:</strong> {printCustomerName}
           </div>
         )}
@@ -3112,6 +3229,11 @@ export default function POSModule() {
         </div>
         
         <div style={{ borderTop: "1px dashed #000", marginTop: "15px", paddingBottom: "25px" }}>
+          {showPreviewWarranty && (
+            <div style={{ marginTop: "10px", textAlign: "center", color: "#000", fontSize: "11px", opacity: 0.8 }}>
+              <p>🛡️ Garantía de 30 días contra defectos de fábrica.</p>
+            </div>
+          )}
           {showPreviewBilling && (
             <div style={{ marginTop: "15px", textAlign: "center", color: "#000", fontSize: "11px" }}>
               <p style={{ fontWeight: "bold", margin: "0 0 5px 0" }}>Auto-Facturación Express</p>

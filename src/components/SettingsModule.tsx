@@ -34,6 +34,8 @@ export default function SettingsModule() {
   const [printerFontFamily, setPrinterFontFamily] = useState("monospace");
   const [printerFields, setPrinterFields] = useState<string[]>(["name", "rfc", "phone", "address", "logo", "footer"]);
   const [printerFooterMsg, setPrinterFooterMsg] = useState("¡Gracias por su compra!");
+  const [printerAlign, setPrinterAlign] = useState("center");
+  const [printerPadding, setPrinterPadding] = useState("8");
   
   // Printer scan simulation states
   const [isScanning, setIsScanning] = useState(false);
@@ -331,6 +333,8 @@ export default function SettingsModule() {
       setPrinterFontFamily(businessSettings.config.printer_font_family || "monospace");
       setPrinterFields(businessSettings.config.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"]);
       setPrinterFooterMsg(businessSettings.config.printer_footer_msg || "¡Gracias por su compra!");
+      setPrinterAlign(businessSettings.config.printer_align || "center");
+      setPrinterPadding(businessSettings.config.printer_padding || "8");
       setLowStockThreshold(String(businessSettings.config.low_stock_threshold || 5));
       setMaxCajeroDiscountPct(String(businessSettings.config.max_cajero_discount_pct || 5));
       /* eslint-enable react-hooks/set-state-in-effect */
@@ -466,6 +470,8 @@ export default function SettingsModule() {
         printer_font_family: printerFontFamily,
         printer_fields: printerFields,
         printer_footer_msg: printerFooterMsg,
+        printer_align: printerAlign,
+        printer_padding: printerPadding,
       }
     });
     if (success) {
@@ -729,40 +735,54 @@ export default function SettingsModule() {
     const showAddress = printerFields.includes("address") && businessAddress;
     const showBilling = printerFields.includes("billing");
     const showFooter = printerFields.includes("footer");
+    const showEmail = printerFields.includes("email") && businessEmail;
 
     const html = `
       <html>
         <head>
           <style>
-            body { font-family: ${fontFamilyCss}; font-size: ${fontSizeCss}; margin: 0; padding: 10px; width: ${widthCss}; color: #000; background: #fff; }
+            @page { margin: 0 !important; }
+            body { 
+              font-family: ${fontFamilyCss}; 
+              font-size: ${fontSizeCss}; 
+              margin: 0 auto !important; 
+              padding: ${printerPadding}mm !important; 
+              width: ${widthCss}; 
+              color: #000; 
+              background: #fff; 
+              box-sizing: border-box;
+            }
             .center { text-align: center; }
-            .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
             .bold { font-weight: bold; }
+            .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
           </style>
         </head>
         <body>
-          ${showLogo ? `<div class="center"><img src="${businessLogo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
-          ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessName}</div>` : ""}
-          ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessRfc}</div>` : ""}
-          ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessAddress}</div>` : ""}
-          ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessPhone}</div>` : ""}
-          
-          <div class="divider"></div>
-          <p class="center bold">TICKET DE PRUEBA POS</p>
-          <p class="center">¡Impresora configurada correctamente!</p>
-          <div style="font-size: 0.9em; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
-          <div style="font-size: 0.9em; margin-bottom: 5px;">Impresora: ${printerName || "Por defecto del sistema"}</div>
-          <div style="font-size: 0.9em; margin-bottom: 5px;">Papel: ${printerPaperSize}</div>
-          <div style="font-size: 0.9em; margin-bottom: 5px;">Letra: ${printerFontFamily} (${printerFontSize})</div>
-          <div class="divider"></div>
-          
-          ${showBilling ? `
-          <div class="center" style="margin-top: 10px; font-size: 0.9em;">
-            <strong>Auto-Facturación Express</strong><br>
-            <span>Entra a ${window.location.origin}/facturacion/test para facturar.</span>
+          <div style="text-align: ${printerAlign}; width: 100%;">
+            ${showLogo ? `<div class="center"><img src="${businessLogo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
+            ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessName}</div>` : ""}
+            ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessRfc}</div>` : ""}
+            ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessAddress}</div>` : ""}
+            ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessPhone}</div>` : ""}
+            ${showEmail ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Email: ${businessEmail}</div>` : ""}
+            
+            <div class="divider"></div>
+            <p class="center bold">TICKET DE PRUEBA POS</p>
+            <p class="center">¡Impresora configurada correctamente!</p>
+            <div style="font-size: 0.9em; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
+            <div style="font-size: 0.9em; margin-bottom: 5px;">Impresora: ${printerName || "Por defecto del sistema"}</div>
+            <div style="font-size: 0.9em; margin-bottom: 5px;">Papel: ${printerPaperSize}</div>
+            <div style="font-size: 0.9em; margin-bottom: 5px;">Letra: ${printerFontFamily} (${printerFontSize})</div>
+            <div class="divider"></div>
+            
+            ${showBilling ? `
+            <div class="center" style="margin-top: 10px; font-size: 0.9em;">
+              <strong>Auto-Facturación Express</strong><br>
+              <span>Entra a ${window.location.origin}/facturacion/test para facturar.</span>
+            </div>
+            ` : ""}
+            ${showFooter ? `<div class="center bold" style="margin-top: 10px;">${printerFooterMsg}</div>` : ""}
           </div>
-          ` : ""}
-          ${showFooter ? `<div class="center bold" style="margin-top: 10px;">${printerFooterMsg}</div>` : ""}
         </body>
       </html>
     `;
@@ -1233,18 +1253,51 @@ export default function SettingsModule() {
               </div>
             </div>
 
+            {/* Nuevos parámetros de formato: Margen y Alineación */}
+            <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginTop: "15px" }}>
+              <div style={{ flex: 1, minWidth: "200px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem", color: "var(--color-text)" }}>Alineación Horizontal del Ticket:</label>
+                <select
+                  value={printerAlign}
+                  onChange={(e) => setPrinterAlign(e.target.value)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
+                >
+                  <option value="center">Centrado (Centrar impresión)</option>
+                  <option value="left">Alineado a la Izquierda</option>
+                </select>
+              </div>
+
+              <div style={{ flex: 1, minWidth: "200px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem", color: "var(--color-text)" }}>Margen Interno del Ticket (Padding en mm):</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="50"
+                  value={printerPadding}
+                  onChange={(e) => setPrinterPadding(e.target.value)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
+                />
+              </div>
+            </div>
+
             {/* Fields to Print */}
             <div>
               <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--color-secondary)" }}>
                 Campos a Imprimir en el Ticket:
               </label>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "8px", background: "rgba(0,0,0,0.15)", padding: "10px", borderRadius: "6px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "8px", background: "rgba(0,0,0,0.15)", padding: "10px", borderRadius: "6px" }}>
                 {[
                   { key: "logo", label: "🖼️ Logotipo" },
                   { key: "name", label: "🏢 Nombre Negocio" },
                   { key: "rfc", label: "🧾 RFC Fiscal" },
                   { key: "phone", label: "📱 Teléfono" },
                   { key: "address", label: "📍 Dirección" },
+                  { key: "email", label: "✉️ Correo" },
+                  { key: "payment_method", label: "💳 Método de Pago" },
+                  { key: "seller", label: "👤 Cajero / Vendedor" },
+                  { key: "customer", label: "👥 Datos Cliente" },
+                  { key: "notes", label: "📝 Notas Ticket" },
+                  { key: "warranty", label: "🛡️ Garantías" },
                   { key: "billing", label: "🧾 Facturación Express" },
                   { key: "footer", label: "💬 Mensaje de Pie" },
                 ].map((field) => {
