@@ -263,6 +263,34 @@ export default function POSModule() {
     }
   }, [selectedCustomerId, customers]);
 
+  useEffect(() => {
+    if (!selectedCustomerId) {
+      setCustomerActiveStats(null);
+      return;
+    }
+
+    const fetchStats = async () => {
+      const { count: layawaysCount } = await supabase
+        .from("layaways")
+        .select("id", { count: "exact", head: true })
+        .eq("customer_id", selectedCustomerId)
+        .eq("status", "pending");
+
+      const { count: quotesCount } = await supabase
+        .from("quotes")
+        .select("id", { count: "exact", head: true })
+        .eq("customer_id", selectedCustomerId)
+        .eq("status", "pending");
+
+      setCustomerActiveStats({
+        layawaysCount: layawaysCount || 0,
+        quotesCount: quotesCount || 0
+      });
+    };
+
+    fetchStats();
+  }, [selectedCustomerId]);
+
   const handleSaveQuickCustomer = async () => {
     if (!quickCustomerName.trim()) return alert("El nombre del cliente es obligatorio.");
     setIsSavingQuickCustomer(true);
