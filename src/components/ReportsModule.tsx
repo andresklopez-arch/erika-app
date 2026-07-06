@@ -43,6 +43,24 @@ export default function ReportsModule() {
   const [lostSales, setLostSales] = useState<{term: string, count: number, type: string, estimatedPrice?: number}[]>([]);
   const [radarFilterFecha, setRadarFilterFecha] = useState("mes");
 
+  interface AuditLog {
+    id: string;
+    inventory_id: string;
+    field: string;
+    old_value: string | null;
+    new_value: string | null;
+    changed_by: string | null;
+    created_at: string;
+    inventory?: {
+      name: string;
+      code: string | null;
+    } | null;
+  }
+
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [searchAuditProduct, setSearchAuditProduct] = useState("");
+  const [searchAuditUser, setSearchAuditUser] = useState("");
+
   useEffect(() => {
      const fetchData = async () => {
         const today = new Date();
