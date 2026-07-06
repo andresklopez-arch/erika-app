@@ -161,10 +161,32 @@ export default function ReportsModule() {
                  total_sales: totalSales
               };
            });
-           setCashSessions(sessionsWithSales as CashSession[]);
-        }
-     };
-     fetchData();
+            setCashSessions(sessionsWithSales as CashSession[]);
+         }
+
+         const { data: logs, error: logsErr } = await supabase
+           .from("inventory_audit_logs")
+           .select(`
+             id,
+             inventory_id,
+             field,
+             old_value,
+             new_value,
+             changed_by,
+             created_at,
+             inventory (
+               name,
+               code
+             )
+           `)
+           .order("created_at", { ascending: false })
+           .limit(100);
+
+         if (logs && !logsErr) {
+           setAuditLogs(logs as any[]);
+         }
+      };
+      fetchData();
   }, []);
 
   useEffect(() => {
