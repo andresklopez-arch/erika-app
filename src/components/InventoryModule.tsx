@@ -3096,6 +3096,7 @@ export default function InventoryModule() {
               >
                 Cancelar
               </button>
+            </div>
           </div>
         </div>
       )}
