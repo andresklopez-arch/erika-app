@@ -515,6 +515,13 @@ export default function InventoryModule() {
       }
       dbQuery = dbQuery.eq("supplier", bulkSelectedSupplier);
       itemsToLog = allItems.filter(i => i.supplier === bulkSelectedSupplier);
+    } else if (bulkTargetMode === "category") {
+      if (!bulkSelectedCategory) {
+        alert("⚠️ Por favor selecciona una categoría.");
+        return;
+      }
+      dbQuery = dbQuery.eq("category", bulkSelectedCategory);
+      itemsToLog = allItems.filter(i => i.category === bulkSelectedCategory);
     } else {
       const ids = items.map(i => i.id);
       if (ids.length === 0) {
