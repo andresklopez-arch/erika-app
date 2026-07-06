@@ -1533,12 +1533,11 @@ export default function POSModule() {
     // Si la impresora configurada es del sistema, redireccionar al flujo nativo sin popup
     if (printerConnectionType === "system") {
       if (job.type === "ticket") {
-        const { realTicketId, items, finalTotal, paymentMethod } = job.data;
+        const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = job.data;
         const subtotalVal = items.reduce((sum: number, item: any) => {
            const p = getItemFinalPrice(item, wholesaleRules);
            return sum + (p * item.qty);
         }, 0);
-        const discountPct = activeTicket.discountPct || 0;
         const discountAmt = subtotalVal * (discountPct / 100);
         const subtotalNeto = subtotalVal - discountAmt;
         const iva = applyIva ? subtotalNeto * 0.16 : 0;
@@ -1548,7 +1547,7 @@ export default function POSModule() {
           ticketId: realTicketId,
           customerName: customers.find(c => c.id === selectedCustomerId)?.name || "",
           items: [...items],
-          subtotal: subtotalNeto,
+          subtotal: subtotalVal,
           iva,
           discountPct,
           discountAmount: discountAmt,
@@ -1557,12 +1556,11 @@ export default function POSModule() {
           paymentMethod
         });
       } else if (job.type === "layaway") {
-        const { customer, items, finalTotal, downPayment } = job.data;
+        const { customer, items, finalTotal, downPayment, discountPct = 0, applyIva = false } = job.data;
         const subtotalVal = items.reduce((sum: number, item: any) => {
            const p = getItemFinalPrice(item, wholesaleRules);
            return sum + (p * item.qty);
         }, 0);
-        const discountPct = activeTicket.discountPct || 0;
         const discountAmt = subtotalVal * (discountPct / 100);
         const subtotalNeto = subtotalVal - discountAmt;
         const iva = applyIva ? subtotalNeto * 0.16 : 0;
@@ -1571,7 +1569,7 @@ export default function POSModule() {
           type: "layaway",
           customerName: customer?.name || "Desconocido",
           items: [...items],
-          subtotal: subtotalNeto,
+          subtotal: subtotalVal,
           iva,
           discountPct,
           discountAmount: discountAmt,
