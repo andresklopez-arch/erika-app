@@ -3165,7 +3165,9 @@ export default function POSModule() {
                       customer,
                       items: [...activeTicket.items],
                       finalTotal,
-                      downPayment
+                      downPayment,
+                      discountPct: activeTicket.discountPct || 0,
+                      applyIva: applyIva
                     }
                   });
 
