@@ -48,6 +48,14 @@ const levenshtein = (a: string, b: string) => {
   return matrix[a.length][b.length];
 };
 
+const getActiveDiscount = (item: any): number => {
+  if (!item || !item.discount_pct || item.discount_pct <= 0) return 0;
+  const now = new Date();
+  if (item.discount_start_at && new Date(item.discount_start_at) > now) return 0;
+  if (item.discount_end_at && new Date(item.discount_end_at) < now) return 0;
+  return item.discount_pct;
+};
+
 const fuzzyMatch = (itemName: string, query: string) => {
   const itemWords = itemName.split(/\s+/);
   const queryWords = query.split(/\s+/);
