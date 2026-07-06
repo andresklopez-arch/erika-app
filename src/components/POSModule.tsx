@@ -2642,15 +2642,39 @@ export default function POSModule() {
                   onFocus={() => setShowCustomerDropdown(true)}
                   style={{
                     width: "100%",
-                    padding: "10px",
+                    padding: "10px 35px 10px 10px",
                     borderRadius: "8px",
                     background: "white",
                     color: "black",
                     border: "1px solid var(--color-primary)",
                   }}
                 />
-                
-                {showCustomerDropdown && (
+                {selectedCustomerId && (
+                   <button
+                     type="button"
+                     onClick={() => {
+                       setSelectedCustomerId("");
+                       setCustomerSearch("");
+                     }}
+                     style={{
+                       position: "absolute",
+                       right: "10px",
+                       top: "50%",
+                       transform: "translateY(-50%)",
+                       background: "transparent",
+                       border: "none",
+                       color: "#9ca3af",
+                       fontSize: "1.2rem",
+                       cursor: "pointer",
+                       padding: "5px"
+                     }}
+                     title="Quitar cliente seleccionado"
+                   >
+                     ✖
+                   </button>
+                 )}
+                 
+                 {showCustomerDropdown && (
                   <div 
                     onClick={() => setShowCustomerDropdown(false)}
                     style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }}
