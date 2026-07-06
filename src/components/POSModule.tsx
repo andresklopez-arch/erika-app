@@ -1451,7 +1451,9 @@ export default function POSModule() {
               realTicketId,
               items: [...activeTicket.items],
               finalTotal: totalAmt,
-              paymentMethod: selectedMethod
+              paymentMethod: selectedMethod,
+              discountPct: activeTicket.discountPct || 0,
+              applyIva: applyIva
             }
           });
         } catch (printErr) {
