@@ -3164,10 +3164,7 @@ export default function POSModule() {
           </thead>
           <tbody>
             {printItems.map((item: any) => {
-               let p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
-               if (item.discountPct) {
-                  p = p * (1 - item.discountPct / 100);
-               }
+               const p = getItemFinalPrice(item, wholesaleRules);
                return (
                   <tr key={item.id} style={{ borderBottom: "1px solid #eee" }}>
                     <td style={{ padding: "5px 0", verticalAlign: "top" }}>{item.qty} {item.unit}</td>
