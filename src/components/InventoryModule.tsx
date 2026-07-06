@@ -303,6 +303,11 @@ export default function InventoryModule() {
         dbQuery = dbQuery.eq("supplier", selectedSupplierFilter);
       }
 
+      // Apply discount filter
+      if (showOnlyDiscounts) {
+        dbQuery = dbQuery.gt("discount_pct", 0);
+      }
+
       // Apply search query
       const cleanQuery = queryStr.trim();
       if (cleanQuery) {
