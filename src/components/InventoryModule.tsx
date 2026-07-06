@@ -87,6 +87,8 @@ export interface InventoryItem {
   deleted?: boolean;
   deleted_at?: string | null;
   discount_pct?: number;
+  discount_start_at?: string | null;
+  discount_end_at?: string | null;
 }
 
 export default function InventoryModule() {
