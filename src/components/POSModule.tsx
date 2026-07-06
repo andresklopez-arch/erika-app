@@ -2504,20 +2504,7 @@ export default function POSModule() {
                     </button>
                   </div>
                   <div style={{ display: "flex", gap: "8px" }}>
-                    <button
-                      style={{
-                        background: "transparent",
-                        border: "1px solid #10b981",
-                        color: "#10b981",
-                        cursor: "pointer",
-                        padding: "5px 10px",
-                        borderRadius: "6px",
-                        fontSize: "0.8rem",
-                      }}
-                      onClick={() => applyItemDiscount(item.id)}
-                    >
-                      🏷️ Desc.
-                    </button>
+
                     <button
                       style={{
                         background: "transparent",
