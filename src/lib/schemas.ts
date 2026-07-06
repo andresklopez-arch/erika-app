@@ -11,6 +11,8 @@ export const InventoryItemSchema = z.object({
   supplier: z.string().optional().nullable().default(""),
   location: z.string().optional().nullable().default(""),
   discount_pct: z.preprocess((val) => Number(val) || 0, z.number().default(0)),
+  discount_start_at: z.string().optional().nullable(),
+  discount_end_at: z.string().optional().nullable(),
 });
 
 export const CustomerSchema = z.object({
