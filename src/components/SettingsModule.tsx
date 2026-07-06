@@ -76,6 +76,8 @@ export default function SettingsModule() {
   const [editRole, setEditRole] = useState("");
   const [editPermissions, setEditPermissions] = useState<Record<string, boolean>>({});
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showNewUserPinText, setShowNewUserPinText] = useState(false);
+  const [showEditUserPinText, setShowEditUserPinText] = useState(false);
 
   const [isConnected, setIsConnected] = useState<boolean>(true);
   const [connectionType, setConnectionType] = useState<string>("system");
@@ -624,6 +626,7 @@ export default function SettingsModule() {
       reportes: user.permissions?.reportes || false,
       configuracion: user.permissions?.configuracion || false,
     });
+    setShowEditUserPinText(false);
   };
 
   const handleSaveEditUser = async () => {
@@ -939,6 +942,7 @@ export default function SettingsModule() {
               onClick={() => {
                 if (!checkAdmin()) return;
                 setShowCreateModal(true);
+                setShowNewUserPinText(false);
               }} 
               style={{ background: "#10b981", border: "none", padding: "12px", width: "100%", fontWeight: "bold", fontSize: "1rem", marginBottom: "20px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
             >
@@ -1526,14 +1530,23 @@ export default function SettingsModule() {
             </div>
 
             <div>
-              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>PIN (Visible):</label>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>PIN:</label>
               <div style={{ display: "flex", gap: "8px" }}>
                 <input
-                  type="text"
+                  type={showEditUserPinText ? "text" : "password"}
                   value={editPin}
                   onChange={(e) => setEditPin(e.target.value)}
                   style={{ flex: 1, padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: editPin.length >= 4 && systemUsers.some(u => u.pin === editPin && u.id !== editingUser?.id) ? "1px solid #ef4444" : "1px solid var(--glass-border)" }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowEditUserPinText(!showEditUserPinText)}
+                  className="btn-primary"
+                  style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "white", padding: "10px", width: "40px", fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center" }}
+                  title={showEditUserPinText ? "Ocultar PIN" : "Mostrar PIN"}
+                >
+                  {showEditUserPinText ? "🙈" : "👁️"}
+                </button>
                 <button
                   type="button"
                   onClick={handleGenerateEditRandomPin}
@@ -1674,15 +1687,24 @@ export default function SettingsModule() {
             </div>
 
             <div>
-              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>PIN (Visible):</label>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>PIN:</label>
               <div style={{ display: "flex", gap: "8px" }}>
                 <input
-                  type="text"
+                  type={showNewUserPinText ? "text" : "password"}
                   placeholder="PIN (ej. 4321)"
                   value={newUserPin}
                   onChange={(e) => setNewUserPin(e.target.value)}
                   style={{ flex: 1, padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: newUserPin.length >= 4 && systemUsers.some(u => u.pin === newUserPin) ? "1px solid #ef4444" : "1px solid var(--glass-border)" }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowNewUserPinText(!showNewUserPinText)}
+                  className="btn-primary"
+                  style={{ background: "rgba(255, 255, 255, 0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "white", padding: "10px", width: "40px", fontSize: "1rem", display: "flex", alignItems: "center", justifyContent: "center" }}
+                  title={showNewUserPinText ? "Ocultar PIN" : "Mostrar PIN"}
+                >
+                  {showNewUserPinText ? "🙈" : "👁️"}
+                </button>
                 <button
                   type="button"
                   onClick={handleGenerateRandomPin}
