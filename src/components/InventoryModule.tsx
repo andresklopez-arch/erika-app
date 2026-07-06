@@ -127,6 +127,9 @@ export default function InventoryModule() {
   const [sortAscending, setSortAscending] = useState<boolean>(true);
   const [editingCell, setEditingCell] = useState<{ itemId: string; field: string } | null>(null);
   const [editingDiscountItem, setEditingDiscountItem] = useState<InventoryItem | null>(null);
+  const [promoDiscountPct, setPromoDiscountPct] = useState<string>("");
+  const [promoStartAt, setPromoStartAt] = useState<string>("");
+  const [promoEndAt, setPromoEndAt] = useState<string>("");
   const [editValue, setEditValue] = useState<string>("");
   const [hoveredCell, setHoveredCell] = useState<{ itemId: string; field: string } | null>(null);
   const [hoveredHeader, setHoveredHeader] = useState<string | null>(null);
