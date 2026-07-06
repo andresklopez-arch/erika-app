@@ -2943,6 +2943,9 @@ export default function InventoryModule() {
                 <option value="supplier" style={{ background: "#1f2937", color: "white" }}>
                   Todos los productos de un Proveedor
                 </option>
+                <option value="category" style={{ background: "#1f2937", color: "white" }}>
+                  Todos los productos de una Categoría
+                </option>
               </select>
             </div>
 
@@ -2969,6 +2972,35 @@ export default function InventoryModule() {
                   {Array.from(new Set(allItems.map(i => i.supplier).filter(Boolean))).map(sup => (
                     <option key={sup} value={sup!} style={{ background: "#1f2937", color: "white" }}>
                       {sup}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {bulkTargetMode === "category" && (
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
+                  Seleccionar Categoría
+                </label>
+                <select
+                  value={bulkSelectedCategory}
+                  onChange={(e) => setBulkSelectedCategory(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--glass-border)",
+                    background: "rgba(0,0,0,0.5)",
+                    color: "white",
+                    outline: "none",
+                    fontSize: "1rem"
+                  }}
+                >
+                  <option value="" style={{ background: "#1f2937", color: "white" }}>-- Selecciona una categoría --</option>
+                  {Array.from(new Set(allItems.map(i => i.category).filter(Boolean))).map(cat => (
+                    <option key={cat} value={cat!} style={{ background: "#1f2937", color: "white" }}>
+                      {cat}
                     </option>
                   ))}
                 </select>
