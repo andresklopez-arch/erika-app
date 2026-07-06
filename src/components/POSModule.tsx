@@ -1682,11 +1682,10 @@ export default function POSModule() {
       printWindow.document.write(html);
       printWindow.document.close();
       setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
-    } else if (job.type === "layaway") {
+      } else if (job.type === "layaway") {
       const { customer, items, finalTotal, downPayment } = job.data;
       const itemsHtml = items.map((item: any) => {
-        let p = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct/100) : item.price;
-        if (item.discountPct) p = p * (1 - item.discountPct / 100);
+        const p = getItemFinalPrice(item, wholesaleRules);
         return `
         <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
           <div style="flex: 2;">${item.qty}x ${item.name}</div>
