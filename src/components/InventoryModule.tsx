@@ -145,6 +145,9 @@ export default function InventoryModule() {
   const [bulkPromoEndAt, setBulkPromoEndAt] = useState<string>("");
   const [bulkTargetMode, setBulkTargetMode] = useState<"visible" | "supplier">("visible");
   const [bulkSelectedSupplier, setBulkSelectedSupplier] = useState<string>("");
+  const [auditHistoryItem, setAuditHistoryItem] = useState<InventoryItem | null>(null);
+  const [auditHistoryLogs, setAuditHistoryLogs] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
   const [editValue, setEditValue] = useState<string>("");
   const [hoveredCell, setHoveredCell] = useState<{ itemId: string; field: string } | null>(null);
   const [hoveredHeader, setHoveredHeader] = useState<string | null>(null);
