@@ -2325,22 +2325,40 @@ export default function InventoryModule() {
                       {item.cost > 0 ? ((item.price - item.cost) / item.cost * 100).toFixed(1) + "%" : "N/A"}
                     </td>
                     <td style={{ padding: "15px", textAlign: "center" }}>
-                      <button
-                        onClick={() => handleDeleteProduct(item.id, item.name)}
-                        title="Eliminar Producto"
-                        style={{
-                          background: "transparent",
-                          border: "1px solid #ef4444",
-                          color: "#ef4444",
-                          padding: "6px 12px",
-                          borderRadius: "6px",
-                          cursor: "pointer",
-                          fontWeight: "bold",
-                          fontSize: "0.85rem",
-                        }}
-                      >
-                        🗑️
-                      </button>
+                      <div style={{ display: "flex", gap: "5px", justifyContent: "center" }}>
+                        <button
+                          onClick={() => loadProductAuditHistory(item)}
+                          title="Ver historial de cambios de este producto"
+                          style={{
+                            background: "transparent",
+                            border: "1px solid var(--color-primary)",
+                            color: "var(--color-primary)",
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            fontWeight: "bold",
+                            fontSize: "0.85rem",
+                          }}
+                        >
+                          🔍 Historial
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProduct(item.id, item.name)}
+                          title="Eliminar Producto"
+                          style={{
+                            background: "transparent",
+                            border: "1px solid #ef4444",
+                            color: "#ef4444",
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            fontWeight: "bold",
+                            fontSize: "0.85rem",
+                          }}
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
