@@ -2943,8 +2943,8 @@ export default function InventoryModule() {
                 <option value="supplier" style={{ background: "#1f2937", color: "white" }}>
                   Todos los productos de un Proveedor
                 </option>
-                <option value="category" style={{ background: "#1f2937", color: "white" }}>
-                  Todos los productos de una Categoría
+                <option value="location" style={{ background: "#1f2937", color: "white" }}>
+                  Todos los productos de una Ubicación
                 </option>
               </select>
             </div>
@@ -2978,14 +2978,14 @@ export default function InventoryModule() {
               </div>
             )}
 
-            {bulkTargetMode === "category" && (
+            {bulkTargetMode === "location" && (
               <div style={{ marginBottom: "15px" }}>
                 <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
-                  Seleccionar Categoría
+                  Seleccionar Ubicación
                 </label>
                 <select
-                  value={bulkSelectedCategory}
-                  onChange={(e) => setBulkSelectedCategory(e.target.value)}
+                  value={bulkSelectedLocation}
+                  onChange={(e) => setBulkSelectedLocation(e.target.value)}
                   style={{
                     width: "100%",
                     padding: "10px 14px",
@@ -2997,10 +2997,10 @@ export default function InventoryModule() {
                     fontSize: "1rem"
                   }}
                 >
-                  <option value="" style={{ background: "#1f2937", color: "white" }}>-- Selecciona una categoría --</option>
-                  {Array.from(new Set(allItems.map(i => i.category).filter(Boolean))).map(cat => (
-                    <option key={cat} value={cat!} style={{ background: "#1f2937", color: "white" }}>
-                      {cat}
+                  <option value="" style={{ background: "#1f2937", color: "white" }}>-- Selecciona una ubicación --</option>
+                  {Array.from(new Set(allItems.map(i => i.location).filter(Boolean))).map(loc => (
+                    <option key={loc} value={loc!} style={{ background: "#1f2937", color: "white" }}>
+                      {loc}
                     </option>
                   ))}
                 </select>
