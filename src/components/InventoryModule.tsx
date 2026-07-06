@@ -686,6 +686,19 @@ export default function InventoryModule() {
     if (error) {
       alert("❌ Error al actualizar producto: " + error.message);
     } else {
+      // Log change to audit logs (Sugerencia 1)
+      if (originalItem) {
+        supabase.from("inventory_audit_logs").insert({
+          inventory_id: itemId,
+          field: field,
+          old_value: String(originalItem[field as keyof InventoryItem] ?? ""),
+          new_value: String(finalValue),
+          changed_by: currentUser?.name || "Administrador"
+        }).then(({ error: logErr }) => {
+          if (logErr) console.warn("Fallo al registrar bitácora de auditoría:", logErr);
+        });
+      }
+
       // Guardar cambio para el deshacer
       if (originalItem) {
         setLastManualChange({
