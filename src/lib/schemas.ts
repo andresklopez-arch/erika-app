@@ -10,6 +10,7 @@ export const InventoryItemSchema = z.object({
   minStock: z.preprocess((val) => Number(val) || 5, z.number()),
   supplier: z.string().optional().nullable().default(""),
   location: z.string().optional().nullable().default(""),
+  discount_pct: z.preprocess((val) => Number(val) || 0, z.number().default(0)),
 });
 
 export const CustomerSchema = z.object({
