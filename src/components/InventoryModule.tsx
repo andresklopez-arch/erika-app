@@ -455,7 +455,7 @@ export default function InventoryModule() {
           new_value: String(endVal || ""),
           changed_by: currentUser?.name || "Administrador",
         }
-      ]).then(({ error: logErr }) => {
+      ]).then(({ error: logErr }: any) => {
         if (logErr) console.warn("Fallo al registrar bitácora de auditoría:", logErr);
       });
 
