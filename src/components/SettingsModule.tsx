@@ -458,6 +458,8 @@ export default function SettingsModule() {
     }
   };
 
+  const savePrintSettings = async () => {
+    if (!checkAdmin()) return;
     const paddingNum = parseInt(printerPadding, 10);
     const validatedPadding = isNaN(paddingNum) ? "8" : String(Math.max(0, Math.min(50, paddingNum)));
     const success = await updateBusinessSettings({
