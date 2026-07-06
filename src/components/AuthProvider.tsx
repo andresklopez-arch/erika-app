@@ -133,6 +133,8 @@ export default function AuthProvider({
         printer_font_family: localStorage.getItem("ERIKA_PRINTER_FONT_FAMILY") || "monospace",
         printer_fields: localStorage.getItem("ERIKA_PRINTER_FIELDS") ? JSON.parse(localStorage.getItem("ERIKA_PRINTER_FIELDS")!) : ["name", "rfc", "phone", "address", "logo", "footer"],
         printer_footer_msg: localStorage.getItem("ERIKA_PRINTER_FOOTER_MSG") || "¡Gracias por su compra!",
+        printer_align: localStorage.getItem("ERIKA_PRINTER_ALIGN") || "center",
+        printer_padding: localStorage.getItem("ERIKA_PRINTER_PADDING") || "8",
         low_stock_threshold: Number(localStorage.getItem("ERIKA_LOW_STOCK_THRESHOLD")) || 5,
         max_cajero_discount_pct: Number(localStorage.getItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT")) || 5,
       };
@@ -168,6 +170,8 @@ export default function AuthProvider({
         printer_font_family: "monospace",
         printer_fields: ["name", "rfc", "phone", "address", "logo", "footer"],
         printer_footer_msg: "¡Gracias por su compra!",
+        printer_align: "center",
+        printer_padding: "8",
         low_stock_threshold: 5,
         max_cajero_discount_pct: 5,
       },
