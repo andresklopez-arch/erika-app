@@ -1014,10 +1014,7 @@ export default function POSModule() {
   const applyDiscount = async (mode: "percent" | "fixed") => {
     if (activeTicket.items.length === 0) return;
     const currentRawTotal = activeTicket.items.reduce((sum, item) => {
-      let p = item.price;
-      if (item.qty >= wholesaleRules.minQty) {
-        p = item.price * (1 - wholesaleRules.discountPct / 100);
-      }
+      const p = getItemFinalPrice(item, wholesaleRules);
       return sum + p * item.qty;
     }, 0);
     const totalCost = activeTicket.items.reduce(
@@ -1029,35 +1026,43 @@ export default function POSModule() {
     let proposedTotal = 0,
       finalPct = 0;
     if (mode === "percent") {
-      const pct = parseFloat(
-        window.prompt(
-          `Máx: ${((1 - safeMinimum / currentRawTotal) * 100).toFixed(1)}%\nIngresa %:`,
-        ) || "",
+      const maxPct = ((1 - safeMinimum / currentRawTotal) * 100);
+      const pctStr = window.prompt(
+        `Máx. Descuento Permitido: ${maxPct > 0 ? maxPct.toFixed(1) : 0}%\n\nIngresa el porcentaje de descuento (%):`,
+        ""
       );
-      if (isNaN(pct)) return;
+      if (pctStr === null) return;
+      const pct = parseFloat(pctStr) || 0;
+      if (isNaN(pct) || pct < 0 || pct > 100) return alert("Porcentaje no válido");
       proposedTotal = currentRawTotal * (1 - pct / 100);
       finalPct = pct;
     } else {
-      const fixedAmount = parseFloat(
-        window.prompt(
-          `Mínimo seguro: $${safeMinimum.toFixed(2)}\nTotal deseado:`,
-        ) || "",
+      const fixedAmountStr = window.prompt(
+        `Mínimo seguro con utilidad (5%): $${safeMinimum.toFixed(2)}\nTotal actual: $${currentRawTotal.toFixed(2)}\n\nIngresa el Total Deseado ($):`,
+        ""
       );
-      if (isNaN(fixedAmount)) return;
+      if (fixedAmountStr === null) return;
+      const fixedAmount = parseFloat(fixedAmountStr) || 0;
+      if (isNaN(fixedAmount) || fixedAmount <= 0) return alert("Monto no válido");
       proposedTotal = fixedAmount;
-      finalPct = (1 - fixedAmount / currentRawTotal) * 100;
+      finalPct = ((currentRawTotal - fixedAmount) / currentRawTotal) * 100;
     }
 
-    if (proposedTotal < safeMinimum)
+    if (proposedTotal < safeMinimum) {
       return alert(
-        `⚠️ SEGURO DE UTILIDAD\nLímite Mínimo: $${safeMinimum.toFixed(2)}`,
+        `⚠️ SEGURO DE UTILIDAD\nEl descuento excede el límite mínimo permitido de $${safeMinimum.toFixed(2)} (Costo + 5% de utilidad).`
       );
+    }
 
     if (finalPct > 5) {
       if (currentUser?.role !== "admin") {
-         const pin = window.prompt("⚠️ Descuento mayor al 5%. Requiere PIN de administrador:");
+         const pin = await getPinAsync(
+           "⚠️ AUTORIZACIÓN REQUERIDA",
+           `El descuento solicitado (${finalPct.toFixed(1)}%) supera el 5% permitido.\n\nIngresa el PIN de Administrador para autorizar:`
+         );
+         if (!pin) return;
          const { data: admin } = await supabase.from("users").select("*").eq("pin", pin).eq("role", "admin").single();
-         if (!admin) return alert("❌ PIN incorrecto o sin privilegios. Descuento denegado.");
+         if (!admin) return alert("❌ PIN incorrecto o sin privilegios de administrador. Descuento denegado.");
       }
     }
 
