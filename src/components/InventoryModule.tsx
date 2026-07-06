@@ -33,6 +33,15 @@ const getActiveDiscount = (item: any): number => {
   return item.discount_pct;
 };
 
+const isExpiringSoon = (endStr: string | null | undefined): boolean => {
+  if (!endStr) return false;
+  const now = new Date();
+  const end = new Date(endStr);
+  const diffMs = end.getTime() - now.getTime();
+  const diffHours = diffMs / (1000 * 60 * 60);
+  return diffHours > 0 && diffHours <= 24;
+};
+
 const highlightText = (text: string | undefined, query: string) => {
   if (!text) return "";
   if (!query.trim()) return text;
