@@ -963,8 +963,12 @@ export default function InventoryModule() {
               return;
             }
           }
-          setEditingCell({ itemId: item.id, field });
-          setEditValue(value);
+          if (field === "discount_pct") {
+            setEditingDiscountItem(item);
+          } else {
+            setEditingCell({ itemId: item.id, field });
+            setEditValue(value);
+          }
         }}
         onMouseEnter={() => setHoveredCell({ itemId: item.id, field })}
         onMouseLeave={() => setHoveredCell(null)}
