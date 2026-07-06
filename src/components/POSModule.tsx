@@ -824,7 +824,7 @@ export default function POSModule() {
        }
     }
 
-    const itemDiscountPct = invItem ? (invItem.discount_pct || 0) : 0;
+    const itemDiscountPct = invItem ? getActiveDiscount(invItem) : 0;
 
     // Client price history logic
     if (selectedCustomerId) {
