@@ -2762,25 +2762,63 @@ export default function POSModule() {
           </div>
 
           {selectedCustomerId && (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "-10px", marginBottom: "15px" }}>
-              <span style={{ fontSize: "0.85rem", opacity: 0.8 }}>
-                Cliente seleccionado
-              </span>
-              <button
-                type="button"
-                onClick={() => fetchCustomerHistory(selectedCustomerId)}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "#3b82f6",
-                  cursor: "pointer",
-                  fontSize: "0.85rem",
-                  textDecoration: "underline",
-                  padding: 0
-                }}
-              >
-                {isLoadingCustomerHistory ? "⌛ Cargando historial..." : "📅 Ver últimas compras"}
-              </button>
+            <div style={{ display: "flex", flexDirection: "column", gap: "5px", marginTop: "-10px", marginBottom: "15px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.85rem", opacity: 0.8 }}>
+                  Cliente seleccionado
+                </span>
+                <button
+                  type="button"
+                  onClick={() => fetchCustomerHistory(selectedCustomerId)}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "#3b82f6",
+                    cursor: "pointer",
+                    fontSize: "0.85rem",
+                    textDecoration: "underline",
+                    padding: 0
+                  }}
+                >
+                  {isLoadingCustomerHistory ? "⌛ Cargando historial..." : "📅 Ver últimas compras"}
+                </button>
+              </div>
+              {customerActiveStats && (customerActiveStats.layawaysCount > 0 || customerActiveStats.quotesCount > 0) && (
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "3px" }}>
+                  {customerActiveStats.layawaysCount > 0 && (
+                    <span 
+                      style={{ 
+                        background: "rgba(245, 158, 11, 0.15)", 
+                        border: "1px solid #f59e0b", 
+                        color: "#f59e0b", 
+                        fontSize: "0.75rem", 
+                        padding: "2px 6px", 
+                        borderRadius: "4px",
+                        fontWeight: "500" 
+                      }}
+                      title="Este cliente tiene apartados pendientes por liquidar"
+                    >
+                      📦 {customerActiveStats.layawaysCount} Apartado(s) pendiente(s)
+                    </span>
+                  )}
+                  {customerActiveStats.quotesCount > 0 && (
+                    <span 
+                      style={{ 
+                        background: "rgba(59, 130, 246, 0.15)", 
+                        border: "1px solid #3b82f6", 
+                        color: "#3b82f6", 
+                        fontSize: "0.75rem", 
+                        padding: "2px 6px", 
+                        borderRadius: "4px",
+                        fontWeight: "500" 
+                      }}
+                      title="Este cliente tiene cotizaciones activas sin concretar"
+                    >
+                      📄 {customerActiveStats.quotesCount} Cotización(es) activa(s)
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
