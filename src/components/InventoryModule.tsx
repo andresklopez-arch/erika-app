@@ -1669,6 +1669,27 @@ export default function InventoryModule() {
             )}
           </div>
 
+          {/* BOTÓN FILTRO DE DESCUENTOS */}
+          <button
+            onClick={() => setShowOnlyDiscounts(!showOnlyDiscounts)}
+            style={{
+              padding: "12px 15px",
+              borderRadius: "10px",
+              border: showOnlyDiscounts ? "1px solid var(--color-primary)" : "1px solid var(--glass-border)",
+              background: showOnlyDiscounts ? "rgba(244, 63, 94, 0.15)" : "rgba(0, 0, 0, 0.3)",
+              color: showOnlyDiscounts ? "var(--color-primary)" : "white",
+              fontSize: "0.9rem",
+              fontWeight: "bold",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              transition: "all 0.2s"
+            }}
+          >
+            🏷️ {showOnlyDiscounts ? "Ver Todos" : "Sólo con Descuento"}
+          </button>
+
           {/* FILTRO DE PROVEEDOR */}
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <select
