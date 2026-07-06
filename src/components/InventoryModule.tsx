@@ -2064,6 +2064,17 @@ export default function InventoryModule() {
                         {renderEditableCell(item, "price", "number", true, item.autoPriced ? "var(--color-secondary)" : "white", rowIndex)}
                       </div>
                     </td>
+                    <td style={{ padding: "15px" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        {renderEditableCell(item, "discount_pct", "number", false, (item.discount_pct || 0) > 0 ? "var(--color-primary)" : "white", rowIndex)}
+                      </div>
+                    </td>
                     <td style={{ padding: "15px", color: "var(--color-secondary)", fontWeight: "bold" }}>
                       {item.cost > 0 ? ((item.price - item.cost) / item.cost * 100).toFixed(1) + "%" : "N/A"}
                     </td>
