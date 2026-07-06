@@ -86,6 +86,7 @@ export interface InventoryItem {
   priceChanged?: "up" | "down";
   deleted?: boolean;
   deleted_at?: string | null;
+  discount_pct?: number;
 }
 
 export default function InventoryModule() {
@@ -111,6 +112,7 @@ export default function InventoryModule() {
 
   const [dbSuppliers, setDbSuppliers] = useState<string[]>([]);
   const [selectedSupplierFilter, setSelectedSupplierFilter] = useState<string>("");
+  const [showOnlyDiscounts, setShowOnlyDiscounts] = useState<boolean>(false);
   const [sortColumn, setSortColumn] = useState<string>("name");
   const [sortAscending, setSortAscending] = useState<boolean>(true);
   const [editingCell, setEditingCell] = useState<{ itemId: string; field: string } | null>(null);
@@ -1090,7 +1092,7 @@ export default function InventoryModule() {
       setPage(0);
       fetchInventory(0, debouncedSearchQuery, true, true);
     }
-  }, [mounted, debouncedSearchQuery, selectedSupplierFilter, sortColumn, sortAscending]);
+  }, [mounted, debouncedSearchQuery, selectedSupplierFilter, showOnlyDiscounts, sortColumn, sortAscending]);
 
   const loadNextPage = () => {
     if (isLoadingMore || !hasMore) return;
