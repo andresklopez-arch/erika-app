@@ -206,6 +206,7 @@ export default function POSModule() {
   const [transferPayAmount, setTransferPayAmount] = useState("");
   const [applyIva, setApplyIva] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [paymentReference, setPaymentReference] = useState("");
   const [receiptToPrint, setReceiptToPrint] = useState<any>(null);
   const [pendingOfflineCount, setPendingOfflineCount] = useState(0);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
@@ -1163,7 +1164,7 @@ export default function POSModule() {
     recognition.start();
   };
 
-  const handleCheckoutSubmit = async (selectedMethod: "efectivo" | "tarjeta" | "transferencia" | "mixto", cashAmt: number, cardAmt: number, transferAmt: number) => {
+  const handleCheckoutSubmit = async (selectedMethod: "efectivo" | "tarjeta" | "transferencia" | "mixto", cashAmt: number, cardAmt: number, transferAmt: number, reference: string) => {
     if (activeTicket.items.length === 0)
       return alert("El ticket está vacío.");
 
@@ -1248,7 +1249,7 @@ export default function POSModule() {
           );
         }
 
-        const descriptionText = `Venta Ticket #${activeTicket.id}${selectedCustomerId ? ` (Cliente ID: ${selectedCustomerId})` : ""} [METODO:${selectedMethod}] [CASH:${cashAmt}] [CARD:${cardAmt}] [TRANS:${transferAmt}] [COSTO:${totalCost.toFixed(2)}]`;
+        const descriptionText = `Venta Ticket #${activeTicket.id}${selectedCustomerId ? ` (Cliente ID: ${selectedCustomerId})` : ""} [METODO:${selectedMethod}] [CASH:${cashAmt}] [CARD:${cardAmt}] [TRANS:${transferAmt}] [COSTO:${totalCost.toFixed(2)}]${reference ? ` [REF:${reference}]` : ""}`;
 
         const { error } = await supabase
           .from("cash_transactions")
@@ -1286,13 +1287,26 @@ export default function POSModule() {
         
         // Registrar en quotes (completamente aislado)
         try {
-          const { data: quoteData } = await supabase.from("quotes").insert({
+          let insertObj = {
              customer_name: selectedCustomerId ? (customers.find(c => c.id === selectedCustomerId)?.name || "Venta Registrada") : "Venta Mostrador",
              customer_id: selectedCustomerId || null,
              items: activeTicket.items,
              total: totalAmt,
-             status: "ticket"
-          }).select("id").single();
+             status: "ticket",
+             notes: `Pago: ${selectedMethod.toUpperCase()}${reference ? ` (Ref: ${reference})` : ""}`
+          };
+          const { data: quoteData, error: quoteErr } = await supabase.from("quotes").insert(insertObj).select("id").single();
+
+          if (quoteErr) {
+             console.warn("Falla al insertar quotes con notes, reintentando con fallback...");
+             delete (insertObj as any).notes;
+             const fallback = await supabase.from("quotes").insert(insertObj).select("id").single();
+             if (fallback.data) {
+                realTicketId = fallback.data.id;
+             }
+          } else if (quoteData) {
+             realTicketId = quoteData.id;
+          }
 
           if (quoteData) {
              realTicketId = quoteData.id;
@@ -1394,6 +1408,7 @@ export default function POSModule() {
         if (sendWpp) {
           sendWhatsApp("receipt");
         }
+        setPaymentReference("");
       }
 
       // Update local state globalCatalog (Descontar existencias localmente)
@@ -3305,6 +3320,21 @@ export default function POSModule() {
               </div>
             )}
 
+            {paymentMethod !== "efectivo" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", background: "rgba(0,0,0,0.3)", padding: "15px", borderRadius: "8px", marginBottom: "20px" }}>
+                <label style={{ display: "block", marginBottom: "4px", fontSize: "0.85rem", color: "var(--color-secondary)", textAlign: "left" }}>
+                  📝 Referencia / Folio de Operación (Opcional):
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej. Últimos 4 dígitos o folio bancario..."
+                  value={paymentReference}
+                  onChange={e => setPaymentReference(e.target.value)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.5)", color: "white", border: "1px solid var(--glass-border)", fontSize: "0.95rem" }}
+                />
+              </div>
+            )}
+
             <button
               className="btn-primary"
               disabled={isProcessingPayment}
@@ -3320,7 +3350,7 @@ export default function POSModule() {
                   }
                 }
                 
-                handleCheckoutSubmit(paymentMethod === "mixto" ? "mixto" : paymentMethod as any, cash, card, transfer);
+                handleCheckoutSubmit(paymentMethod === "mixto" ? "mixto" : paymentMethod as any, cash, card, transfer, paymentReference);
               }}
               style={{
                 width: "100%",

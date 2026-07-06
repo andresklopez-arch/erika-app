@@ -75,6 +75,7 @@ export default function SettingsModule() {
   const [editPin, setEditPin] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editPermissions, setEditPermissions] = useState<Record<string, boolean>>({});
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const [isConnected, setIsConnected] = useState<boolean>(true);
   const [connectionType, setConnectionType] = useState<string>("system");
@@ -570,6 +571,7 @@ export default function SettingsModule() {
             reportes: false,
             configuracion: false
          });
+         setShowCreateModal(false);
          fetchUsers();
          alert("✅ Cajero/Usuario creado exitosamente.");
        } else {
@@ -900,77 +902,16 @@ export default function SettingsModule() {
               Crea cuentas de personal, define su rol (predeterminado o personalizado) y gestiona los permisos granulares de visibilidad para cada módulo.
             </p>
             
-            <div style={{ display: "flex", flexDirection: "column", gap: "15px", marginBottom: "20px" }}>
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                 <input 
-                   type="text" 
-                   placeholder="Nombre (ej. Juan)" 
-                   value={newUserName} 
-                   onChange={e => setNewUserName(e.target.value)} 
-                   style={{ flex: 1, minWidth: "150px", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }} 
-                 />
-                 <input 
-                   type="text" 
-                   placeholder="PIN (ej. 4321)" 
-                   value={newUserPin} 
-                   onChange={e => setNewUserPin(e.target.value)} 
-                   style={{ width: "120px", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }} 
-                 />
-                 <select 
-                   value={roleType} 
-                   onChange={e => handleRoleTypeChange(e.target.value)} 
-                   style={{ padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }}
-                 >
-                   <option value="cajero">Cajero</option>
-                   <option value="admin">Administrador</option>
-                   <option value="custom">Otro (Personalizado)</option>
-                 </select>
-              </div>
-
-              {roleType === "custom" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                  <label style={{ fontSize: "0.85rem", color: "var(--color-primary)" }}>Nombre del Rol Personalizado:</label>
-                  <input 
-                    type="text" 
-                    placeholder="ej. Supervisor, Vendedor, Contador" 
-                    value={customRoleName} 
-                    onChange={e => setCustomRoleName(e.target.value)} 
-                    style={{ padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--color-primary)" }} 
-                  />
-                </div>
-              )}
-
-              <div>
-                <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--color-secondary)" }}>
-                  Permisos de Visibilidad (Módulos):
-                </label>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "10px", background: "rgba(0,0,0,0.15)", padding: "12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.05)" }}>
-                  {[
-                    { key: "pos", label: "🛒 Punto de Venta" },
-                    { key: "dashboard", label: "📊 Dashboard" },
-                    { key: "caja", label: "💵 Arqueo de Caja" },
-                    { key: "servicios", label: "📅 Agenda de Servicios" },
-                    { key: "inventario", label: "📦 Almacén e Inventario" },
-                    { key: "reportes", label: "📈 Reportes e Inteligencia" },
-                    { key: "configuracion", label: "⚙️ Configuración" },
-                  ].map((mod) => (
-                    <label key={mod.key} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.85rem", color: "white" }} onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        checked={(newPermissions as any)[mod.key] || false}
-                        onChange={(e) => setNewPermissions({ ...newPermissions, [mod.key]: e.target.checked })}
-                      />
-                      {mod.label}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <button className="btn-primary" onClick={handleCreateUser} style={{ background: "#10b981", border: "none", padding: "12px" }}>
-                + Añadir Usuario / Personal
-              </button>
-            </div>
+            <button 
+              className="btn-primary animate-fade-in" 
+              onClick={() => {
+                if (!checkAdmin()) return;
+                setShowCreateModal(true);
+              }} 
+              style={{ background: "#10b981", border: "none", padding: "12px", width: "100%", fontWeight: "bold", fontSize: "1rem", marginBottom: "20px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+            >
+              ➕ Añadir Usuario / Personal
+            </button>
 
             <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "15px" }}>
               <thead>
@@ -1610,6 +1551,136 @@ export default function SettingsModule() {
               </button>
               <button
                 onClick={() => setEditingUser(null)}
+                style={{ flex: 1, padding: "10px", background: "transparent", border: "1px solid rgba(255,255,255,0.2)", color: "white", borderRadius: "6px", cursor: "pointer" }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCreateModal && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+          padding: "20px"
+        }}>
+          <div className="glass-panel animate-fade-in" style={{
+            width: "100%",
+            maxWidth: "500px",
+            padding: "25px",
+            border: "1px solid var(--color-secondary)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "15px"
+          }}>
+            <h3 style={{ margin: 0, color: "var(--color-secondary)", fontSize: "1.2rem", display: "flex", alignItems: "center", gap: "8px" }}>
+              👤 Añadir Nuevo Usuario / Personal
+            </h3>
+            
+            <div>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Nombre:</label>
+              <input
+                type="text"
+                placeholder="Nombre (ej. Juan)"
+                value={newUserName}
+                onChange={(e) => setNewUserName(e.target.value)}
+                style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>PIN (Visible):</label>
+              <input
+                type="text"
+                placeholder="PIN (ej. 4321)"
+                value={newUserPin}
+                onChange={(e) => setNewUserPin(e.target.value)}
+                style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)" }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Rol / Puesto:</label>
+              <select 
+                value={roleType} 
+                onChange={e => handleRoleTypeChange(e.target.value)} 
+                style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--glass-border)", marginBottom: roleType === "custom" ? "10px" : "0" }}
+              >
+                <option value="cajero">Cajero</option>
+                <option value="admin">Administrador</option>
+                <option value="custom">Otro (Personalizado)</option>
+              </select>
+              {roleType === "custom" && (
+                <input 
+                  type="text" 
+                  placeholder="ej. Supervisor, Vendedor, Contador" 
+                  value={customRoleName} 
+                  onChange={e => setCustomRoleName(e.target.value)} 
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", background: "rgba(0,0,0,0.3)", color: "white", border: "1px solid var(--color-primary)" }} 
+                />
+              )}
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--color-secondary)" }}>Permisos de Visibilidad (Módulos):</label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", background: "rgba(0,0,0,0.15)", padding: "10px", borderRadius: "6px" }}>
+                {[
+                  { key: "pos", label: "🛒 Punto de Venta" },
+                  { key: "dashboard", label: "📊 Dashboard" },
+                  { key: "caja", label: "💵 Arqueo de Caja" },
+                  { key: "servicios", label: "📅 Agenda de Servicios" },
+                  { key: "inventario", label: "📦 Almacén e Inventario" },
+                  { key: "reportes", label: "📈 Reportes e Inteligencia" },
+                  { key: "configuracion", label: "⚙️ Configuración" },
+                ].map((mod) => (
+                  <label key={mod.key} style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.85rem", color: "white" }}>
+                    <input
+                      type="checkbox"
+                      checked={newPermissions[mod.key] || false}
+                      onChange={(e) => setNewPermissions({ ...newPermissions, [mod.key]: e.target.checked })}
+                    />
+                    {mod.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", marginTop: "15px" }}>
+              <button
+                className="btn-primary"
+                onClick={handleCreateUser}
+                style={{ flex: 1, padding: "10px", background: "#10b981", border: "none" }}
+              >
+                💾 Guardar Usuario
+              </button>
+              <button
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setNewUserName("");
+                  setNewUserPin("");
+                  setCustomRoleName("");
+                  setRoleType("cajero");
+                  setNewPermissions({
+                    pos: true,
+                    dashboard: false,
+                    caja: true,
+                    servicios: false,
+                    inventario: false,
+                    reportes: false,
+                    configuracion: false
+                  });
+                }}
                 style={{ flex: 1, padding: "10px", background: "transparent", border: "1px solid rgba(255,255,255,0.2)", color: "white", borderRadius: "6px", cursor: "pointer" }}
               >
                 Cancelar
