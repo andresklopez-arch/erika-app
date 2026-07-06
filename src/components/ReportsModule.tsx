@@ -791,6 +791,7 @@ export default function ReportsModule() {
                 <th style={{ padding: "10px" }}>Valor Anterior</th>
                 <th style={{ padding: "10px" }}>Valor Nuevo</th>
                 <th style={{ padding: "10px" }}>Usuario</th>
+                <th style={{ padding: "10px", textAlign: "right" }}>Acción</th>
               </tr>
             </thead>
             <tbody>
@@ -823,11 +824,32 @@ export default function ReportsModule() {
                       {log.new_value || "-"}
                     </td>
                     <td style={{ padding: "10px" }}>{log.changed_by || "Sistema"}</td>
+                    <td style={{ padding: "10px", textAlign: "right" }}>
+                      {log.inventory_id && !log.changed_by?.includes("Reversión") && (
+                        <button
+                          onClick={() => handleRevertAuditLog(log)}
+                          title="Deshacer este cambio y restaurar el valor anterior"
+                          style={{
+                            background: "rgba(59, 130, 246, 0.15)",
+                            border: "1px solid #3b82f6",
+                            color: "#3b82f6",
+                            padding: "3px 8px",
+                            borderRadius: "5px",
+                            cursor: "pointer",
+                            fontSize: "0.8rem",
+                            fontWeight: "bold",
+                            transition: "all 0.15s"
+                          }}
+                        >
+                          ↩️ Revertir
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               {auditLogs.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ padding: "20px", textAlign: "center", color: "rgba(255,255,255,0.4)" }}>
+                  <td colSpan={7} style={{ padding: "20px", textAlign: "center", color: "rgba(255,255,255,0.4)" }}>
                     No hay registros de auditoría de inventario.
                   </td>
                 </tr>
