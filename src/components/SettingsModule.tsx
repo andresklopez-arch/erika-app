@@ -458,8 +458,8 @@ export default function SettingsModule() {
     }
   };
 
-  const savePrintSettings = async () => {
-    if (!checkAdmin()) return;
+    const paddingNum = parseInt(printerPadding, 10);
+    const validatedPadding = isNaN(paddingNum) ? "8" : String(Math.max(0, Math.min(50, paddingNum)));
     const success = await updateBusinessSettings({
       config: {
         printer_connected: isConnected,
@@ -471,7 +471,7 @@ export default function SettingsModule() {
         printer_fields: printerFields,
         printer_footer_msg: printerFooterMsg,
         printer_align: printerAlign,
-        printer_padding: printerPadding,
+        printer_padding: validatedPadding,
       }
     });
     if (success) {
@@ -1274,7 +1274,17 @@ export default function SettingsModule() {
                   min="0"
                   max="50"
                   value={printerPadding}
-                  onChange={(e) => setPrinterPadding(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "") {
+                      setPrinterPadding("");
+                      return;
+                    }
+                    const num = parseInt(val, 10);
+                    if (!isNaN(num)) {
+                      setPrinterPadding(String(Math.max(0, Math.min(50, num))));
+                    }
+                  }}
                   style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
                 />
               </div>
@@ -1334,6 +1344,95 @@ export default function SettingsModule() {
                 />
               </div>
             )}
+
+            {/* Live Preview of the Ticket */}
+            <div style={{ marginTop: "20px", borderTop: "1px dashed var(--glass-border)", paddingTop: "15px" }}>
+              <h4 style={{ fontSize: "0.95rem", fontWeight: "bold", marginBottom: "12px", color: "var(--color-primary)", display: "flex", alignItems: "center", gap: "8px" }}>
+                👁️ Vista Previa del Ticket (Alineación: {printerAlign === "center" ? "Centrado" : "Izquierda"}, Margen: {printerPadding || 0}mm)
+              </h4>
+              <div style={{ display: "flex", justifyContent: "center", background: "rgba(0,0,0,0.2)", padding: "15px", borderRadius: "8px", border: "1px solid var(--glass-border)" }}>
+                <div 
+                  style={{ 
+                    background: "white", 
+                    color: "black", 
+                    width: "100%", 
+                    maxWidth: printerPaperSize === "58mm" ? "200px" : "260px", 
+                    padding: `${printerPadding || 0}mm`, 
+                    boxSizing: "border-box", 
+                    fontFamily: printerFontFamily === "sans-serif" ? "sans-serif" : printerFontFamily === "serif" ? "serif" : "monospace",
+                    fontSize: printerFontSize === "small" ? "10px" : printerFontSize === "large" ? "13px" : "11px",
+                    textAlign: printerAlign as any,
+                    boxShadow: "0 4px 10px rgba(0,0,0,0.3)",
+                    borderRadius: "4px",
+                    transition: "all 0.15s ease"
+                  }}
+                >
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: printerAlign === "center" ? "center" : "flex-start", borderBottom: "1px dashed #000", paddingBottom: "6px", marginBottom: "8px" }}>
+                    {printerFields.includes("logo") && businessLogo && <img src={businessLogo} alt="Logo" style={{ maxHeight: "35px", marginBottom: "5px" }} />}
+                    {printerFields.includes("name") && <div style={{ fontWeight: "bold", fontSize: "1.1em" }}>{businessName || "Ferretería ERIKA"}</div>}
+                    {printerFields.includes("rfc") && businessRfc && <div>RFC: {businessRfc}</div>}
+                    {printerFields.includes("address") && businessAddress && <div style={{ fontSize: "0.9em", whiteSpace: "pre-line" }}>{businessAddress}</div>}
+                    {printerFields.includes("phone") && businessPhone && <div>Tel: {businessPhone}</div>}
+                    {printerFields.includes("email") && businessEmail && <div>Email: {businessEmail}</div>}
+                  </div>
+
+                  <div style={{ fontSize: "0.9em", marginBottom: "6px", textAlign: "left" }}>
+                    <strong>Ticket: #0001</strong><br />
+                    <span>Fecha: {new Date().toLocaleDateString()}</span><br />
+                    {printerFields.includes("seller") && <span>Atendido por: Administrador</span>}
+                  </div>
+
+                  {printerFields.includes("customer") && (
+                    <div style={{ background: "#f3f4f6", padding: "3px 6px", borderRadius: "3px", fontSize: "0.85em", marginBottom: "6px", border: "1px solid #e5e7eb", textAlign: "left" }}>
+                      <strong>Cliente:</strong> Público General
+                    </div>
+                  )}
+
+                  {printerFields.includes("payment_method") && (
+                    <div style={{ fontSize: "0.85em", marginBottom: "6px", textAlign: "left" }}>
+                      <strong>Método de Pago:</strong> EFECTIVO
+                    </div>
+                  )}
+
+                  {printerFields.includes("notes") && (
+                    <div style={{ background: "#f3f4f6", padding: "3px 6px", borderRadius: "3px", fontSize: "0.8em", marginBottom: "6px", border: "1px solid #e5e7eb", textAlign: "left" }}>
+                      <strong>Nota:</strong> Esta es una nota de prueba.
+                    </div>
+                  )}
+
+                  <div style={{ borderBottom: "1px dashed #000", paddingBottom: "4px", marginBottom: "4px", fontSize: "0.9em" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span>1x Producto Demo</span>
+                      <span>$100</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", fontSize: "1em" }}>
+                    <span>TOTAL:</span>
+                    <span>$100</span>
+                  </div>
+
+                  {printerFields.includes("warranty") && (
+                    <div style={{ fontSize: "0.8em", marginTop: "8px", opacity: 0.8, textAlign: "center" }}>
+                      🛡️ Garantía de 30 días contra defectos de fábrica.
+                    </div>
+                  )}
+
+                  {printerFields.includes("billing") && (
+                    <div style={{ fontSize: "0.8em", marginTop: "8px", textAlign: "center" }}>
+                      <strong>Auto-Facturación Express</strong><br />
+                      <span style={{ fontSize: "0.85em" }}>Entra a: erika-app.vercel.app/facturacion para facturar</span>
+                    </div>
+                  )}
+
+                  {printerFields.includes("footer") && printerFooterMsg && (
+                    <div style={{ marginTop: "8px", fontWeight: "bold", textAlign: "center" }}>
+                      {printerFooterMsg}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
 
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "10px" }}>
               <button

@@ -10,15 +10,27 @@ CREATE TABLE IF NOT EXISTS business_settings (
 -- Habilitar Row Level Security (RLS)
 ALTER TABLE business_settings ENABLE ROW LEVEL SECURITY;
 
--- Crear políticas para permitir lectura y escritura pública
+-- Crear políticas para permitir lectura y escritura segura
 CREATE POLICY "Permitir lectura pública de configuracion" ON business_settings
   FOR SELECT USING (true);
 
-CREATE POLICY "Permitir escritura pública de configuracion" ON business_settings
-  FOR INSERT WITH CHECK (true);
+CREATE POLICY "Permitir escritura solo a administradores" ON business_settings
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM users
+      WHERE users.id = auth.uid()
+        AND users.role = 'admin'
+    )
+  );
 
-CREATE POLICY "Permitir actualizacion pública de configuracion" ON business_settings
-  FOR UPDATE USING (true);
+CREATE POLICY "Permitir actualizacion solo a administradores" ON business_settings
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM users
+      WHERE users.id = auth.uid()
+        AND users.role = 'admin'
+    )
+  );
 
 -- Insertar registro por defecto si no existe
 INSERT INTO business_settings (id, target_utility, monthly_goals, config)
