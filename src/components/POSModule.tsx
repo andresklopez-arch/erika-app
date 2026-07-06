@@ -3098,7 +3098,7 @@ export default function POSModule() {
         style={{ 
           padding: `${marginPadding}mm`, 
           fontFamily: "monospace", 
-          maxWidth: paperSize === "58mm" ? "58mm" : "80mm", 
+          maxWidth: (previewConfig.printer_paper_size || "80mm") === "58mm" ? "58mm" : "80mm", 
           margin: "0 auto",
           textAlign: marginAlign as any,
           boxSizing: "border-box"
