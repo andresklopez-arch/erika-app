@@ -2946,6 +2946,7 @@ export default function POSModule() {
                 if (error)
                   return alert("Error al guardar cotización: " + error.message);
                 alert("✅ Cotización guardada con éxito.");
+                setSelectedCustomerId("");
                 setTickets(
                   tickets.map((t) =>
                     t.id === activeTicketId
