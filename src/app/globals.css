@@ -340,14 +340,18 @@ body {
   #printable-receipt {
     display: block !important;
     position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    left: var(--receipt-margin-left, 0) !important;
+    top: var(--receipt-margin-top, 0) !important;
+    right: var(--receipt-margin-right, auto) !important;
+    bottom: var(--receipt-margin-bottom, auto) !important;
     width: var(--receipt-width, 80mm) !important;
     max-width: var(--receipt-width, 80mm) !important;
     background: white !important;
     color: black !important;
     padding: 0 !important;
     margin: 0 !important;
+    transform: var(--receipt-zoom, scale(1)) !important;
+    transform-origin: top left !important;
   }
 }
 
