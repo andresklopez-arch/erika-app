@@ -1310,6 +1310,69 @@ export default function SettingsModule() {
               </div>
             </div>
 
+            {/* Parámetros de alineación avanzada (Desfases y Zoom) */}
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "5px" }}>
+              <div style={{ flex: 1, minWidth: "120px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.85rem", color: "var(--color-text)" }}>Margen Izq. (mm):</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={printerMarginLeft}
+                  onChange={(e) => setPrinterMarginLeft(e.target.value)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
+                />
+              </div>
+
+              <div style={{ flex: 1, minWidth: "120px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.85rem", color: "var(--color-text)" }}>Margen Der. (mm):</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={printerMarginRight}
+                  onChange={(e) => setPrinterMarginRight(e.target.value)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
+                />
+              </div>
+
+              <div style={{ flex: 1, minWidth: "120px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.85rem", color: "var(--color-text)" }}>Margen Sup. (mm):</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={printerMarginTop}
+                  onChange={(e) => setPrinterMarginTop(e.target.value)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
+                />
+              </div>
+
+              <div style={{ flex: 1, minWidth: "120px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.85rem", color: "var(--color-text)" }}>Margen Inf. (mm):</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={printerMarginBottom}
+                  onChange={(e) => setPrinterMarginBottom(e.target.value)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
+                />
+              </div>
+
+              <div style={{ flex: 1, minWidth: "120px" }}>
+                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.85rem", color: "var(--color-text)" }}>Zoom / Escala (%):</label>
+                <input
+                  type="number"
+                  min="30"
+                  max="200"
+                  value={printerZoom}
+                  onChange={(e) => setPrinterZoom(e.target.value)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
+                />
+              </div>
+            </div>
+
             {/* Fields to Print */}
             <div>
               <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--color-secondary)" }}>
@@ -1384,7 +1447,13 @@ export default function SettingsModule() {
                     textAlign: printerAlign as any,
                     boxShadow: "0 4px 10px rgba(0,0,0,0.3)",
                     borderRadius: "4px",
-                    transition: "all 0.15s ease"
+                    transition: "all 0.15s ease",
+                    marginLeft: `${printerMarginLeft || 0}px`,
+                    marginRight: `${printerMarginRight || 0}px`,
+                    marginTop: `${printerMarginTop || 0}px`,
+                    marginBottom: `${printerMarginBottom || 0}px`,
+                    transform: `scale(${parseFloat(printerZoom || "100") / 100})`,
+                    transformOrigin: "top center"
                   }}
                 >
                   <div style={{ display: "flex", flexDirection: "column", alignItems: printerAlign === "center" ? "center" : "flex-start", borderBottom: "1px dashed #000", paddingBottom: "6px", marginBottom: "8px" }}>
