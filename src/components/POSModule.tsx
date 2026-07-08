@@ -3216,11 +3216,13 @@ export default function POSModule() {
         style={{ 
           padding: `${marginPadding}mm`, 
           fontFamily: "monospace", 
+          width: (previewConfig.printer_paper_size || "80mm") === "58mm" ? "58mm" : "80mm",
           maxWidth: (previewConfig.printer_paper_size || "80mm") === "58mm" ? "58mm" : "80mm", 
-          margin: "0 auto",
+          margin: "0",
           textAlign: marginAlign as any,
-          boxSizing: "border-box"
-        }}
+          boxSizing: "border-box",
+          "--receipt-width": (previewConfig.printer_paper_size || "80mm") === "58mm" ? "58mm" : "80mm"
+        } as any}
       >
         <div style={{ display: "flex", flexDirection: "column", alignItems: marginAlign === "center" ? "center" : "flex-start", borderBottom: "1px dashed #000", paddingBottom: "10px", marginBottom: "15px", textAlign: marginAlign as any }}>
           {showPreviewLogo && <img src={businessProfile.logo} alt="Logo" style={{ maxHeight: "60px", marginBottom: "10px" }} />}
