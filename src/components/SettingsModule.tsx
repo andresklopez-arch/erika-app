@@ -36,6 +36,11 @@ export default function SettingsModule() {
   const [printerFooterMsg, setPrinterFooterMsg] = useState("¡Gracias por su compra!");
   const [printerAlign, setPrinterAlign] = useState("center");
   const [printerPadding, setPrinterPadding] = useState("8");
+  const [printerMarginLeft, setPrinterMarginLeft] = useState("0");
+  const [printerMarginRight, setPrinterMarginRight] = useState("0");
+  const [printerMarginTop, setPrinterMarginTop] = useState("0");
+  const [printerMarginBottom, setPrinterMarginBottom] = useState("0");
+  const [printerZoom, setPrinterZoom] = useState("100");
   
   // Printer scan simulation states
   const [isScanning, setIsScanning] = useState(false);
@@ -335,6 +340,11 @@ export default function SettingsModule() {
       setPrinterFooterMsg(businessSettings.config.printer_footer_msg || "¡Gracias por su compra!");
       setPrinterAlign(businessSettings.config.printer_align || "center");
       setPrinterPadding(businessSettings.config.printer_padding || "8");
+      setPrinterMarginLeft(businessSettings.config.printer_margin_left || "0");
+      setPrinterMarginRight(businessSettings.config.printer_margin_right || "0");
+      setPrinterMarginTop(businessSettings.config.printer_margin_top || "0");
+      setPrinterMarginBottom(businessSettings.config.printer_margin_bottom || "0");
+      setPrinterZoom(businessSettings.config.printer_zoom || "100");
       setLowStockThreshold(String(businessSettings.config.low_stock_threshold || 5));
       setMaxCajeroDiscountPct(String(businessSettings.config.max_cajero_discount_pct || 5));
       /* eslint-enable react-hooks/set-state-in-effect */
@@ -477,6 +487,11 @@ export default function SettingsModule() {
         printer_footer_msg: sanitizedFooterMsg,
         printer_align: printerAlign,
         printer_padding: validatedPadding,
+        printer_margin_left: printerMarginLeft,
+        printer_margin_right: printerMarginRight,
+        printer_margin_top: printerMarginTop,
+        printer_margin_bottom: printerMarginBottom,
+        printer_zoom: printerZoom,
       }
     });
     if (success) {
