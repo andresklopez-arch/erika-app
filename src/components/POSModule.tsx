@@ -3221,7 +3221,12 @@ export default function POSModule() {
           margin: "0",
           textAlign: marginAlign as any,
           boxSizing: "border-box",
-          "--receipt-width": (previewConfig.printer_paper_size || "80mm") === "58mm" ? "58mm" : "80mm"
+          "--receipt-width": (previewConfig.printer_paper_size || "80mm") === "58mm" ? "58mm" : "80mm",
+          "--receipt-margin-left": previewConfig.printer_margin_left ? `${previewConfig.printer_margin_left}mm` : "0mm",
+          "--receipt-margin-right": previewConfig.printer_margin_right ? `${previewConfig.printer_margin_right}mm` : "0mm",
+          "--receipt-margin-top": previewConfig.printer_margin_top ? `${previewConfig.printer_margin_top}mm` : "0mm",
+          "--receipt-margin-bottom": previewConfig.printer_margin_bottom ? `${previewConfig.printer_margin_bottom}mm` : "0mm",
+          "--receipt-zoom": previewConfig.printer_zoom ? `scale(${parseFloat(previewConfig.printer_zoom) / 100})` : "scale(1)"
         } as any}
       >
         <div style={{ display: "flex", flexDirection: "column", alignItems: marginAlign === "center" ? "center" : "flex-start", borderBottom: "1px dashed #000", paddingBottom: "10px", marginBottom: "15px", textAlign: marginAlign as any }}>
