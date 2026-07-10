@@ -2165,7 +2165,20 @@ export default function POSModule() {
       setPendingPrintJob(job);
       return;
     }
-    executePrintWindow(job);
+    
+    executePrintWindow({ ...job, isCopy: false });
+    
+    const config = businessSettings?.config || {};
+    const doubleCopyEnabled = config.printer_double_copy_layaway_credit || false;
+    
+    const isLayaway = job.type === "layaway";
+    const isCredit = job.type === "ticket" && job.data?.paymentMethod === "credito";
+    
+    if (doubleCopyEnabled && (isLayaway || isCredit)) {
+      setTimeout(() => {
+        executePrintWindow({ ...job, isCopy: true });
+      }, 1500);
+    }
   };
 
   const handleReconnectPrinter = async (type?: string) => {
