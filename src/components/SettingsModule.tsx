@@ -5,7 +5,7 @@ import { useAuth } from "./AuthProvider";
 import { LoggerService } from "../services/loggerService";
 
 export default function SettingsModule() {
-  const { currentUser, businessSettings, updateBusinessSettings } = useAuth();
+  const { currentUser, businessSettings, updateBusinessSettings, bleCharacteristic, setBleCharacteristic } = useAuth();
 
   const checkAdmin = () => {
     if (currentUser?.role !== "admin") {
