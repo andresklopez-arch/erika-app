@@ -724,6 +724,11 @@ export default function POSModule() {
     let barcodeTimeout: any = null;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "F10") {
+        e.preventDefault();
+        handleReconnectPrinter();
+        return;
+      }
       if (e.key === "F4") {
         e.preventDefault();
         applyDiscount("percent");
