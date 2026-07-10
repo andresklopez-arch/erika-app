@@ -1560,6 +1560,10 @@ export default function POSModule() {
       write([0x1d, 0x21, on ? 0x11 : 0x00]);
     };
     
+    const paperSize = config.printer_paper_size || "80mm";
+    const maxCols = paperSize === "58mm" ? 30 : 42;
+    const divider = "-".repeat(maxCols) + "\n";
+    
     const fields = config.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"];
     const showName = fields.includes("name");
     const showRfc = fields.includes("rfc") && (businessProfile.rfc || config.business_rfc);
@@ -1588,7 +1592,7 @@ export default function POSModule() {
     if (showPhone) writeText(`Tel: ${businessProfile.phone || config.business_phone}\n`);
     if (showEmail) writeText(`Email: ${businessProfile.email || config.business_email}\n`);
     
-    writeText("--------------------------------\n");
+    writeText(divider);
     
     if (job.type === "ticket") {
       const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = job.data;
@@ -1604,18 +1608,43 @@ export default function POSModule() {
       if (showCustomer && job.data.customerName) writeText(`Cliente: ${job.data.customerName}\n`);
       if (showPaymentMethod && paymentMethod) writeText(`Metodo de Pago: ${paymentMethod.toUpperCase()}\n`);
       
-      writeText("--------------------------------\n");
+      writeText(divider);
       
       items.forEach((item: any) => {
         const p = getItemFinalPrice(item, wholesaleRules);
-        const itemTotal = Math.round(p * item.qty);
-        writeText(`${item.qty}x ${item.name}\n`);
-        setAlign(2);
-        writeText(`$${itemTotal}\n`);
-        setAlign(0);
+        const itemTotal = `$${Math.round(p * item.qty)}`;
+        const nameText = `${item.qty}x ${item.name}`;
+        
+        const wrappedLines: string[] = [];
+        let currentLine = "";
+        const words = nameText.split(" ");
+        words.forEach((word: string) => {
+          if ((currentLine + word).length <= maxCols - 10) {
+            currentLine += (currentLine ? " " : "") + word;
+          } else {
+            wrappedLines.push(currentLine);
+            currentLine = word;
+          }
+        });
+        if (currentLine) wrappedLines.push(currentLine);
+        
+        for (let idx = 0; idx < wrappedLines.length - 1; idx++) {
+          writeText(wrappedLines[idx] + "\n");
+        }
+        
+        const lastLine = wrappedLines[wrappedLines.length - 1] || "";
+        const spacesNeeded = maxCols - lastLine.length - itemTotal.length;
+        if (spacesNeeded > 0) {
+          writeText(lastLine + " ".repeat(spacesNeeded) + itemTotal + "\n");
+        } else {
+          writeText(lastLine + "\n");
+          setAlign(2);
+          writeText(itemTotal + "\n");
+          setAlign(0);
+        }
       });
       
-      writeText("--------------------------------\n");
+      writeText(divider);
       
       const subtotalVal = items.reduce((sum: number, i: any) => {
          const p = getItemFinalPrice(i, wholesaleRules);
@@ -1638,7 +1667,7 @@ export default function POSModule() {
       setBold(false);
       setAlign(0);
       
-      writeText("--------------------------------\n");
+      writeText(divider);
       
       if (showWarranty) {
         setAlign(1);
@@ -1662,17 +1691,43 @@ export default function POSModule() {
       if (showSeller) writeText(`Atendido por: ${currentUser?.name || "Venta Mostrador"}\n`);
       writeText(`Cliente: ${customer?.name || "Desconocido"}\n`);
       
-      writeText("--------------------------------\n");
+      writeText(divider);
       
       items.forEach((item: any) => {
         const p = getItemFinalPrice(item, wholesaleRules);
-        writeText(`${item.qty}x ${item.name}\n`);
-        setAlign(2);
-        writeText(`$${Math.round(p * item.qty)}\n`);
-        setAlign(0);
+        const itemTotal = `$${Math.round(p * item.qty)}`;
+        const nameText = `${item.qty}x ${item.name}`;
+        
+        const wrappedLines: string[] = [];
+        let currentLine = "";
+        const words = nameText.split(" ");
+        words.forEach((word: string) => {
+          if ((currentLine + word).length <= maxCols - 10) {
+            currentLine += (currentLine ? " " : "") + word;
+          } else {
+            wrappedLines.push(currentLine);
+            currentLine = word;
+          }
+        });
+        if (currentLine) wrappedLines.push(currentLine);
+        
+        for (let idx = 0; idx < wrappedLines.length - 1; idx++) {
+          writeText(wrappedLines[idx] + "\n");
+        }
+        
+        const lastLine = wrappedLines[wrappedLines.length - 1] || "";
+        const spacesNeeded = maxCols - lastLine.length - itemTotal.length;
+        if (spacesNeeded > 0) {
+          writeText(lastLine + " ".repeat(spacesNeeded) + itemTotal + "\n");
+        } else {
+          writeText(lastLine + "\n");
+          setAlign(2);
+          writeText(itemTotal + "\n");
+          setAlign(0);
+        }
       });
       
-      writeText("--------------------------------\n");
+      writeText(divider);
       
       const subtotalVal = items.reduce((sum: number, i: any) => {
          const p = getItemFinalPrice(i, wholesaleRules);
