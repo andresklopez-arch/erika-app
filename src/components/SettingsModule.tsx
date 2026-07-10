@@ -524,8 +524,65 @@ export default function SettingsModule() {
             "0000ae30-0000-1000-8000-00805f9b34fb"
           ]
         });
-        setPrinterName(device.name || "Impresora Bluetooth");
-        alert(`✅ Vinculado con éxito a: ${device.name || "Dispositivo Bluetooth"}\n\nErika recordará este dispositivo al imprimir.`);
+        
+        console.log("Conectando a GATT server de:", device.name);
+        const server = await device.gatt?.connect();
+        if (server) {
+          const services = await server.getPrimaryServices();
+          let char = null;
+          for (const service of services) {
+            const characteristics = await service.getCharacteristics();
+            for (const characteristic of characteristics) {
+              if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
+                char = characteristic;
+                break;
+              }
+            }
+            if (char) break;
+          }
+          
+          if (char) {
+            const name = device.name || "MPT-II";
+            setPrinterName(name);
+            setScannedPrinters([name]);
+            
+            const success = await updateBusinessSettings({
+              config: {
+                printer_connected: true,
+                printer_type: "bluetooth",
+                printer_name: name,
+                printer_paper_size: printerPaperSize,
+                printer_font_size: printerFontSize,
+                printer_font_family: printerFontFamily,
+                printer_fields: printerFields,
+                printer_footer_msg: printerFooterMsg,
+                printer_align: printerAlign,
+                printer_padding: printerPadding,
+                printer_margin_left: printerMarginLeft,
+                printer_margin_right: printerMarginRight,
+                printer_margin_top: printerMarginTop,
+                printer_margin_bottom: printerMarginBottom,
+                printer_zoom: printerZoom,
+                printer_double_copy_layaway_credit: printerDoubleCopy,
+              }
+            });
+            
+            if (success) {
+              localStorage.setItem("ERIKA_PRINTER_CONNECTED", "true");
+              localStorage.setItem("ERIKA_PRINTER_TYPE", "bluetooth");
+              localStorage.setItem("ERIKA_PRINTER_NAME", name);
+              localStorage.setItem("ERIKA_PRINTER_SILENT_KIOSK", silentKiosk ? "true" : "false");
+              localStorage.setItem("ERIKA_PRINTER_DOUBLE_COPY", printerDoubleCopy ? "true" : "false");
+              alert(`✅ Impresora "${name}" vinculada y guardada como predeterminada con éxito.`);
+            } else {
+              alert(`✅ Vinculado a "${name}" localmente, pero hubo un error al guardar en la nube.`);
+            }
+          } else {
+            alert("⚠️ Dispositivo vinculado, pero no se encontró un canal de escritura de impresión térmica.");
+          }
+        } else {
+          alert("No se pudo conectar a la impresora.");
+        }
       } catch (err: any) {
         console.error(err);
         if (err.name !== "NotFoundError") {
