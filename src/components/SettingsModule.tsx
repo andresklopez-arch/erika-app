@@ -1541,44 +1541,65 @@ export default function SettingsModule() {
             </div>
           </div>
 
-          <div className="glass-panel" style={{ border: "1px solid #ef4444" }}>
+          <div className="glass-panel" style={{ border: "1px solid var(--color-primary)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-              <h3 style={{ margin: 0, color: "#ef4444", display: "flex", alignItems: "center", gap: "10px" }}>
-                🚨 Registro de Errores del Sistema
+              <h3 style={{ margin: 0, color: "var(--color-primary)", display: "flex", alignItems: "center", gap: "10px" }}>
+                📋 Bitácora de Auditoría y Eventos del Sistema
               </h3>
               <button 
                 onClick={fetchErrorLogs} 
                 disabled={isLoadingLogs}
-                style={{ background: "rgba(239,68,68,0.2)", color: "#ef4444", border: "1px solid #ef4444", padding: "5px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "0.8rem" }}
+                style={{ background: "rgba(16,185,129,0.15)", color: "var(--color-primary)", border: "1px solid var(--color-primary)", padding: "5px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "0.8rem" }}
               >
                 {isLoadingLogs ? "Cargando..." : "🔄 Actualizar"}
               </button>
             </div>
             
+            <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", marginTop: "-10px", marginBottom: "15px" }}>
+              Historial de actividades del personal, cambios en el inventario e incidencias técnicas registradas en el sistema.
+            </p>
+
             <div style={{ maxHeight: "250px", overflowY: "auto", background: "rgba(0,0,0,0.2)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.05)" }}>
               {errorLogs.length === 0 ? (
                 <p style={{ textAlign: "center", padding: "20px", color: "rgba(255,255,255,0.5)", fontSize: "0.9rem", margin: 0 }}>
-                  No hay errores registrados recientemente. ¡Todo funciona perfecto!
+                  No hay registros ni incidencias recientes en la bitácora. ¡Todo funciona perfecto!
                 </p>
               ) : (
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
                   <thead style={{ background: "rgba(255,255,255,0.05)", position: "sticky", top: 0 }}>
                     <tr>
                       <th style={{ padding: "8px", textAlign: "left", color: "rgba(255,255,255,0.7)" }}>Fecha</th>
-                      <th style={{ padding: "8px", textAlign: "left", color: "rgba(255,255,255,0.7)" }}>Módulo</th>
+                      <th style={{ padding: "8px", textAlign: "left", color: "rgba(255,255,255,0.7)" }}>Tipo / Módulo</th>
                       <th style={{ padding: "8px", textAlign: "left", color: "rgba(255,255,255,0.7)" }}>Usuario</th>
-                      <th style={{ padding: "8px", textAlign: "left", color: "rgba(255,255,255,0.7)" }}>Detalle del Error</th>
+                      <th style={{ padding: "8px", textAlign: "left", color: "rgba(255,255,255,0.7)" }}>Detalle de la Actividad</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {errorLogs.map(log => (
-                      <tr key={log.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                        <td style={{ padding: "8px", color: "white" }}>{new Date(log.created_at).toLocaleString()}</td>
-                        <td style={{ padding: "8px", color: "#3b82f6", fontWeight: "bold" }}>{log.module}</td>
-                        <td style={{ padding: "8px", color: "white" }}>{log.usuario}</td>
-                        <td style={{ padding: "8px", color: "#ef4444", fontFamily: "monospace", wordBreak: "break-all" }}>{log.error_details}</td>
-                      </tr>
-                    ))}
+                    {errorLogs.map(log => {
+                      const isAudit = log.module === "Inventario_Edicion_Manual" || log.error_details.toLowerCase().includes("edición inline") || log.error_details.toLowerCase().includes("cambió");
+                      return (
+                        <tr key={log.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                          <td style={{ padding: "8px", color: "white", whiteSpace: "nowrap" }}>{new Date(log.created_at).toLocaleString()}</td>
+                          <td style={{ padding: "8px" }}>
+                            <span style={{ 
+                              padding: "2px 6px", 
+                              borderRadius: "4px", 
+                              fontSize: "0.75rem", 
+                              fontWeight: "bold",
+                              background: isAudit ? "rgba(59,130,246,0.15)" : "rgba(239,68,68,0.15)",
+                              color: isAudit ? "#60a5fa" : "#f87171",
+                              border: isAudit ? "1px solid rgba(59,130,246,0.3)" : "1px solid rgba(239,68,68,0.3)"
+                            }}>
+                              {isAudit ? "📋 Auditoría" : "🚨 Incidencia"}
+                            </span>
+                          </td>
+                          <td style={{ padding: "8px", color: "white" }}>{log.usuario}</td>
+                          <td style={{ padding: "8px", color: isAudit ? "rgba(255,255,255,0.9)" : "#f87171", fontFamily: isAudit ? "inherit" : "monospace", wordBreak: "break-all" }}>
+                            {log.error_details}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
