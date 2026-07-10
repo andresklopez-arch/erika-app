@@ -1272,7 +1272,7 @@ export default function POSModule() {
 
   const ensureBleConnection = async (): Promise<boolean> => {
     if (printerConnectionType !== "bluetooth") return true;
-    if (bleCharacteristic) return true;
+    if (bleCharacteristic && bleCharacteristic.service?.device?.gatt?.connected) return true;
 
     try {
       if (typeof window === "undefined" || !(navigator as any).bluetooth) {
