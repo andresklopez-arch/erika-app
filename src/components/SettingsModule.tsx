@@ -595,8 +595,16 @@ export default function SettingsModule() {
             } else {
               alert(`✅ Vinculado a "${name}" localmente, pero hubo un error al guardar en la nube.`);
             }
+            try {
+              device.gatt?.disconnect();
+            } catch (discErr) {
+              console.warn("Error al desconectar tras vinculación:", discErr);
+            }
           } else {
             alert("⚠️ Dispositivo vinculado, pero no se encontró un canal de escritura de impresión térmica.");
+            try {
+              device.gatt?.disconnect();
+            } catch (discErr) {}
           }
         } else {
           alert("No se pudo conectar a la impresora.");
