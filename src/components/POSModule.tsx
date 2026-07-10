@@ -1957,6 +1957,10 @@ export default function POSModule() {
     const printWindow = window.open("", "_blank", `width=${paperSize === "58mm" ? 300 : 400},height=500`);
     if (!printWindow) return;
 
+    const copyLabelHtml = job.isCopy 
+      ? `<div style="text-align:center; font-weight:bold; border: 2px dashed #000; padding: 6px; margin-bottom: 12px; font-size: 0.9em; background: #eee;">*** COPIA PARA EL NEGOCIO ***</div>`
+      : "";
+
     if (job.type === "ticket") {
       const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = job.data;
       const itemsHtml = items.map((i: any) => {
@@ -1998,6 +2002,7 @@ export default function POSModule() {
           </head>
           <body>
             <div style="text-align: ${marginAlign}; width: 100%;">
+              ${copyLabelHtml}
               ${showLogo ? `<div class="center"><img src="${businessProfile.logo || config.business_logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
               ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name || config.business_name || "FERRETERÍA ERIKA"}</div>` : ""}
               ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc || config.business_rfc}</div>` : ""}
@@ -2108,6 +2113,7 @@ export default function POSModule() {
           </head>
           <body>
             <div style="text-align: ${marginAlign}; width: 100%;">
+              ${copyLabelHtml}
               ${showLogo ? `<div class="center"><img src="${businessProfile.logo || config.business_logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
               ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name || config.business_name || "FERRETERÍA ERIKA"}</div>` : ""}
               ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc || config.business_rfc}</div>` : ""}
