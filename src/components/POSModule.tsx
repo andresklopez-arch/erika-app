@@ -1351,11 +1351,13 @@ export default function POSModule() {
     if (activeTicket.items.length === 0)
       return alert("El ticket está vacío.");
 
+    let shouldPrint = true;
     if (printerConnectionType === "bluetooth") {
       const connected = await ensureBleConnection();
       if (!connected) {
         const proceed = confirm("⚠️ No se pudo conectar a la impresora Bluetooth. ¿Deseas guardar la venta de todos modos sin imprimir?");
         if (!proceed) return;
+        shouldPrint = false;
       }
     }
 
@@ -1584,20 +1586,22 @@ export default function POSModule() {
         );
 
         // Impresión (completamente aislado)
-        try {
-          triggerPrint({
-            type: "ticket",
-            data: {
-              realTicketId,
-              items: [...activeTicket.items],
-              finalTotal: totalAmt,
-              paymentMethod: selectedMethod,
-              discountPct: activeTicket.discountPct || 0,
-              applyIva: applyIva
-            }
-          });
-        } catch (printErr) {
-          console.error("Error al disparar la impresion:", printErr);
+        if (shouldPrint) {
+          try {
+            triggerPrint({
+              type: "ticket",
+              data: {
+                realTicketId,
+                items: [...activeTicket.items],
+                finalTotal: totalAmt,
+                paymentMethod: selectedMethod,
+                discountPct: activeTicket.discountPct || 0,
+                applyIva: applyIva
+              }
+            });
+          } catch (printErr) {
+            console.error("Error al disparar la impresion:", printErr);
+          }
         }
 
         // WhatsApp option (Sugerencia 3)
