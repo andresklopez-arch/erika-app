@@ -2379,8 +2379,12 @@ export default function POSModule() {
                 onClick={() => setShowPrinterModal(true)}
                 className="btn-primary"
                 style={{
-                  background: isPrinterConnected ? "rgba(16, 185, 129, 0.15)" : "rgba(244, 63, 94, 0.15)",
-                  border: isPrinterConnected ? "1px solid var(--color-secondary)" : "1px solid var(--color-primary)",
+                  background: printerConnectionType === "bluetooth"
+                    ? (bleCharacteristic ? "rgba(59, 130, 246, 0.15)" : "rgba(244, 63, 94, 0.15)")
+                    : (isPrinterConnected ? "rgba(16, 185, 129, 0.15)" : "rgba(244, 63, 94, 0.15)"),
+                  border: printerConnectionType === "bluetooth"
+                    ? (bleCharacteristic ? "1px solid #3b82f6" : "1px solid var(--color-primary)")
+                    : (isPrinterConnected ? "1px solid var(--color-secondary)" : "1px solid var(--color-primary)"),
                   padding: "6px 12px",
                   fontSize: "0.85rem",
                   display: "flex",
@@ -2388,8 +2392,16 @@ export default function POSModule() {
                   gap: "6px",
                 }}
               >
-                <span>{isPrinterConnected ? "🟢" : "🔴"}</span>
-                <span>{isPrinterConnected ? `Impresora Lista${silentKiosk ? " (Kiosco ⚡)" : ""}` : "Impresora Off"}</span>
+                <span>
+                  {printerConnectionType === "bluetooth"
+                    ? (bleCharacteristic ? "🔵" : "⚪")
+                    : (isPrinterConnected ? "🟢" : "🔴")}
+                </span>
+                <span>
+                  {printerConnectionType === "bluetooth"
+                    ? (bleCharacteristic ? "Bluetooth Listo" : "Bluetooth Off")
+                    : (isPrinterConnected ? `Impresora Lista${silentKiosk ? " (Kiosco ⚡)" : ""}` : "Impresora Off")}
+                </span>
               </button>
               <button
                 onClick={() => setShowScanner(true)}
