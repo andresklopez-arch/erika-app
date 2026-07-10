@@ -94,6 +94,7 @@ export default function SettingsModule() {
     }
     return false;
   });
+  const [printerDoubleCopy, setPrinterDoubleCopy] = useState<boolean>(false);
 
   interface ErrorLogItem {
     id: string;
@@ -345,6 +346,7 @@ export default function SettingsModule() {
       setPrinterMarginTop(businessSettings.config.printer_margin_top || "0");
       setPrinterMarginBottom(businessSettings.config.printer_margin_bottom || "0");
       setPrinterZoom(businessSettings.config.printer_zoom || "100");
+      setPrinterDoubleCopy(businessSettings.config.printer_double_copy_layaway_credit || false);
       setLowStockThreshold(String(businessSettings.config.low_stock_threshold || 5));
       setMaxCajeroDiscountPct(String(businessSettings.config.max_cajero_discount_pct || 5));
       /* eslint-enable react-hooks/set-state-in-effect */
@@ -492,10 +494,12 @@ export default function SettingsModule() {
         printer_margin_top: printerMarginTop,
         printer_margin_bottom: printerMarginBottom,
         printer_zoom: printerZoom,
+        printer_double_copy_layaway_credit: printerDoubleCopy,
       }
     });
     if (success) {
       localStorage.setItem("ERIKA_PRINTER_SILENT_KIOSK", silentKiosk ? "true" : "false");
+      localStorage.setItem("ERIKA_PRINTER_DOUBLE_COPY", printerDoubleCopy ? "true" : "false");
       alert("✅ Configuración de Impresión guardada exitosamente.");
     }
   };
@@ -1211,6 +1215,19 @@ export default function SettingsModule() {
                 </div>
               </div>
             )}
+
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "5px", background: "rgba(255,255,255,0.05)", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)" }}>
+              <input
+                type="checkbox"
+                id="printer-double-copy-checkbox"
+                checked={printerDoubleCopy}
+                onChange={(e) => setPrinterDoubleCopy(e.target.checked)}
+                style={{ width: "18px", height: "18px", cursor: "pointer" }}
+              />
+              <label htmlFor="printer-double-copy-checkbox" style={{ fontSize: "0.9rem", cursor: "pointer", userSelect: "none", color: "white" }}>
+                <strong>Doble copia para Apartados y Crédito</strong> (Imprime automáticamente un segundo ticket de copia para el negocio).
+              </label>
+            </div>
 
             {connectionType === "system" && (
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "5px", background: "rgba(255,255,255,0.05)", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)" }}>
