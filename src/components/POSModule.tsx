@@ -152,7 +152,7 @@ const renderHighlightedName = (name: string, query: string) => {
 };
 
 export default function POSModule() {
-  const { currentUser, businessSettings } = useAuth();
+  const { currentUser, businessSettings, bleCharacteristic, setBleCharacteristic } = useAuth();
   const businessProfile = useBusinessProfile();
   const [globalCatalog, setGlobalCatalog] = useState<any[]>([]);
   const [offlinePendingCount, setOfflinePendingCount] = useState(0);
@@ -503,7 +503,6 @@ export default function POSModule() {
     return false;
   });
   const [pendingPrintJob, setPendingPrintJob] = useState<any>(null);
-  const [bleCharacteristic, setBleCharacteristic] = useState<any>(null);
   const [showPrinterModal, setShowPrinterModal] = useState<boolean>(false);
   const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
