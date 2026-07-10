@@ -1463,13 +1463,20 @@ export default function SettingsModule() {
                   </button>
                 </div>
                 {printerName && (
-                  <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "5px" }}>
+                  <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "10px" }}>
                     <div style={{ fontSize: "0.85rem", color: "#34d399", fontWeight: "bold" }}>
                       Dispositivo Activo: 🟢 {printerName}
                     </div>
                     <div style={{ fontSize: "0.8rem", color: "#34d399", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)", padding: "6px 10px", borderRadius: "4px" }}>
                       ✔️ Impresora Lista y Conectada (Canal de escritura verificado)
                     </div>
+                    <button
+                      onClick={handleTestPrint}
+                      className="btn-primary"
+                      style={{ padding: "8px 12px", fontSize: "0.8rem", background: "rgba(59, 130, 246, 0.2)", border: "1px solid #3b82f6", color: "white", borderRadius: "6px", width: "100%", fontWeight: "bold" }}
+                    >
+                      📄 Enviar Ticket de Prueba
+                    </button>
                   </div>
                 )}
               </div>
