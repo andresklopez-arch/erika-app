@@ -636,11 +636,17 @@ export default function SettingsModule() {
         }
         
         let device;
-        if ((navigator as any).bluetooth.getDevices) {
-          const devices = await (navigator as any).bluetooth.getDevices();
-          if (devices.length > 0) {
-            device = devices[0];
-          }
+        if (bleCharacteristic && bleCharacteristic.service?.device?.gatt?.connected) {
+          device = bleCharacteristic.service.device;
+        }
+
+        if (!device && (navigator as any).bluetooth.getDevices) {
+          try {
+            const devices = await (navigator as any).bluetooth.getDevices();
+            if (devices.length > 0) {
+              device = devices[0];
+            }
+          } catch (e) {}
         }
         
         if (!device) {
