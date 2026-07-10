@@ -504,12 +504,12 @@ export default function SettingsModule() {
     if (!checkAdmin()) return;
     if (connectionType === "bluetooth") {
       try {
-        if (typeof window === "undefined" || !navigator.bluetooth) {
+        if (typeof window === "undefined" || !(navigator as any).bluetooth) {
           alert("Su navegador o sistema no soporta Web Bluetooth. Asegúrese de usar Google Chrome y tener el Bluetooth encendido.");
           return;
         }
         setIsScanning(true);
-        const device = await navigator.bluetooth.requestDevice({
+        const device = await (navigator as any).bluetooth.requestDevice({
           acceptAllDevices: true,
           optionalServices: [
             "000018f0-0000-1000-8000-00805f9b34fb",
