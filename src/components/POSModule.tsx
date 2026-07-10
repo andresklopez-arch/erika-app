@@ -1600,6 +1600,14 @@ export default function POSModule() {
     const maxCols = paperSize === "58mm" ? 30 : 42;
     const divider = "-".repeat(maxCols) + "\n";
     
+    if (job.isCopy) {
+      setAlign(1);
+      setBold(true);
+      writeText("*** COPIA PARA EL NEGOCIO ***\n");
+      setBold(false);
+      writeText(divider);
+    }
+    
     const fields = config.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"];
     const showName = fields.includes("name");
     const showRfc = fields.includes("rfc") && (businessProfile.rfc || config.business_rfc);
