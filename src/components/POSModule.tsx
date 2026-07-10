@@ -1999,6 +1999,16 @@ export default function POSModule() {
             await new Promise(resolve => setTimeout(resolve, 20));
           }
           console.log("✅ Impresión Bluetooth directa completada.");
+          await new Promise(resolve => setTimeout(resolve, 500));
+          try {
+            if (char.service?.device?.gatt?.connected) {
+              char.service.device.gatt.disconnect();
+              console.log("GATT desconectado con éxito tras imprimir.");
+            }
+          } catch (discErr) {
+            console.warn("Fallo al desconectar GATT tras imprimir:", discErr);
+          }
+          setBleCharacteristic(null);
         } catch (err: any) {
           console.error("Error al imprimir por Bluetooth:", err);
           if (err.name !== "NotFoundError") {
