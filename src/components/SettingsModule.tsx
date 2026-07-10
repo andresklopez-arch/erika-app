@@ -732,6 +732,10 @@ export default function SettingsModule() {
           }
           await new Promise(r => setTimeout(r, 20));
         }
+        await new Promise(r => setTimeout(r, 500));
+        try {
+          device.gatt?.disconnect();
+        } catch (discErr) {}
         alert("✅ Ticket de prueba enviado a la impresora.");
       } catch (err: any) {
         console.error(err);
