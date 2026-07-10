@@ -285,6 +285,8 @@ export default function CajaModule() {
     });
     
     alert(`✅ Caja Cerrada. ${discrepancy !== 0 ? `\n⚠️ DESCUADRE DETECTADO: $${discrepancy.toFixed(2)}` : '\n✅ Caja Cuadrada Perfectamente.'}`);
+  };
+
   const printCorteTicket = async () => {
     if (!ticketData) return;
     const type = localStorage.getItem("ERIKA_PRINTER_TYPE") || "system";
