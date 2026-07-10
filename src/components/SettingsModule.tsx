@@ -1307,6 +1307,19 @@ export default function SettingsModule() {
               </label>
             </div>
 
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "5px", background: "rgba(255,255,255,0.05)", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)" }}>
+              <input
+                type="checkbox"
+                id="printer-enable-autocut-checkbox"
+                checked={printerEnableAutocut}
+                onChange={(e) => setPrinterEnableAutocut(e.target.checked)}
+                style={{ width: "18px", height: "18px", cursor: "pointer" }}
+              />
+              <label htmlFor="printer-enable-autocut-checkbox" style={{ fontSize: "0.9rem", cursor: "pointer", userSelect: "none", color: "white" }}>
+                <strong>Corte de Papel Automático</strong> (Envía el comando de corte al final del ticket. Desactívelo para impresoras portátiles como la MPT-II para evitar ruidos de navaja).
+              </label>
+            </div>
+
             {connectionType === "system" && (
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "5px", background: "rgba(255,255,255,0.05)", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)" }}>
                 <input
