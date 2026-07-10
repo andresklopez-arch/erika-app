@@ -1175,6 +1175,34 @@ export default function SettingsModule() {
               </div>
             </div>
 
+            {(connectionType === "bluetooth" || connectionType === "wifi") && (
+              <div style={{ 
+                background: "rgba(59,130,246,0.1)", 
+                border: "1px solid rgba(59,130,246,0.25)", 
+                borderRadius: "8px", 
+                padding: "15px", 
+                color: "#93c5fd",
+                fontSize: "0.85rem",
+                lineHeight: "1.5"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "bold", marginBottom: "8px" }}>
+                  ℹ️ Guía para conectar su Impresora Física {connectionType === "bluetooth" ? "Bluetooth" : "WiFi"}
+                </div>
+                <div style={{ color: "rgba(255,255,255,0.85)" }}>
+                  Para usar su impresora térmica inalámbrica de forma real en Erika:
+                  <ol style={{ margin: "8px 0 8px 20px", padding: 0 }}>
+                    <li>Conecte o empareje su impresora térmica en la configuración de su computadora (Windows).</li>
+                    <li>Verifique que aparezca en el panel de control de Windows como impresora activa.</li>
+                    <li>Seleccione la opción de Conexión: <strong>"Sistema / Navegador (USB/Red)"</strong> arriba en este menú.</li>
+                    <li>Al cobrar en el POS, el navegador abrirá el diálogo de impresión nativo donde podrá elegir su impresora y se imprimirá con los márgenes y escala que haya configurado.</li>
+                  </ol>
+                  <span style={{ fontSize: "0.8rem", color: "#93c5fd" }}>
+                    * La opción directa "Bluetooth/WiFi (Simulado)" es para demostración, ya que los navegadores bloquean la conexión directa de hardware por seguridad.
+                  </span>
+                </div>
+              </div>
+            )}
+
             {connectionType === "system" && (
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "5px", background: "rgba(255,255,255,0.05)", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)" }}>
                 <input
@@ -1221,7 +1249,7 @@ export default function SettingsModule() {
                         key={idx}
                         onClick={() => {
                           setPrinterName(printer);
-                          alert(`✅ Conectado a la impresora: ${printer}`);
+                          alert(`✅ Conectado al simulador de impresora: ${printer}.\n\nNota: Para usar tu impresora física real (Bluetooth/WiFi), agrégala en la configuración de Windows y selecciona la opción "Sistema / Navegador" como método de conexión.`);
                         }}
                         style={{
                           padding: "8px 12px",
