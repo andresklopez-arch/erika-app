@@ -2253,17 +2253,24 @@ export default function POSModule() {
         const server = await device.gatt?.connect();
         if (server) {
           const services = await server.getPrimaryServices();
-          let char = null;
+          let allCharacteristics: any[] = [];
           for (const service of services) {
-            const characteristics = await service.getCharacteristics();
-            for (const characteristic of characteristics) {
-              if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
-                char = characteristic;
-                break;
-              }
+            try {
+              const characteristics = await service.getCharacteristics();
+              allCharacteristics.push(...characteristics);
+            } catch (e) {
+              console.warn("Error al leer características:", e);
             }
-            if (char) break;
           }
+          const writeChars = allCharacteristics.filter(c => c.properties.write || c.properties.writeWithoutResponse);
+          const KNOWN_PATTERNS = ["e7e2", "ae01", "ae02", "18f1", "2af1", "4954"];
+          let char = writeChars.find(c => {
+            const uuidLower = c.uuid.toLowerCase();
+            return KNOWN_PATTERNS.some(pat => uuidLower.includes(pat));
+          });
+          if (!char) char = writeChars.find(c => c.properties.writeWithoutResponse);
+          if (!char) char = writeChars[0];
+
           if (char) {
             setBleCharacteristic(char);
           }
