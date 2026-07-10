@@ -1271,9 +1271,93 @@ export default function POSModule() {
     recognition.start();
   };
 
+  const ensureBleConnection = async (): Promise<boolean> => {
+    if (printerConnectionType !== "bluetooth") return true;
+    if (bleCharacteristic) return true;
+
+    try {
+      if (typeof window === "undefined" || !(navigator as any).bluetooth) {
+        alert("Su navegador no soporta Web Bluetooth. Asegúrese de usar Google Chrome.");
+        return false;
+      }
+
+      let device;
+      if ((navigator as any).bluetooth.getDevices) {
+        try {
+          const devices = await (navigator as any).bluetooth.getDevices();
+          if (devices.length > 0) {
+            device = devices[0];
+            console.log("ensureBleConnection: usando getDevices pre-vinculado:", device.name);
+          }
+        } catch (err) {
+          console.warn("ensureBleConnection: getDevices falló:", err);
+        }
+      }
+
+      if (!device) {
+        console.log("ensureBleConnection: solicitando requestDevice...");
+        device = await (navigator as any).bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [
+            "000018f0-0000-1000-8000-00805f9b34fb",
+            "0000e7e1-0000-1000-8000-00805f9b34fb",
+            "0000ae30-0000-1000-8000-00805f9b34fb"
+          ]
+        });
+      }
+
+      console.log("ensureBleConnection: conectando a GATT de:", device.name);
+      const server = await device.gatt?.connect();
+      if (!server) throw new Error("No se pudo conectar al GATT server");
+
+      const services = await server.getPrimaryServices();
+      let allCharacteristics: any[] = [];
+      for (const service of services) {
+        try {
+          const characteristics = await service.getCharacteristics();
+          allCharacteristics.push(...characteristics);
+        } catch (e) {
+          console.warn("Error al leer características:", e);
+        }
+      }
+      
+      const writeChars = allCharacteristics.filter(c => c.properties.write || c.properties.writeWithoutResponse);
+      const KNOWN_PATTERNS = ["e7e2", "ae01", "ae02", "18f1", "2af1", "4954"];
+      let char = writeChars.find(c => {
+        const uuidLower = c.uuid.toLowerCase();
+        return KNOWN_PATTERNS.some(pat => uuidLower.includes(pat));
+      });
+      if (!char) char = writeChars.find(c => c.properties.writeWithoutResponse);
+      if (!char) char = writeChars[0];
+
+      if (char) {
+        setBleCharacteristic(char);
+        console.log("ensureBleConnection: conexión exitosa, característica fijada:", char.uuid);
+        return true;
+      } else {
+        alert("⚠️ No se encontró un canal de escritura de impresión térmica.");
+        return false;
+      }
+    } catch (err: any) {
+      console.error("ensureBleConnection error:", err);
+      if (err.name !== "NotFoundError") {
+        alert("❌ Error al conectar la impresora Bluetooth: " + err.message);
+      }
+      return false;
+    }
+  };
+
   const handleCheckoutSubmit = async (selectedMethod: "efectivo" | "tarjeta" | "transferencia" | "mixto", cashAmt: number, cardAmt: number, transferAmt: number, reference: string) => {
     if (activeTicket.items.length === 0)
       return alert("El ticket está vacío.");
+
+    if (printerConnectionType === "bluetooth") {
+      const connected = await ensureBleConnection();
+      if (!connected) {
+        const proceed = confirm("⚠️ No se pudo conectar a la impresora Bluetooth. ¿Deseas guardar la venta de todos modos sin imprimir?");
+        if (!proceed) return;
+      }
+    }
 
     const totalAmt = finalTotal;
     setIsProcessingPayment(true);
@@ -1551,68 +1635,6 @@ export default function POSModule() {
     } finally {
       setIsProcessingPayment(false);
     }
-  };
-
-  const handleConfirmPaymentClick = async (
-    selectedMethod: "efectivo" | "tarjeta" | "transferencia" | "mixto",
-    cashAmt: number,
-    cardAmt: number,
-    transferAmt: number,
-    reference: string
-  ) => {
-    if (printerConnectionType === "bluetooth" && !bleCharacteristic) {
-      try {
-        let device;
-        if (typeof window !== "undefined" && (navigator as any).bluetooth?.getDevices) {
-          const devices = await (navigator as any).bluetooth.getDevices();
-          if (devices.length > 0) {
-            device = devices[0];
-          }
-        }
-        
-        if (!device) {
-          device = await (navigator as any).bluetooth.requestDevice({
-            acceptAllDevices: true,
-            optionalServices: [
-              "000018f0-0000-1000-8000-00805f9b34fb",
-              "0000e7e1-0000-1000-8000-00805f9b34fb",
-              "0000ae30-0000-1000-8000-00805f9b34fb"
-            ]
-          });
-        }
-        
-        const server = await device.gatt?.connect();
-        if (server) {
-          const services = await server.getPrimaryServices();
-          let allCharacteristics: any[] = [];
-          for (const service of services) {
-            try {
-              const characteristics = await service.getCharacteristics();
-              allCharacteristics.push(...characteristics);
-            } catch (e) {}
-          }
-          const writeChars = allCharacteristics.filter(c => c.properties.write || c.properties.writeWithoutResponse);
-          const KNOWN_PATTERNS = ["e7e2", "ae01", "ae02", "18f1", "2af1", "4954"];
-          let char = writeChars.find(c => {
-            const uuidLower = c.uuid.toLowerCase();
-            return KNOWN_PATTERNS.some(pat => uuidLower.includes(pat));
-          });
-          if (!char) char = writeChars.find(c => c.properties.writeWithoutResponse);
-          if (!char) char = writeChars[0];
-          
-          if (char) {
-            setBleCharacteristic(char);
-          }
-        }
-      } catch (err: any) {
-        console.warn("Fallo al pre-conectar Bluetooth en confirmación de pago:", err);
-        if (err.name !== "NotFoundError") {
-          alert("Aviso: No se pudo enlazar la impresora Bluetooth. La venta se registrará pero el ticket podría no imprimirse automáticamente.");
-        }
-      }
-    }
-    
-    await handleCheckoutSubmit(selectedMethod, cashAmt, cardAmt, transferAmt, reference);
   };
 
   const getCrossSellSuggestions = () => {
