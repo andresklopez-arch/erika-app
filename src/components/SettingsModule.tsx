@@ -1214,12 +1214,12 @@ export default function SettingsModule() {
               </div>
             )}
 
-            {/* Bluetooth/WiFi Scan block */}
-            {(connectionType === "bluetooth" || connectionType === "wifi") && (
+            {/* Bluetooth Scan block */}
+            {connectionType === "bluetooth" && (
               <div style={{ background: "rgba(0,0,0,0.2)", padding: "12px", borderRadius: "8px", border: "1px dashed var(--color-secondary)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontSize: "0.85rem", fontWeight: "bold" }}>
-                    Búsqueda de Dispositivos ({connectionType.toUpperCase()}):
+                    Vinculación Inalámbrica:
                   </span>
                   <button
                     onClick={handleScanPrinters}
@@ -1227,42 +1227,12 @@ export default function SettingsModule() {
                     className="btn-primary"
                     style={{ padding: "6px 12px", fontSize: "0.8rem", background: "var(--color-secondary)", border: "none", color: "black" }}
                   >
-                    {isScanning ? "⏳ Buscando..." : "🔍 Buscar Impresoras"}
+                    {isScanning ? "⏳ Buscando..." : "🔍 Vincular Impresora"}
                   </button>
                 </div>
-
-                {isScanning && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px", justifyContent: "center" }}>
-                    <div className="spinner" style={{ width: "20px", height: "20px", border: "2px solid rgba(255,255,255,0.1)", borderTop: "2px solid var(--color-secondary)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                    <span style={{ fontSize: "0.85rem", color: "var(--color-secondary)" }}>Escaneando redes cercanas...</span>
-                  </div>
-                )}
-
-                {!isScanning && scannedPrinters.length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "5px", marginTop: "10px" }}>
-                    {scannedPrinters.map((printer, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() => {
-                          setPrinterName(printer);
-                          alert(`✅ Conectado al simulador de impresora: ${printer}.\n\nNota: Para usar tu impresora física real (Bluetooth/WiFi), agrégala en la configuración de Windows y selecciona la opción "Sistema / Navegador" como método de conexión.`);
-                        }}
-                        style={{
-                          padding: "8px 12px",
-                          background: printerName === printer ? "rgba(16, 185, 129, 0.15)" : "rgba(255,255,255,0.05)",
-                          border: printerName === printer ? "1px solid var(--color-primary)" : "1px solid transparent",
-                          borderRadius: "6px",
-                          cursor: "pointer",
-                          fontSize: "0.85rem",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center"
-                        }}
-                      >
-                        <span>{printer}</span>
-                        {printerName === printer && <span style={{ color: "var(--color-primary)", fontWeight: "bold" }}>Conectado 🟢</span>}
-                      </div>
-                    ))}
+                {printerName && (
+                  <div style={{ marginTop: "10px", fontSize: "0.85rem", color: "var(--color-primary)", fontWeight: "bold" }}>
+                    Dispositivo Activo: 🟢 {printerName}
                   </div>
                 )}
               </div>
