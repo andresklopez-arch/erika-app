@@ -1156,9 +1156,8 @@ export default function SettingsModule() {
                   onChange={(e) => setConnectionType(e.target.value)}
                   style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
                 >
-                  <option value="system">Sistema / Navegador (USB/Red/Bluetooth/WiFi)</option>
-                  <option value="bluetooth">Bluetooth (Demostración Simulada)</option>
-                  <option value="wifi">WiFi (Demostración Simulada)</option>
+                  <option value="system">Sistema / Navegador (USB/Red/WiFi)</option>
+                  <option value="bluetooth">Bluetooth Directo (Sin Controlador - Web BLE)</option>
                 </select>
               </div>
 
@@ -1175,7 +1174,7 @@ export default function SettingsModule() {
               </div>
             </div>
 
-            {(connectionType === "bluetooth" || connectionType === "wifi") && (
+            {connectionType === "bluetooth" && (
               <div style={{ 
                 background: "rgba(59,130,246,0.1)", 
                 border: "1px solid rgba(59,130,246,0.25)", 
@@ -1186,19 +1185,16 @@ export default function SettingsModule() {
                 lineHeight: "1.5"
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "bold", marginBottom: "8px" }}>
-                  ℹ️ Guía para conectar su Impresora Física {connectionType === "bluetooth" ? "Bluetooth" : "WiFi"}
+                  🛜 Conexión Directa Bluetooth (Sin Controlador)
                 </div>
                 <div style={{ color: "rgba(255,255,255,0.85)" }}>
-                  Para usar su impresora térmica inalámbrica de forma real en Erika:
+                  Erika se conectará directamente a su impresora Bluetooth mediante las herramientas inalámbricas del navegador (GATT BLE), similar a conectar audífonos.
                   <ol style={{ margin: "8px 0 8px 20px", padding: 0 }}>
-                    <li>Conecte o empareje su impresora térmica en la configuración de su computadora (Windows).</li>
-                    <li>Verifique que aparezca en el panel de control de Windows como impresora activa.</li>
-                    <li>Seleccione la opción de Conexión: <strong>"Sistema / Navegador (USB/Red)"</strong> arriba en este menú.</li>
-                    <li>Al cobrar en el POS, el navegador abrirá el diálogo de impresión nativo donde podrá elegir su impresora y se imprimirá con los márgenes y escala que haya configurado.</li>
+                    <li>Encienda el Bluetooth de su computadora e impresora.</li>
+                    <li>Haga clic en el botón <strong>"Vincular Impresora"</strong> de abajo.</li>
+                    <li>Seleccione su impresora (ej: <code>MPT-II</code>) en la ventana flotante de Chrome y haga clic en <strong>Vincular</strong>.</li>
+                    <li>¡Eso es todo! Erika enviará los tickets de forma inalámbrica directa sin diálogos de impresión y sin requerir drivers de Windows.</li>
                   </ol>
-                  <span style={{ fontSize: "0.8rem", color: "#93c5fd" }}>
-                    * La opción directa "Bluetooth/WiFi (Simulado)" es para demostración, ya que los navegadores bloquean la conexión directa de hardware por seguridad.
-                  </span>
                 </div>
               </div>
             )}
