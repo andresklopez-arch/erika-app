@@ -3700,6 +3700,9 @@ export default function POSModule() {
                 >
                   🖥️ Impresora del Sistema (Navegador)
                 </button>
+                <p style={{ fontSize: "0.75rem", opacity: 0.7, color: "#93c5fd", marginTop: "-5px", textAlign: "center" }}>
+                  💡 Soporta cualquier impresora (USB, Bluetooth, WiFi o Red) agregada en Windows.
+                </p>
               </div>
             )}
 
