@@ -1854,16 +1854,24 @@ export default function POSModule() {
             if (!server) throw new Error("No se pudo conectar al GATT server");
             
             const services = await server.getPrimaryServices();
+            let allCharacteristics: any[] = [];
             for (const service of services) {
-              const characteristics = await service.getCharacteristics();
-              for (const characteristic of characteristics) {
-                if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
-                  char = characteristic;
-                  break;
-                }
+              try {
+                const characteristics = await service.getCharacteristics();
+                allCharacteristics.push(...characteristics);
+              } catch (e) {
+                console.warn("Error al leer características:", e);
               }
-              if (char) break;
             }
+            const writeChars = allCharacteristics.filter(c => c.properties.write || c.properties.writeWithoutResponse);
+            const KNOWN_PATTERNS = ["e7e2", "ae01", "ae02", "18f1", "2af1", "4954"];
+            char = writeChars.find(c => {
+              const uuidLower = c.uuid.toLowerCase();
+              return KNOWN_PATTERNS.some(pat => uuidLower.includes(pat));
+            });
+            if (!char) char = writeChars.find(c => c.properties.writeWithoutResponse);
+            if (!char) char = writeChars[0];
+
             if (!char) throw new Error("No se encontró una característica de escritura en el dispositivo.");
             setBleCharacteristic(char);
           }
@@ -1873,7 +1881,18 @@ export default function POSModule() {
           const chunkSize = 20;
           for (let i = 0; i < bytes.length; i += chunkSize) {
             const chunk = bytes.slice(i, i + chunkSize);
-            await char.writeValueWithoutResponse(chunk);
+            try {
+              if (char.properties.writeWithoutResponse) {
+                await char.writeValueWithoutResponse(chunk);
+              } else if (char.properties.write) {
+                await char.writeValueWithResponse(chunk);
+              } else {
+                await char.writeValue(chunk);
+              }
+            } catch (writeErr) {
+              console.warn("Fallo al escribir sin respuesta, reintentando con writeValue estándar:", writeErr);
+              await char.writeValue(chunk);
+            }
             await new Promise(resolve => setTimeout(resolve, 20));
           }
           console.log("✅ Impresión Bluetooth directa completada.");
