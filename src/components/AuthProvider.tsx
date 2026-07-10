@@ -57,6 +57,7 @@ const AuthContext = createContext<AuthContextType>({
       printer_zoom: "100",
       printer_double_copy_layaway_credit: false,
       printer_ble_chunk_size: 20,
+      printer_enable_autocut: true,
       low_stock_threshold: 5,
       max_cajero_discount_pct: 5,
     },
@@ -149,6 +150,7 @@ export default function AuthProvider({
         printer_zoom: localStorage.getItem("ERIKA_PRINTER_ZOOM") || "100",
         printer_double_copy_layaway_credit: localStorage.getItem("ERIKA_PRINTER_DOUBLE_COPY") === "true",
         printer_ble_chunk_size: Number(localStorage.getItem("ERIKA_PRINTER_BLE_CHUNK_SIZE")) || 20,
+        printer_enable_autocut: localStorage.getItem("ERIKA_PRINTER_ENABLE_AUTOCUT") !== "false",
         low_stock_threshold: Number(localStorage.getItem("ERIKA_LOW_STOCK_THRESHOLD")) || 5,
         max_cajero_discount_pct: Number(localStorage.getItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT")) || 5,
       };
@@ -193,6 +195,7 @@ export default function AuthProvider({
         printer_zoom: "100",
         printer_double_copy_layaway_credit: false,
         printer_ble_chunk_size: 20,
+        printer_enable_autocut: true,
         low_stock_threshold: 5,
         max_cajero_discount_pct: 5,
       },
