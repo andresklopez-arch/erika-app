@@ -503,6 +503,7 @@ export default function POSModule() {
     return false;
   });
   const [pendingPrintJob, setPendingPrintJob] = useState<any>(null);
+  const [bleCharacteristic, setBleCharacteristic] = useState<any>(null);
   const [showPrinterModal, setShowPrinterModal] = useState<boolean>(false);
   const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -1529,7 +1530,247 @@ export default function POSModule() {
   const finalTotal = subtotalNeto + iva;
   const subtotal = subtotalNeto;
 
+  const generateEscPosBytes = (job: any, config: any) => {
+    const encoder = new TextEncoder();
+    const chunks: Uint8Array[] = [];
+    
+    const write = (bytes: number[]) => {
+      chunks.push(new Uint8Array(bytes));
+    };
+    const writeText = (text: string) => {
+      chunks.push(encoder.encode(text));
+    };
+    
+    write([0x1b, 0x40]);
+    
+    const setAlign = (align: number) => {
+      write([0x1b, 0x61, align]);
+    };
+    
+    const setBold = (on: boolean) => {
+      write([0x1b, 0x45, on ? 0x01 : 0x00]);
+    };
+    
+    const setDoubleSize = (on: boolean) => {
+      write([0x1d, 0x21, on ? 0x11 : 0x00]);
+    };
+    
+    const fields = config.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"];
+    const showName = fields.includes("name");
+    const showRfc = fields.includes("rfc") && (businessProfile.rfc || config.business_rfc);
+    const showPhone = fields.includes("phone") && (businessProfile.phone || config.business_phone);
+    const showAddress = fields.includes("address") && (businessProfile.address || config.business_address);
+    const showBilling = fields.includes("billing");
+    const showFooter = fields.includes("footer");
+    const showEmail = fields.includes("email") && (businessProfile.email || config.business_email);
+    const showPaymentMethod = fields.includes("payment_method");
+    const showSeller = fields.includes("seller");
+    const showCustomer = fields.includes("customer");
+    const showNotes = fields.includes("notes");
+    const showWarranty = fields.includes("warranty");
+    
+    setAlign(1);
+    if (showName) {
+      setDoubleSize(true);
+      setBold(true);
+      writeText((businessProfile.name || config.business_name || "FERRETERIA ERIKA") + "\n");
+      setDoubleSize(false);
+    }
+    
+    setBold(false);
+    if (showRfc) writeText(`RFC: ${businessProfile.rfc || config.business_rfc}\n`);
+    if (showAddress) writeText(`${businessProfile.address || config.business_address}\n`);
+    if (showPhone) writeText(`Tel: ${businessProfile.phone || config.business_phone}\n`);
+    if (showEmail) writeText(`Email: ${businessProfile.email || config.business_email}\n`);
+    
+    writeText("--------------------------------\n");
+    
+    if (job.type === "ticket") {
+      const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = job.data;
+      
+      setAlign(1);
+      setBold(true);
+      writeText(`Ticket: #${realTicketId}\n`);
+      setBold(false);
+      
+      setAlign(0);
+      writeText(`Fecha: ${new Date().toLocaleString()}\n`);
+      if (showSeller) writeText(`Atendido por: ${currentUser?.name || "Venta Mostrador"}\n`);
+      if (showCustomer && job.data.customerName) writeText(`Cliente: ${job.data.customerName}\n`);
+      if (showPaymentMethod && paymentMethod) writeText(`Metodo de Pago: ${paymentMethod.toUpperCase()}\n`);
+      
+      writeText("--------------------------------\n");
+      
+      items.forEach((item: any) => {
+        const p = getItemFinalPrice(item, wholesaleRules);
+        const itemTotal = Math.round(p * item.qty);
+        writeText(`${item.qty}x ${item.name}\n`);
+        setAlign(2);
+        writeText(`$${itemTotal}\n`);
+        setAlign(0);
+      });
+      
+      writeText("--------------------------------\n");
+      
+      const subtotalVal = items.reduce((sum: number, i: any) => {
+         const p = getItemFinalPrice(i, wholesaleRules);
+         return sum + (p * i.qty);
+      }, 0);
+      const discountVal = subtotalVal * (discountPct / 100);
+      const subtotalNeto = subtotalVal - discountVal;
+      const iva = applyIva ? subtotalNeto * 0.16 : 0;
+      
+      setAlign(2);
+      writeText(`Subtotal: $${Math.round(subtotalVal)}\n`);
+      if (discountPct > 0) {
+        writeText(`Desc. (${discountPct}%): -$${Math.round(discountVal)}\n`);
+      }
+      if (applyIva) {
+        writeText(`IVA (16%): $${Math.round(iva)}\n`);
+      }
+      setBold(true);
+      writeText(`TOTAL: $${Math.round(finalTotal)}\n`);
+      setBold(false);
+      setAlign(0);
+      
+      writeText("--------------------------------\n");
+      
+      if (showWarranty) {
+        setAlign(1);
+        writeText("Garantia de 30 dias contra\ndefectos de fabrica.\n");
+      }
+      
+      if (showBilling) {
+        setAlign(1);
+        writeText(`Auto-Facturacion Express:\nerika-app.vercel.app/facturacion\n`);
+      }
+    } else if (job.type === "layaway") {
+      const { customer, items, finalTotal, downPayment, discountPct = 0, applyIva = false } = job.data;
+      
+      setAlign(1);
+      setBold(true);
+      writeText("Comprobante de Apartado\n");
+      setBold(false);
+      
+      setAlign(0);
+      writeText(`Fecha: ${new Date().toLocaleString()}\n`);
+      if (showSeller) writeText(`Atendido por: ${currentUser?.name || "Venta Mostrador"}\n`);
+      writeText(`Cliente: ${customer?.name || "Desconocido"}\n`);
+      
+      writeText("--------------------------------\n");
+      
+      items.forEach((item: any) => {
+        const p = getItemFinalPrice(item, wholesaleRules);
+        writeText(`${item.qty}x ${item.name}\n`);
+        setAlign(2);
+        writeText(`$${Math.round(p * item.qty)}\n`);
+        setAlign(0);
+      });
+      
+      writeText("--------------------------------\n");
+      
+      const subtotalVal = items.reduce((sum: number, i: any) => {
+         const p = getItemFinalPrice(i, wholesaleRules);
+         return sum + (p * i.qty);
+      }, 0);
+      const discountVal = subtotalVal * (discountPct / 100);
+      const subtotalNeto = subtotalVal - discountVal;
+      const iva = applyIva ? subtotalNeto * 0.16 : 0;
+      
+      setAlign(2);
+      writeText(`Subtotal: $${Math.round(subtotalVal)}\n`);
+      if (discountPct > 0) writeText(`Desc. (${discountPct}%): -$${Math.round(discountVal)}\n`);
+      if (applyIva) writeText(`IVA (16%): $${Math.round(iva)}\n`);
+      
+      setBold(true);
+      writeText(`TOTAL: $${Math.round(finalTotal)}\n`);
+      writeText(`Enganche: $${Math.round(downPayment)}\n`);
+      writeText(`Saldo: $${Math.round(finalTotal - downPayment)}\n`);
+      setBold(false);
+      setAlign(0);
+    }
+    
+    writeText("\n");
+    if (showFooter) {
+      setAlign(1);
+      writeText((config.printer_footer_msg || "Gracias por su compra!") + "\n");
+    }
+    
+    writeText("\n\n\n\n");
+    write([0x1d, 0x56, 0x41, 0x00]);
+    
+    const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    chunks.forEach(chunk => {
+      result.set(chunk, offset);
+      offset += chunk.length;
+    });
+    
+    return result;
+  };
+
   const executePrintWindow = (job: any) => {
+    const config = businessSettings?.config || {};
+
+    if (printerConnectionType === "bluetooth") {
+      const printDirectBle = async () => {
+        try {
+          if (typeof window === "undefined" || !navigator.bluetooth) {
+            alert("Su navegador no soporta Web Bluetooth. Asegúrese de usar Google Chrome.");
+            return;
+          }
+          
+          let char = bleCharacteristic;
+          if (!char) {
+            const device = await navigator.bluetooth.requestDevice({
+              acceptAllDevices: true,
+              optionalServices: [
+                "000018f0-0000-1000-8000-00805f9b34fb",
+                "0000e7e1-0000-1000-8000-00805f9b34fb",
+                "0000ae30-0000-1000-8000-00805f9b34fb"
+              ]
+            });
+            console.log("Conectando a GATT server de:", device.name);
+            const server = await device.gatt?.connect();
+            if (!server) throw new Error("No se pudo conectar al GATT server");
+            
+            const services = await server.getPrimaryServices();
+            for (const service of services) {
+              const characteristics = await service.getCharacteristics();
+              for (const characteristic of characteristics) {
+                if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
+                  char = characteristic;
+                  break;
+                }
+              }
+              if (char) break;
+            }
+            if (!char) throw new Error("No se encontró una característica de escritura en el dispositivo.");
+            setBleCharacteristic(char);
+          }
+          
+          const bytes = generateEscPosBytes(job, config);
+          
+          const chunkSize = 20;
+          for (let i = 0; i < bytes.length; i += chunkSize) {
+            const chunk = bytes.slice(i, i + chunkSize);
+            await char.writeValueWithoutResponse(chunk);
+            await new Promise(resolve => setTimeout(resolve, 20));
+          }
+          console.log("✅ Impresión Bluetooth directa completada.");
+        } catch (err: any) {
+          console.error("Error al imprimir por Bluetooth:", err);
+          if (err.name !== "NotFoundError") {
+            alert("Fallo al imprimir por Bluetooth: " + err.message);
+          }
+        }
+      };
+      
+      printDirectBle();
+      return;
+    }
+
     // Si la impresora configurada es del sistema, redireccionar al flujo nativo sin popup
     if (printerConnectionType === "system") {
       if (job.type === "ticket") {
