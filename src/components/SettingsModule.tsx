@@ -1156,9 +1156,9 @@ export default function SettingsModule() {
                   onChange={(e) => setConnectionType(e.target.value)}
                   style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
                 >
-                  <option value="system">Sistema / Navegador (USB/Red)</option>
-                  <option value="bluetooth">Bluetooth (Simulado)</option>
-                  <option value="wifi">WiFi (Simulado)</option>
+                  <option value="system">Sistema / Navegador (USB/Red/Bluetooth/WiFi)</option>
+                  <option value="bluetooth">Bluetooth (Demostración Simulada)</option>
+                  <option value="wifi">WiFi (Demostración Simulada)</option>
                 </select>
               </div>
 
