@@ -1716,14 +1716,14 @@ export default function POSModule() {
     if (printerConnectionType === "bluetooth") {
       const printDirectBle = async () => {
         try {
-          if (typeof window === "undefined" || !navigator.bluetooth) {
+          if (typeof window === "undefined" || !(navigator as any).bluetooth) {
             alert("Su navegador no soporta Web Bluetooth. Asegúrese de usar Google Chrome.");
             return;
           }
           
           let char = bleCharacteristic;
           if (!char) {
-            const device = await navigator.bluetooth.requestDevice({
+            const device = await (navigator as any).bluetooth.requestDevice({
               acceptAllDevices: true,
               optionalServices: [
                 "000018f0-0000-1000-8000-00805f9b34fb",
@@ -1822,7 +1822,6 @@ export default function POSModule() {
       return;
     }
 
-    const config = businessSettings?.config || {};
     const paperSize = config.printer_paper_size || "80mm";
     const fontSize = config.printer_font_size || "normal";
     const fontFamily = config.printer_font_family || "monospace";
@@ -2086,7 +2085,7 @@ export default function POSModule() {
       } else if (connType === "serial" && typeof navigator !== "undefined" && "serial" in navigator) {
         await (navigator.serial as any).requestPort();
       } else if (connType === "bluetooth" && typeof navigator !== "undefined" && "bluetooth" in navigator) {
-        const device = await navigator.bluetooth.requestDevice({
+        const device = await (navigator as any).bluetooth.requestDevice({
           acceptAllDevices: true,
           optionalServices: [
             "000018f0-0000-1000-8000-00805f9b34fb",
