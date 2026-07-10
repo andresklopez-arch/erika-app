@@ -1333,10 +1333,34 @@ export default function SettingsModule() {
                   </button>
                 </div>
                 {printerName && (
-                  <div style={{ marginTop: "10px", fontSize: "0.85rem", color: "var(--color-primary)", fontWeight: "bold" }}>
-                    Dispositivo Activo: 🟢 {printerName}
+                  <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "5px" }}>
+                    <div style={{ fontSize: "0.85rem", color: "#34d399", fontWeight: "bold" }}>
+                      Dispositivo Activo: 🟢 {printerName}
+                    </div>
+                    <div style={{ fontSize: "0.8rem", color: "#34d399", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)", padding: "6px 10px", borderRadius: "4px" }}>
+                      ✔️ Impresora Lista y Conectada (Canal de escritura verificado)
+                    </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {connectionType === "bluetooth" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "5px", background: "rgba(255,255,255,0.02)", padding: "12px", borderRadius: "8px", border: "1px solid var(--glass-border)" }}>
+                <label style={{ display: "block", fontSize: "0.9rem", fontWeight: "bold" }}>Tamaño de Bloque Bluetooth (Buffer de Envío):</label>
+                <select
+                  value={printerBleChunkSize}
+                  onChange={(e) => setPrinterBleChunkSize(Number(e.target.value))}
+                  style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
+                >
+                  <option value={10}>10 bytes (Ultra seguro / Impresoras lentas)</option>
+                  <option value={20}>20 bytes (Estándar / Recomendado)</option>
+                  <option value={40}>40 bytes (Rápido)</option>
+                  <option value={60}>60 bytes (Ultra Rápido / Alta Gama)</option>
+                </select>
+                <span style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)" }}>
+                  Reduzca este valor a 10 bytes si nota que los tickets largos salen incompletos o con caracteres extraños.
+                </span>
               </div>
             )}
 
