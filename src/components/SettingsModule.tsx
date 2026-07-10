@@ -500,32 +500,45 @@ export default function SettingsModule() {
     }
   };
 
-  const handleScanPrinters = () => {
+  const handleScanPrinters = async () => {
     if (!checkAdmin()) return;
-    setIsScanning(true);
-    setScannedPrinters([]);
-    setTimeout(() => {
-      setIsScanning(false);
-      if (connectionType === "bluetooth") {
-        setScannedPrinters([
-          "🛜 Impresora Térmica Portátil BT-58",
-          "🛜 EC Line Printer BT-80",
-          "🛜 Star Micronics SM-T300i"
-        ]);
-      } else if (connectionType === "wifi") {
-        setScannedPrinters([
-          "📶 EPSON TM-T88VI (192.168.1.150)",
-          "📶 Bixolon SRP-350plusIII (192.168.1.155)",
-          "📶 Impresora Cocina (192.168.1.200)"
-        ]);
-      } else {
+    if (connectionType === "bluetooth") {
+      try {
+        if (typeof window === "undefined" || !navigator.bluetooth) {
+          alert("Su navegador o sistema no soporta Web Bluetooth. Asegúrese de usar Google Chrome y tener el Bluetooth encendido.");
+          return;
+        }
+        setIsScanning(true);
+        const device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [
+            "000018f0-0000-1000-8000-00805f9b34fb",
+            "0000e7e1-0000-1000-8000-00805f9b34fb",
+            "0000ae30-0000-1000-8000-00805f9b34fb"
+          ]
+        });
+        setPrinterName(device.name || "Impresora Bluetooth");
+        alert(`✅ Vinculado con éxito a: ${device.name || "Dispositivo Bluetooth"}\n\nErika recordará este dispositivo al imprimir.`);
+      } catch (err: any) {
+        console.error(err);
+        if (err.name !== "NotFoundError") {
+          alert("Error al vincular: " + err.message);
+        }
+      } finally {
+        setIsScanning(false);
+      }
+    } else {
+      setIsScanning(true);
+      setScannedPrinters([]);
+      setTimeout(() => {
+        setIsScanning(false);
         setScannedPrinters([
           "💻 Impresora de Sistema (PDF Writer)",
           "💻 POS-58 USB Printer",
           "💻 EPSON TM-T20II USB"
         ]);
-      }
-    }, 2500);
+      }, 1500);
+    }
   };
 
   const handleRoleTypeChange = (val: string) => {
