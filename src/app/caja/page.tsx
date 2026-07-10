@@ -285,6 +285,177 @@ export default function CajaModule() {
     });
     
     alert(`✅ Caja Cerrada. ${discrepancy !== 0 ? `\n⚠️ DESCUADRE DETECTADO: $${discrepancy.toFixed(2)}` : '\n✅ Caja Cuadrada Perfectamente.'}`);
+  const printCorteTicket = async () => {
+    if (!ticketData) return;
+    const type = localStorage.getItem("ERIKA_PRINTER_TYPE") || "system";
+    const paperSize = localStorage.getItem("ERIKA_PRINTER_PAPER_SIZE") || "80mm";
+    const maxCols = paperSize === "58mm" ? 30 : 42;
+    const divider = "-".repeat(maxCols) + "\n";
+    
+    if (type === "bluetooth") {
+      try {
+        if (typeof window === "undefined" || !(navigator as any).bluetooth) {
+          alert("Web Bluetooth no soportado en este navegador. Por favor use Google Chrome.");
+          return;
+        }
+        
+        let device;
+        if ((navigator as any).bluetooth.getDevices) {
+          const devices = await (navigator as any).bluetooth.getDevices();
+          if (devices.length > 0) {
+            device = devices[0];
+          }
+        }
+        
+        if (!device) {
+          device = await (navigator as any).bluetooth.requestDevice({
+            acceptAllDevices: true,
+            optionalServices: [
+              "000018f0-0000-1000-8000-00805f9b34fb",
+              "0000e7e1-0000-1000-8000-00805f9b34fb",
+              "0000ae30-0000-1000-8000-00805f9b34fb"
+            ]
+          });
+        }
+        
+        console.log("Conectando a GATT server de:", device.name);
+        const server = await device.gatt?.connect();
+        if (!server) throw new Error("No se pudo conectar al servidor GATT.");
+        
+        const services = await server.getPrimaryServices();
+        let char = null;
+        for (const service of services) {
+          const characteristics = await service.getCharacteristics();
+          for (const characteristic of characteristics) {
+            if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
+              char = characteristic;
+              break;
+            }
+          }
+          if (char) break;
+        }
+        if (!char) throw new Error("No se encontró característica de escritura.");
+        
+        const encoder = new TextEncoder();
+        const chunks: Uint8Array[] = [];
+        const write = (b: number[]) => chunks.push(new Uint8Array(b));
+        const writeText = (t: string) => chunks.push(encoder.encode(t));
+        
+        write([0x1b, 0x40]);
+        write([0x1b, 0x61, 0x01]);
+        write([0x1b, 0x45, 0x01]);
+        write([0x1d, 0x21, 0x11]);
+        writeText("FERRETERIA ERIKA\n");
+        write([0x1d, 0x21, 0x00]);
+        writeText("TICKET DE CORTE DE CAJA\n");
+        write([0x1b, 0x45, 0x00]);
+        writeText(divider);
+        
+        write([0x1b, 0x61, 0x00]);
+        writeText(`Fecha: ${ticketData.date}\n`);
+        writeText(`Cajero: ${ticketData.cajero}\n`);
+        writeText(divider);
+        
+        const formatRow = (label: string, value: string) => {
+          const spaces = maxCols - label.length - value.length;
+          return label + (spaces > 0 ? " ".repeat(spaces) : " ") + value + "\n";
+        };
+        
+        writeText(formatRow("Fondo Inicial:", `$${ticketData.fondo}`));
+        writeText(formatRow("Ventas Totales:", `$${ticketData.ventas.toFixed(2)}`));
+        writeText(formatRow("  ↳ Efec:", `$${ticketData.ventasEfectivo.toFixed(2)}`));
+        writeText(formatRow("  ↳ Tarj:", `$${ticketData.ventasTarjeta.toFixed(2)}`));
+        writeText(formatRow("  ↳ Trans:", `$${ticketData.ventasTransferencia.toFixed(2)}`));
+        writeText(formatRow("Ingresos (+):", `$${ticketData.ingresos.toFixed(2)}`));
+        writeText(formatRow("Retiros (-):", `$${ticketData.retiros.toFixed(2)}`));
+        writeText(divider);
+        
+        writeText(formatRow("SISTEMA:", `$${ticketData.esperado.toFixed(2)}`));
+        writeText(formatRow("FISICO:", `$${ticketData.fisico.toFixed(2)}`));
+        writeText(divider);
+        
+        write([0x1b, 0x61, 0x01]);
+        write([0x1b, 0x45, 0x01]);
+        writeText(`DESCUADRE: $${ticketData.descuadre.toFixed(2)}\n`);
+        write([0x1b, 0x45, 0x00]);
+        
+        writeText("\n\n\n\n");
+        write([0x1d, 0x56, 0x41, 0x00]);
+        
+        const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
+        const bytes = new Uint8Array(totalLength);
+        let offset = 0;
+        chunks.forEach(c => {
+          bytes.set(c, offset);
+          offset += c.length;
+        });
+        
+        const chunkSize = 20;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          const chunk = bytes.slice(i, i + chunkSize);
+          await char.writeValueWithoutResponse(chunk);
+          await new Promise(r => setTimeout(r, 20));
+        }
+        alert("✅ Reporte de corte impreso por Bluetooth exitosamente.");
+      } catch (err: any) {
+        console.error(err);
+        alert("Fallo al imprimir por Bluetooth: " + err.message);
+      }
+    } else {
+      const widthCss = paperSize === "58mm" ? "58mm" : "80mm";
+      const printWindow = window.open("", "_blank", `width=${paperSize === "58mm" ? 300 : 400},height=500`);
+      if (!printWindow) return;
+      
+      const html = `
+        <html>
+          <head>
+            <style>
+              @page { margin: 0 !important; }
+              body { 
+                font-family: monospace; 
+                font-size: 12px; 
+                margin: 0 auto !important; 
+                padding: 8mm !important; 
+                width: ${widthCss}; 
+                color: #000; 
+                background: #fff; 
+              }
+              .center { text-align: center; }
+              .bold { font-weight: bold; }
+              .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
+              .flex { display: flex; justify-content: space-between; margin-bottom: 4px; }
+            </style>
+          </head>
+          <body>
+            <div class="center bold" style="font-size: 1.2em;">FERRETERÍA ERIKA</div>
+            <div class="center bold">TICKET DE CORTE DE CAJA</div>
+            <div class="divider"></div>
+            <div><strong>Fecha:</strong> ${ticketData.date}</div>
+            <div><strong>Cajero:</strong> ${ticketData.cajero}</div>
+            <div class="divider"></div>
+            
+            <div class="flex"><span>Fondo Inicial:</span><span>$${ticketData.fondo}</span></div>
+            <div class="flex"><span>Ventas Totales:</span><span>$${ticketData.ventas.toFixed(2)}</span></div>
+            <div class="flex" style="padding-left: 15px; font-size: 0.9em;"><span>↳ Efec:</span><span>$${ticketData.ventasEfectivo.toFixed(2)}</span></div>
+            <div class="flex" style="padding-left: 15px; font-size: 0.9em;"><span>↳ Tarj:</span><span>$${ticketData.ventasTarjeta.toFixed(2)}</span></div>
+            <div class="flex" style="padding-left: 15px; font-size: 0.9em;"><span>↳ Trans:</span><span>$${ticketData.ventasTransferencia.toFixed(2)}</span></div>
+            <div class="flex"><span>Ingresos (+):</span><span>$${ticketData.ingresos.toFixed(2)}</span></div>
+            <div class="flex"><span>Retiros (-):</span><span>$${ticketData.retiros.toFixed(2)}</span></div>
+            <div class="divider"></div>
+            <div class="flex bold"><span>SISTEMA:</span><span>$${ticketData.esperado.toFixed(2)}</span></div>
+            <div class="flex bold"><span>FÍSICO:</span><span>$${ticketData.fisico.toFixed(2)}</span></div>
+            <div class="divider"></div>
+            <div class="center bold" style="font-size: 1.1em; color: ${ticketData.descuadre === 0 ? "black" : "red"};">
+              DESCUADRE: $${ticketData.descuadre.toFixed(2)}
+            </div>
+            <div style="height: 30px;"></div>
+          </body>
+        </html>
+      `;
+      printWindow.document.write(html);
+      printWindow.document.close();
+      setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+    }
   };
 
   return (
@@ -384,7 +555,7 @@ export default function CajaModule() {
             </h3>
             <button
               className="no-print"
-              onClick={() => window.print()}
+              onClick={printCorteTicket}
               style={{
                 width: "100%",
                 padding: "10px",
