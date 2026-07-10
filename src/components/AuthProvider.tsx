@@ -18,11 +18,15 @@ interface AuthContextType {
   businessSettings: BusinessSettings;
   updateBusinessSettings: (settings: { target_utility?: number; monthly_goals?: number; config?: Partial<BusinessConfig> }) => Promise<boolean>;
   refreshSettings: () => Promise<void>;
+  bleCharacteristic: any;
+  setBleCharacteristic: (char: any) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
   currentUser: null,
   logout: () => {},
+  bleCharacteristic: null,
+  setBleCharacteristic: () => {},
   businessSettings: {
     target_utility: 30,
     monthly_goals: 0,
@@ -112,6 +116,7 @@ export default function AuthProvider({
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [pinInput, setPinInput] = useState("");
   const [error, setError] = useState("");
+  const [bleCharacteristic, setBleCharacteristic] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const [businessSettings, setBusinessSettings] = useState<BusinessSettings>(() => {
@@ -468,7 +473,7 @@ export default function AuthProvider({
   }
 
   return (
-    <AuthContext.Provider value={{ currentUser, logout, businessSettings, updateBusinessSettings, refreshSettings }}>
+    <AuthContext.Provider value={{ currentUser, logout, businessSettings, updateBusinessSettings, refreshSettings, bleCharacteristic, setBleCharacteristic }}>
       {children}
     </AuthContext.Provider>
   );
