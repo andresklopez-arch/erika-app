@@ -96,6 +96,7 @@ export default function SettingsModule() {
   });
   const [printerDoubleCopy, setPrinterDoubleCopy] = useState<boolean>(false);
   const [printerBleChunkSize, setPrinterBleChunkSize] = useState<number>(20);
+  const [printerEnableAutocut, setPrinterEnableAutocut] = useState<boolean>(true);
 
   interface ErrorLogItem {
     id: string;
@@ -349,6 +350,7 @@ export default function SettingsModule() {
       setPrinterZoom(businessSettings.config.printer_zoom || "100");
       setPrinterDoubleCopy(businessSettings.config.printer_double_copy_layaway_credit || false);
       setPrinterBleChunkSize(businessSettings.config.printer_ble_chunk_size || 20);
+      setPrinterEnableAutocut(businessSettings.config.printer_enable_autocut !== false);
       setLowStockThreshold(String(businessSettings.config.low_stock_threshold || 5));
       setMaxCajeroDiscountPct(String(businessSettings.config.max_cajero_discount_pct || 5));
       /* eslint-enable react-hooks/set-state-in-effect */
@@ -498,6 +500,7 @@ export default function SettingsModule() {
         printer_zoom: printerZoom,
         printer_double_copy_layaway_credit: printerDoubleCopy,
         printer_ble_chunk_size: printerBleChunkSize,
+        printer_enable_autocut: printerEnableAutocut,
       }
     });
     if (success) {
@@ -507,6 +510,7 @@ export default function SettingsModule() {
       localStorage.setItem("ERIKA_PRINTER_SILENT_KIOSK", silentKiosk ? "true" : "false");
       localStorage.setItem("ERIKA_PRINTER_DOUBLE_COPY", printerDoubleCopy ? "true" : "false");
       localStorage.setItem("ERIKA_PRINTER_BLE_CHUNK_SIZE", String(printerBleChunkSize));
+      localStorage.setItem("ERIKA_PRINTER_ENABLE_AUTOCUT", printerEnableAutocut ? "true" : "false");
       alert("✅ Configuración de Impresión guardada exitosamente.");
     }
   };
@@ -575,6 +579,7 @@ export default function SettingsModule() {
                 printer_zoom: printerZoom,
                 printer_double_copy_layaway_credit: printerDoubleCopy,
                 printer_ble_chunk_size: printerBleChunkSize,
+                printer_enable_autocut: printerEnableAutocut,
               }
             });
             
@@ -585,6 +590,7 @@ export default function SettingsModule() {
               localStorage.setItem("ERIKA_PRINTER_SILENT_KIOSK", silentKiosk ? "true" : "false");
               localStorage.setItem("ERIKA_PRINTER_DOUBLE_COPY", printerDoubleCopy ? "true" : "false");
               localStorage.setItem("ERIKA_PRINTER_BLE_CHUNK_SIZE", String(printerBleChunkSize));
+              localStorage.setItem("ERIKA_PRINTER_ENABLE_AUTOCUT", printerEnableAutocut ? "true" : "false");
               alert(`✅ Impresora "${name}" vinculada y guardada como predeterminada con éxito.`);
             } else {
               alert(`✅ Vinculado a "${name}" localmente, pero hubo un error al guardar en la nube.`);

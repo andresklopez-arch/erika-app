@@ -1841,14 +1841,31 @@ export default function POSModule() {
           
           let char = bleCharacteristic;
           if (!char) {
-            const device = await (navigator as any).bluetooth.requestDevice({
-              acceptAllDevices: true,
-              optionalServices: [
-                "000018f0-0000-1000-8000-00805f9b34fb",
-                "0000e7e1-0000-1000-8000-00805f9b34fb",
-                "0000ae30-0000-1000-8000-00805f9b34fb"
-              ]
-            });
+            let device;
+            if (typeof window !== "undefined" && (navigator as any).bluetooth?.getDevices) {
+              try {
+                const devices = await (navigator as any).bluetooth.getDevices();
+                if (devices.length > 0) {
+                  device = devices[0];
+                  console.log("Reconectando a impresora Bluetooth mediante getDevices:", device.name);
+                }
+              } catch (getDevicesErr) {
+                console.warn("Fallo al obtener dispositivos pre-vinculados:", getDevicesErr);
+              }
+            }
+
+            if (!device) {
+              console.log("No se encontraron dispositivos pre-vinculados, solicitando requestDevice...");
+              device = await (navigator as any).bluetooth.requestDevice({
+                acceptAllDevices: true,
+                optionalServices: [
+                  "000018f0-0000-1000-8000-00805f9b34fb",
+                  "0000e7e1-0000-1000-8000-00805f9b34fb",
+                  "0000ae30-0000-1000-8000-00805f9b34fb"
+                ]
+              });
+            }
+            
             console.log("Conectando a GATT server de:", device.name);
             const server = await device.gatt?.connect();
             if (!server) throw new Error("No se pudo conectar al GATT server");
