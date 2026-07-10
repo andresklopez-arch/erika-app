@@ -559,6 +559,7 @@ export default function SettingsModule() {
             const name = device.name || "MPT-II";
             setPrinterName(name);
             setScannedPrinters([name]);
+            setBleCharacteristic(char);
             
             const success = await updateBusinessSettings({
               config: {
@@ -594,11 +595,6 @@ export default function SettingsModule() {
               alert(`✅ Impresora "${name}" vinculada y guardada como predeterminada con éxito.`);
             } else {
               alert(`✅ Vinculado a "${name}" localmente, pero hubo un error al guardar en la nube.`);
-            }
-            try {
-              device.gatt?.disconnect();
-            } catch (discErr) {
-              console.warn("Error al desconectar tras vinculación:", discErr);
             }
           } else {
             alert("⚠️ Dispositivo vinculado, pero no se encontró un canal de escritura de impresión térmica.");
@@ -732,10 +728,7 @@ export default function SettingsModule() {
           }
           await new Promise(r => setTimeout(r, 20));
         }
-        await new Promise(r => setTimeout(r, 500));
-        try {
-          device.gatt?.disconnect();
-        } catch (discErr) {}
+        setBleCharacteristic(char);
         alert("✅ Ticket de prueba enviado a la impresora.");
       } catch (err: any) {
         console.error(err);
