@@ -389,7 +389,9 @@ export default function CajaModule() {
         write([0x1b, 0x45, 0x00]);
         
         writeText("\n\n\n\n");
-        write([0x1d, 0x56, 0x41, 0x00]);
+        if (localStorage.getItem("ERIKA_PRINTER_ENABLE_AUTOCUT") !== "false") {
+          write([0x1d, 0x56, 0x41, 0x00]);
+        }
         
         const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
         const bytes = new Uint8Array(totalLength);
