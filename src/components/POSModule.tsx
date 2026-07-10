@@ -586,6 +586,42 @@ export default function POSModule() {
   };
 
   useEffect(() => {
+    const autoConnectBle = async () => {
+      if (printerConnectionType === "bluetooth" && typeof window !== "undefined" && (navigator as any).bluetooth?.getDevices) {
+        try {
+          const devices = await (navigator as any).bluetooth.getDevices();
+          if (devices.length > 0) {
+            const device = devices[0];
+            console.log("Auto-conectando a impresora vinculada:", device.name);
+            const server = await device.gatt?.connect();
+            if (server) {
+              const services = await server.getPrimaryServices();
+              let char = null;
+              for (const service of services) {
+                const characteristics = await service.getCharacteristics();
+                for (const characteristic of characteristics) {
+                  if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
+                    char = characteristic;
+                    break;
+                  }
+                }
+                if (char) break;
+              }
+              if (char) {
+                setBleCharacteristic(char);
+                console.log("Auto-conexión Bluetooth exitosa.");
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("Fallo en auto-conexión Bluetooth:", err);
+        }
+      }
+    };
+    autoConnectBle();
+  }, [printerConnectionType]);
+
+  useEffect(() => {
     updateOfflineStatus();
     window.addEventListener("online", updateOfflineStatus);
     window.addEventListener("offline", updateOfflineStatus);
