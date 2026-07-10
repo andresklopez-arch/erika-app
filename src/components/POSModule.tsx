@@ -1815,7 +1815,9 @@ export default function POSModule() {
     }
     
     writeText("\n\n\n\n");
-    write([0x1d, 0x56, 0x41, 0x00]);
+    if (config.printer_enable_autocut !== false) {
+      write([0x1d, 0x56, 0x41, 0x00]);
+    }
     
     const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
     const result = new Uint8Array(totalLength);
