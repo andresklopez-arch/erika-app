@@ -622,6 +622,13 @@ export default function POSModule() {
   }, [printerConnectionType]);
 
   useEffect(() => {
+    if (businessSettings?.config) {
+      setPrinterConnectionType(businessSettings.config.printer_type || "system");
+      setIsPrinterConnected(businessSettings.config.printer_connected !== false);
+    }
+  }, [businessSettings]);
+
+  useEffect(() => {
     updateOfflineStatus();
     window.addEventListener("online", updateOfflineStatus);
     window.addEventListener("offline", updateOfflineStatus);
