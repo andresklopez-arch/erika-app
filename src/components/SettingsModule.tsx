@@ -498,6 +498,9 @@ export default function SettingsModule() {
       }
     });
     if (success) {
+      localStorage.setItem("ERIKA_PRINTER_CONNECTED", isConnected ? "true" : "false");
+      localStorage.setItem("ERIKA_PRINTER_TYPE", connectionType);
+      localStorage.setItem("ERIKA_PRINTER_NAME", printerName);
       localStorage.setItem("ERIKA_PRINTER_SILENT_KIOSK", silentKiosk ? "true" : "false");
       localStorage.setItem("ERIKA_PRINTER_DOUBLE_COPY", printerDoubleCopy ? "true" : "false");
       alert("✅ Configuración de Impresión guardada exitosamente.");
