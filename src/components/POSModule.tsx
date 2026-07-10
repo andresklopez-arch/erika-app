@@ -1878,7 +1878,7 @@ export default function POSModule() {
           
           const bytes = generateEscPosBytes(job, config);
           
-          const chunkSize = 20;
+          const chunkSize = config.printer_ble_chunk_size || 20;
           for (let i = 0; i < bytes.length; i += chunkSize) {
             const chunk = bytes.slice(i, i + chunkSize);
             try {
