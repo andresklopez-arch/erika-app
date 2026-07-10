@@ -2085,6 +2085,34 @@ export default function POSModule() {
         await (navigator.usb as any).requestDevice({ filters: [] });
       } else if (connType === "serial" && typeof navigator !== "undefined" && "serial" in navigator) {
         await (navigator.serial as any).requestPort();
+      } else if (connType === "bluetooth" && typeof navigator !== "undefined" && "bluetooth" in navigator) {
+        const device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [
+            "000018f0-0000-1000-8000-00805f9b34fb",
+            "0000e7e1-0000-1000-8000-00805f9b34fb",
+            "0000ae30-0000-1000-8000-00805f9b34fb"
+          ]
+        });
+        console.log("Conectando a GATT server de:", device.name);
+        const server = await device.gatt?.connect();
+        if (server) {
+          const services = await server.getPrimaryServices();
+          let char = null;
+          for (const service of services) {
+            const characteristics = await service.getCharacteristics();
+            for (const characteristic of characteristics) {
+              if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
+                char = characteristic;
+                break;
+              }
+            }
+            if (char) break;
+          }
+          if (char) {
+            setBleCharacteristic(char);
+          }
+        }
       }
     } catch (e) {
       console.warn("Error o cancelación del usuario al conectar puerto físico:", e);
@@ -3932,6 +3960,14 @@ export default function POSModule() {
                   style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "white" }}
                 >
                   📟 Conectar vía Puerto Serie / COM
+                </button>
+
+                <button
+                  onClick={() => handleReconnectPrinter("bluetooth")}
+                  className="btn-primary"
+                  style={{ background: "rgba(59, 130, 246, 0.2)", border: "1px solid var(--color-primary)", color: "white" }}
+                >
+                  🛜 Conectar vía Bluetooth Directo (Web BLE)
                 </button>
 
                 <button
