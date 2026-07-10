@@ -399,7 +399,7 @@ export default function CajaModule() {
           offset += c.length;
         });
         
-        const chunkSize = 20;
+        const chunkSize = Number(localStorage.getItem("ERIKA_PRINTER_BLE_CHUNK_SIZE")) || 20;
         for (let i = 0; i < bytes.length; i += chunkSize) {
           const chunk = bytes.slice(i, i + chunkSize);
           try {
