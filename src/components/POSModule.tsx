@@ -1553,6 +1553,68 @@ export default function POSModule() {
     }
   };
 
+  const handleConfirmPaymentClick = async (
+    selectedMethod: "efectivo" | "tarjeta" | "transferencia" | "mixto",
+    cashAmt: number,
+    cardAmt: number,
+    transferAmt: number,
+    reference: string
+  ) => {
+    if (printerConnectionType === "bluetooth" && !bleCharacteristic) {
+      try {
+        let device;
+        if (typeof window !== "undefined" && (navigator as any).bluetooth?.getDevices) {
+          const devices = await (navigator as any).bluetooth.getDevices();
+          if (devices.length > 0) {
+            device = devices[0];
+          }
+        }
+        
+        if (!device) {
+          device = await (navigator as any).bluetooth.requestDevice({
+            acceptAllDevices: true,
+            optionalServices: [
+              "000018f0-0000-1000-8000-00805f9b34fb",
+              "0000e7e1-0000-1000-8000-00805f9b34fb",
+              "0000ae30-0000-1000-8000-00805f9b34fb"
+            ]
+          });
+        }
+        
+        const server = await device.gatt?.connect();
+        if (server) {
+          const services = await server.getPrimaryServices();
+          let allCharacteristics: any[] = [];
+          for (const service of services) {
+            try {
+              const characteristics = await service.getCharacteristics();
+              allCharacteristics.push(...characteristics);
+            } catch (e) {}
+          }
+          const writeChars = allCharacteristics.filter(c => c.properties.write || c.properties.writeWithoutResponse);
+          const KNOWN_PATTERNS = ["e7e2", "ae01", "ae02", "18f1", "2af1", "4954"];
+          let char = writeChars.find(c => {
+            const uuidLower = c.uuid.toLowerCase();
+            return KNOWN_PATTERNS.some(pat => uuidLower.includes(pat));
+          });
+          if (!char) char = writeChars.find(c => c.properties.writeWithoutResponse);
+          if (!char) char = writeChars[0];
+          
+          if (char) {
+            setBleCharacteristic(char);
+          }
+        }
+      } catch (err: any) {
+        console.warn("Fallo al pre-conectar Bluetooth en confirmación de pago:", err);
+        if (err.name !== "NotFoundError") {
+          alert("Aviso: No se pudo enlazar la impresora Bluetooth. La venta se registrará pero el ticket podría no imprimirse automáticamente.");
+        }
+      }
+    }
+    
+    await handleCheckoutSubmit(selectedMethod, cashAmt, cardAmt, transferAmt, reference);
+  };
+
   const getCrossSellSuggestions = () => {
     if (globalCatalog.length === 0) return [];
     return globalCatalog
