@@ -1084,16 +1084,38 @@ export default function POSModule() {
     let proposedTotal = 0,
       finalPct = 0;
     if (mode === "percent") {
-      const maxPct = ((1 - safeMinimum / currentRawTotal) * 100);
-      const pctStr = window.prompt(
-        `Máx. Descuento Permitido: ${maxPct > 0 ? maxPct.toFixed(1) : 0}%\n\nIngresa el porcentaje de descuento (%):`,
-        ""
+      const option = window.prompt(
+        "Elige la opción:\n\n1. DESCUENTO\n2. AUMENTO\n\nIngresa el número (deja vacío o cancela para salir):",
+        "1"
       );
-      if (pctStr === null) return;
-      const pct = parseFloat(pctStr) || 0;
-      if (isNaN(pct) || pct < 0 || pct > 100) return alert("Porcentaje no válido");
-      proposedTotal = currentRawTotal * (1 - pct / 100);
-      finalPct = pct;
+      if (option === null || option.trim() === "") return;
+      const cleanOption = option.trim();
+      if (cleanOption !== "1" && cleanOption !== "2") {
+        return alert("Opción no válida");
+      }
+
+      if (cleanOption === "1") {
+        const maxPct = ((1 - safeMinimum / currentRawTotal) * 100);
+        const pctStr = window.prompt(
+          `Máx. Descuento Permitido: ${maxPct > 0 ? maxPct.toFixed(1) : 0}%\n\nIngresa el porcentaje de descuento (%):`,
+          ""
+        );
+        if (pctStr === null) return;
+        const pct = parseFloat(pctStr) || 0;
+        if (isNaN(pct) || pct < 0 || pct > 100) return alert("Porcentaje no válido");
+        proposedTotal = currentRawTotal * (1 - pct / 100);
+        finalPct = pct;
+      } else {
+        const pctStr = window.prompt(
+          `Ingresa el porcentaje de aumento (%):`,
+          ""
+        );
+        if (pctStr === null) return;
+        const pct = parseFloat(pctStr) || 0;
+        if (isNaN(pct) || pct < 0) return alert("Porcentaje no válido");
+        proposedTotal = currentRawTotal * (1 + pct / 100);
+        finalPct = -pct;
+      }
     } else {
       const fixedAmountStr = window.prompt(
         `Mínimo seguro con utilidad (5%): $${safeMinimum.toFixed(2)}\nTotal actual: $${currentRawTotal.toFixed(2)}\n\nIngresa el Total Deseado ($):`,
@@ -1803,6 +1825,8 @@ export default function POSModule() {
       writeText(`Subtotal: $${Math.round(subtotalVal)}\n`);
       if (discountPct > 0) {
         writeText(`Desc. (${discountPct}%): -$${Math.round(discountVal)}\n`);
+      } else if (discountPct < 0) {
+        writeText(`Aum. (${Math.abs(discountPct)}%): +$${Math.round(-discountVal)}\n`);
       }
       if (applyIva) {
         writeText(`IVA (16%): $${Math.round(iva)}\n`);
@@ -1884,7 +1908,11 @@ export default function POSModule() {
       
       setAlign(2);
       writeText(`Subtotal: $${Math.round(subtotalVal)}\n`);
-      if (discountPct > 0) writeText(`Desc. (${discountPct}%): -$${Math.round(discountVal)}\n`);
+      if (discountPct > 0) {
+        writeText(`Desc. (${discountPct}%): -$${Math.round(discountVal)}\n`);
+      } else if (discountPct < 0) {
+        writeText(`Aum. (${Math.abs(discountPct)}%): +$${Math.round(-discountVal)}\n`);
+      }
       if (applyIva) writeText(`IVA (16%): $${Math.round(iva)}\n`);
       
       setBold(true);
@@ -2182,6 +2210,8 @@ export default function POSModule() {
               <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span>$${Math.round(subtotalVal)}</span></div>
               ${discountPct > 0 ? `
               <div style="display:flex; justify-content:space-between; color: red;"><span>Desc. (${discountPct}%):</span><span>-$${Math.round(discountVal)}</span></div>
+              ` : discountPct < 0 ? `
+              <div style="display:flex; justify-content:space-between; color: orange;"><span>Aum. (${Math.abs(discountPct)}%):</span><span>+$${Math.round(-discountVal)}</span></div>
               ` : ""}
               ${applyIva ? `
               <div style="display:flex; justify-content:space-between;"><span>IVA (16%):</span><span>$${Math.round(iva)}</span></div>
@@ -2277,6 +2307,11 @@ export default function POSModule() {
               <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: red;">
                 <div>Desc. (${discountPct}%):</div>
                 <div>-$${Math.round(discountVal)}</div>
+              </div>
+              ` : discountPct < 0 ? `
+              <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: orange;">
+                <div>Aum. (${Math.abs(discountPct)}%):</div>
+                <div>+$${Math.round(-discountVal)}</div>
               </div>
               ` : ""}
               ${applyIva ? `
@@ -3148,11 +3183,11 @@ export default function POSModule() {
                 $ Cierre [F8]
               </button>
             </div>
-            {activeTicket.discountPct > 0 && (
+            {activeTicket.discountPct !== 0 && (
               <span
-                style={{ color: "var(--color-primary)", fontWeight: "bold" }}
+                style={{ color: activeTicket.discountPct > 0 ? "var(--color-primary)" : "#f59e0b", fontWeight: "bold" }}
               >
-                -{activeTicket.discountPct.toFixed(1)}%
+                {activeTicket.discountPct > 0 ? `-${activeTicket.discountPct.toFixed(1)}%` : `+${Math.abs(activeTicket.discountPct).toFixed(1)}%`}
               </span>
             )}
           </div>
@@ -3176,6 +3211,12 @@ export default function POSModule() {
              <div className="flex-between" style={{ marginBottom: "10px", color: "#10b981" }}>
                <span>Descuento ({activeTicket.discountPct}%):</span>
                <span>-${formatPrice(discountAmount)}</span>
+             </div>
+          )}
+          {activeTicket.discountPct < 0 && (
+             <div className="flex-between" style={{ marginBottom: "10px", color: "#f59e0b" }}>
+               <span>Aumento ({Math.abs(activeTicket.discountPct)}%):</span>
+               <span>+${formatPrice(-discountAmount)}</span>
              </div>
           )}
 
@@ -3874,6 +3915,12 @@ export default function POSModule() {
                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px", color: "red" }}>
                  <span>Desc ({printDiscountPct}%):</span>
                  <span>-${Math.round(printDiscountAmount)}</span>
+               </div>
+             )}
+             {printDiscountPct < 0 && (
+               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px", color: "orange" }}>
+                 <span>Aum ({Math.abs(printDiscountPct)}%):</span>
+                 <span>+${Math.round(-printDiscountAmount)}</span>
                </div>
              )}
              <div style={{ display: "flex", justifyContent: "space-between", marginTop: "5px", borderTop: "1px dashed #000", paddingTop: "5px", fontWeight: "bold", fontSize: "16px" }}>
