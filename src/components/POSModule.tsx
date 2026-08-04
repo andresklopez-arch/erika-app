@@ -1687,8 +1687,10 @@ export default function POSModule() {
       }));
   };
 
+  const increaseFactor = activeTicket.discountPct < 0 ? (1 + Math.abs(activeTicket.discountPct) / 100) : 1;
+
   const rawTotal = activeTicket.items.reduce((sum, item) => {
-    const p = getItemFinalPrice(item, wholesaleRules);
+    const p = Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor);
     return sum + p * item.qty;
   }, 0);
   
@@ -1701,10 +1703,10 @@ export default function POSModule() {
     return sum + (pNormal - pDiscounted) * item.qty;
   }, 0);
   
-  const discountAmount = rawTotal * (activeTicket.discountPct / 100);
+  const discountAmount = activeTicket.discountPct < 0 ? 0 : rawTotal * (activeTicket.discountPct / 100);
   const subtotalNeto = rawTotal - discountAmount;
   const iva = applyIva ? subtotalNeto * 0.16 : 0;
-  const finalTotal = subtotalNeto + iva;
+  const finalTotal = Math.round(subtotalNeto + iva);
   const subtotal = subtotalNeto;
 
   const generateEscPosBytes = (job: any, config: any) => {
@@ -2514,7 +2516,7 @@ export default function POSModule() {
   const printTitle = printType === "ticket" ? "TICKET DE VENTA" : (printType === "layaway" ? "COMPROBANTE DE APARTADO" : "COTIZACIÓN");
   
   const rawPrintDiscountPct = isPrintingJob ? receiptToPrint.discountPct : activeTicket.discountPct;
-  const increaseFactor = rawPrintDiscountPct < 0 ? (1 + Math.abs(rawPrintDiscountPct) / 100) : 1;
+  const printIncreaseFactor = rawPrintDiscountPct < 0 ? (1 + Math.abs(rawPrintDiscountPct) / 100) : 1;
   const printDiscountPct = rawPrintDiscountPct < 0 ? 0 : rawPrintDiscountPct;
   const printDiscountAmount = rawPrintDiscountPct < 0 ? 0 : (isPrintingJob ? receiptToPrint.discountAmount : discountAmount);
 
@@ -2522,7 +2524,7 @@ export default function POSModule() {
     if (rawPrintDiscountPct < 0) {
       return {
         ...item,
-        price: Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor),
+        price: Math.round(getItemFinalPrice(item, wholesaleRules) * printIncreaseFactor),
         discountPct: 0
       };
     }
@@ -3105,7 +3107,7 @@ export default function POSModule() {
                           fontSize: "1.1rem",
                         }}
                       >
-                        ${(getItemFinalPrice(item, wholesaleRules) * item.qty).toFixed(2)}
+                        ${(Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor) * item.qty).toFixed(activeTicket.discountPct < 0 ? 0 : 2)}
                       </strong>
                       {(item.discountPct || 0) > 0 && (
                         <span style={{ fontSize: "0.75rem", color: "#ef4444", display: "block", textAlign: "right", marginTop: "2px" }}>
