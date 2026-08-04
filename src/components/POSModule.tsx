@@ -1776,6 +1776,8 @@ export default function POSModule() {
     
     if (job.type === "ticket") {
       const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = job.data;
+      const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
+      const printDiscountPct = discountPct < 0 ? 0 : discountPct;
       
       setAlign(1);
       setBold(true);
@@ -1791,8 +1793,8 @@ export default function POSModule() {
       writeText(divider);
       
       items.forEach((item: any) => {
-        const p = getItemFinalPrice(item, wholesaleRules);
-        const itemTotal = `$${Math.round(p * item.qty)}`;
+        const p = Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor);
+        const itemTotal = `${Math.round(p * item.qty)}`;
         const nameText = `${item.qty}x ${item.name}`;
         
         const wrappedLines: string[] = [];
@@ -1827,19 +1829,17 @@ export default function POSModule() {
       writeText(divider);
       
       const subtotalVal = items.reduce((sum: number, i: any) => {
-         const p = getItemFinalPrice(i, wholesaleRules);
+         const p = Math.round(getItemFinalPrice(i, wholesaleRules) * increaseFactor);
          return sum + (p * i.qty);
       }, 0);
-      const discountVal = subtotalVal * (discountPct / 100);
+      const discountVal = subtotalVal * (printDiscountPct / 100);
       const subtotalNeto = subtotalVal - discountVal;
       const iva = applyIva ? subtotalNeto * 0.16 : 0;
       
       setAlign(2);
-      writeText(`Subtotal: $${Math.round(subtotalVal)}\n`);
-      if (discountPct > 0) {
-        writeText(`Desc. (${discountPct}%): -$${Math.round(discountVal)}\n`);
-      } else if (discountPct < 0) {
-        writeText(`Aum. (${Math.abs(discountPct)}%): +$${Math.round(-discountVal)}\n`);
+      writeText(`Subtotal: ${Math.round(subtotalVal)}\n`);
+      if (printDiscountPct > 0) {
+        writeText(`Desc. (${printDiscountPct}%): -${Math.round(discountVal)}\n`);
       }
       if (applyIva) {
         writeText(`IVA (16%): $${Math.round(iva)}\n`);
@@ -1862,6 +1862,8 @@ export default function POSModule() {
       }
     } else if (job.type === "layaway") {
       const { customer, items, finalTotal, downPayment, discountPct = 0, applyIva = false } = job.data;
+      const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
+      const printDiscountPct = discountPct < 0 ? 0 : discountPct;
       
       setAlign(1);
       setBold(true);
@@ -1876,8 +1878,8 @@ export default function POSModule() {
       writeText(divider);
       
       items.forEach((item: any) => {
-        const p = getItemFinalPrice(item, wholesaleRules);
-        const itemTotal = `$${Math.round(p * item.qty)}`;
+        const p = Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor);
+        const itemTotal = `${Math.round(p * item.qty)}`;
         const nameText = `${item.qty}x ${item.name}`;
         
         const wrappedLines: string[] = [];
@@ -1912,21 +1914,19 @@ export default function POSModule() {
       writeText(divider);
       
       const subtotalVal = items.reduce((sum: number, i: any) => {
-         const p = getItemFinalPrice(i, wholesaleRules);
+         const p = Math.round(getItemFinalPrice(i, wholesaleRules) * increaseFactor);
          return sum + (p * i.qty);
       }, 0);
-      const discountVal = subtotalVal * (discountPct / 100);
+      const discountVal = subtotalVal * (printDiscountPct / 100);
       const subtotalNeto = subtotalVal - discountVal;
       const iva = applyIva ? subtotalNeto * 0.16 : 0;
       
       setAlign(2);
-      writeText(`Subtotal: $${Math.round(subtotalVal)}\n`);
-      if (discountPct > 0) {
-        writeText(`Desc. (${discountPct}%): -$${Math.round(discountVal)}\n`);
-      } else if (discountPct < 0) {
-        writeText(`Aum. (${Math.abs(discountPct)}%): +$${Math.round(-discountVal)}\n`);
+      writeText(`Subtotal: ${Math.round(subtotalVal)}\n`);
+      if (printDiscountPct > 0) {
+        writeText(`Desc. (${printDiscountPct}%): -${Math.round(discountVal)}\n`);
       }
-      if (applyIva) writeText(`IVA (16%): $${Math.round(iva)}\n`);
+      if (applyIva) writeText(`IVA (16%): ${Math.round(iva)}\n`);
       
       setBold(true);
       writeText(`TOTAL: $${Math.round(finalTotal)}\n`);
@@ -2059,11 +2059,13 @@ export default function POSModule() {
     if (printerConnectionType === "system") {
       if (job.type === "ticket") {
         const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = job.data;
+        const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
+        const printDiscountPct = discountPct < 0 ? 0 : discountPct;
         const subtotalVal = items.reduce((sum: number, item: any) => {
-           const p = getItemFinalPrice(item, wholesaleRules);
+           const p = Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor);
            return sum + (p * item.qty);
         }, 0);
-        const discountAmt = subtotalVal * (discountPct / 100);
+        const discountAmt = subtotalVal * (printDiscountPct / 100);
         const subtotalNeto = subtotalVal - discountAmt;
         const iva = applyIva ? subtotalNeto * 0.16 : 0;
 
@@ -2071,10 +2073,14 @@ export default function POSModule() {
           type: "ticket",
           ticketId: realTicketId,
           customerName: customers.find(c => c.id === selectedCustomerId)?.name || "",
-          items: [...items],
+          items: items.map((i: any) => ({
+             ...i,
+             price: Math.round(getItemFinalPrice(i, wholesaleRules) * increaseFactor),
+             discountPct: 0
+          })),
           subtotal: subtotalVal,
           iva,
-          discountPct,
+          discountPct: printDiscountPct,
           discountAmount: discountAmt,
           finalTotal: finalTotal,
           invoiceToken: realTicketId,
@@ -2082,21 +2088,27 @@ export default function POSModule() {
         });
       } else if (job.type === "layaway") {
         const { customer, items, finalTotal, downPayment, discountPct = 0, applyIva = false } = job.data;
+        const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
+        const printDiscountPct = discountPct < 0 ? 0 : discountPct;
         const subtotalVal = items.reduce((sum: number, item: any) => {
-           const p = getItemFinalPrice(item, wholesaleRules);
+           const p = Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor);
            return sum + (p * item.qty);
         }, 0);
-        const discountAmt = subtotalVal * (discountPct / 100);
+        const discountAmt = subtotalVal * (printDiscountPct / 100);
         const subtotalNeto = subtotalVal - discountAmt;
         const iva = applyIva ? subtotalNeto * 0.16 : 0;
 
         setReceiptToPrint({
           type: "layaway",
           customerName: customer?.name || "Desconocido",
-          items: [...items],
+          items: items.map((i: any) => ({
+             ...i,
+             price: Math.round(getItemFinalPrice(i, wholesaleRules) * increaseFactor),
+             discountPct: 0
+          })),
           subtotal: subtotalVal,
           iva,
-          discountPct,
+          discountPct: printDiscountPct,
           discountAmount: discountAmt,
           finalTotal,
           downPayment,
@@ -2143,20 +2155,23 @@ export default function POSModule() {
 
     if (job.type === "ticket") {
       const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = job.data;
+      const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
+      const printDiscountPct = discountPct < 0 ? 0 : discountPct;
+      
       const itemsHtml = items.map((i: any) => {
-        const p = getItemFinalPrice(i, wholesaleRules);
+        const p = Math.round(getItemFinalPrice(i, wholesaleRules) * increaseFactor);
         return `
         <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
           <span>${i.qty}x ${i.name} ${(i.discountPct || 0) > 0 ? `(-${i.discountPct}%)` : ''}</span>
-          <span>$${Math.round(p * i.qty)}</span>
+          <span>${Math.round(p * i.qty)}</span>
         </div>`;
       }).join("");
       
       const subtotalVal = items.reduce((sum: number, i: any) => {
-         const p = getItemFinalPrice(i, wholesaleRules);
+         const p = Math.round(getItemFinalPrice(i, wholesaleRules) * increaseFactor);
          return sum + (p * i.qty);
       }, 0);
-      const discountVal = subtotalVal * (discountPct / 100);
+      const discountVal = subtotalVal * (printDiscountPct / 100);
       const subtotalNeto = subtotalVal - discountVal;
       const iva = applyIva ? subtotalNeto * 0.16 : 0;
 
@@ -2221,10 +2236,8 @@ export default function POSModule() {
               ${itemsHtml}
               <div class="divider"></div>
               <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span>$${Math.round(subtotalVal)}</span></div>
-              ${discountPct > 0 ? `
-              <div style="display:flex; justify-content:space-between; color: red;"><span>Desc. (${discountPct}%):</span><span>-$${Math.round(discountVal)}</span></div>
-              ` : discountPct < 0 ? `
-              <div style="display:flex; justify-content:space-between; color: orange;"><span>Aum. (${Math.abs(discountPct)}%):</span><span>+$${Math.round(-discountVal)}</span></div>
+              ${printDiscountPct > 0 ? `
+              <div style="display:flex; justify-content:space-between; color: red;"><span>Desc. (${printDiscountPct}%):</span><span>-${Math.round(discountVal)}</span></div>
               ` : ""}
               ${applyIva ? `
               <div style="display:flex; justify-content:space-between;"><span>IVA (16%):</span><span>$${Math.round(iva)}</span></div>
@@ -2256,20 +2269,23 @@ export default function POSModule() {
       setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
       } else if (job.type === "layaway") {
       const { customer, items, finalTotal, downPayment, discountPct = 0, applyIva = false } = job.data;
+      const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
+      const printDiscountPct = discountPct < 0 ? 0 : discountPct;
+      
       const itemsHtml = items.map((item: any) => {
-        const p = getItemFinalPrice(item, wholesaleRules);
+        const p = Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor);
         return `
         <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
           <div style="flex: 2;">${item.qty}x ${item.name}</div>
-          <div style="flex: 1; text-align: right;">$${Math.round(p * item.qty)}</div>
+          <div style="flex: 1; text-align: right;">${Math.round(p * item.qty)}</div>
         </div>`;
       }).join("");
       
       const subtotalVal = items.reduce((sum: number, item: any) => {
-         const p = getItemFinalPrice(item, wholesaleRules);
+         const p = Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor);
          return sum + (p * item.qty);
       }, 0);
-      const discountVal = subtotalVal * (discountPct / 100);
+      const discountVal = subtotalVal * (printDiscountPct / 100);
       const subtotalNeto = subtotalVal - discountVal;
       const iva = applyIva ? subtotalNeto * 0.16 : 0;
       
@@ -2316,15 +2332,10 @@ export default function POSModule() {
                 <div>Subtotal:</div>
                 <div>$${Math.round(subtotalVal)}</div>
               </div>
-              ${discountPct > 0 ? `
+              ${printDiscountPct > 0 ? `
               <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: red;">
-                <div>Desc. (${discountPct}%):</div>
-                <div>-$${Math.round(discountVal)}</div>
-              </div>
-              ` : discountPct < 0 ? `
-              <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: orange;">
-                <div>Aum. (${Math.abs(discountPct)}%):</div>
-                <div>+$${Math.round(-discountVal)}</div>
+                <div>Desc. (${printDiscountPct}%):</div>
+                <div>-${Math.round(discountVal)}</div>
               </div>
               ` : ""}
               ${applyIva ? `
@@ -2477,10 +2488,15 @@ export default function POSModule() {
     
     const bizUpper = (businessProfile.name || "FERRETERÍA ERIKA").toUpperCase();
     const title = type === "quote" ? `*COTIZACIÓN - ${bizUpper}*` : `*RECIBO DE COMPRA - ${bizUpper}*`;
-    const itemsText = activeTicket.items.map(i => `▪️ ${i.qty}x ${i.name} - $${(i.price * i.qty).toFixed(2)}`).join("\n");
+    const discountPct = activeTicket.discountPct || 0;
+    const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
+    const itemsText = activeTicket.items.map(i => {
+      const p = Math.round(getItemFinalPrice(i, wholesaleRules) * increaseFactor);
+      return `▪️ ${i.qty}x ${i.name} - ${Math.round(p * i.qty)}`;
+    }).join("\n");
     const totalText = applyIva 
-      ? `*SUBTOTAL: $${subtotalNeto.toFixed(2)}*\n*IVA (16%): $${iva.toFixed(2)}*\n*TOTAL: $${finalTotal.toFixed(2)}*` 
-      : `*TOTAL: $${finalTotal.toFixed(2)}*`;
+      ? `*SUBTOTAL: ${Math.round(subtotalNeto)}*\n*IVA (16%): ${Math.round(iva)}*\n*TOTAL: ${Math.round(finalTotal)}*` 
+      : `*TOTAL: ${Math.round(finalTotal)}*`;
     
     const billingText = type === "receipt" 
       ? `\n\n📄 Auto-Facturación Express:\nEntra a: ${window.location.origin}/facturacion/${invoiceToken} para facturar.` 
@@ -2497,11 +2513,23 @@ export default function POSModule() {
   const printType = isPrintingJob ? receiptToPrint.type : "quote";
   const printTitle = printType === "ticket" ? "TICKET DE VENTA" : (printType === "layaway" ? "COMPROBANTE DE APARTADO" : "COTIZACIÓN");
   
-  const printItems = isPrintingJob ? receiptToPrint.items : activeTicket.items;
+  const rawPrintDiscountPct = isPrintingJob ? receiptToPrint.discountPct : activeTicket.discountPct;
+  const increaseFactor = rawPrintDiscountPct < 0 ? (1 + Math.abs(rawPrintDiscountPct) / 100) : 1;
+  const printDiscountPct = rawPrintDiscountPct < 0 ? 0 : rawPrintDiscountPct;
+  const printDiscountAmount = rawPrintDiscountPct < 0 ? 0 : (isPrintingJob ? receiptToPrint.discountAmount : discountAmount);
+
+  const printItems = (isPrintingJob ? receiptToPrint.items : activeTicket.items).map((item: any) => {
+    if (rawPrintDiscountPct < 0) {
+      return {
+        ...item,
+        price: Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor),
+        discountPct: 0
+      };
+    }
+    return item;
+  });
   const printSubtotal = isPrintingJob ? receiptToPrint.subtotal : subtotal;
   const printIva = isPrintingJob ? receiptToPrint.iva : iva;
-  const printDiscountPct = isPrintingJob ? receiptToPrint.discountPct : activeTicket.discountPct;
-  const printDiscountAmount = isPrintingJob ? receiptToPrint.discountAmount : discountAmount;
   const printFinalTotal = isPrintingJob ? receiptToPrint.finalTotal : finalTotal;
   const printTicketId = isPrintingJob ? receiptToPrint.ticketId : "";
   const printInvoiceToken = isPrintingJob ? receiptToPrint.invoiceToken : invoiceToken;
