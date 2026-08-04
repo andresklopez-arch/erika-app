@@ -31,6 +31,7 @@ interface Ticket {
   id: number;
   items: POSItem[];
   discountPct: number;
+  customerId?: string;
 }
 
 const levenshtein = (a: string, b: string) => {
@@ -214,7 +215,19 @@ export default function POSModule() {
   const [searchInput, setSearchInput] = useState("");
   const [customers, setCustomers] = useState<any[]>([]);
   const [showCreditModal, setShowCreditModal] = useState(false);
-  const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [selectedCustomerIdState, setSelectedCustomerIdState] = useState("");
+  const selectedCustomerId = selectedCustomerIdState;
+  const setSelectedCustomerId = (id: string) => {
+    setSelectedCustomerIdState(id);
+    setTickets((prev) =>
+      prev.map((t) => (t.id === activeTicketId ? { ...t, customerId: id } : t))
+    );
+  };
+
+  useEffect(() => {
+    const activeT = tickets.find((t) => t.id === activeTicketId);
+    setSelectedCustomerIdState(activeT?.customerId || "");
+  }, [activeTicketId, tickets]);
   const [customerActiveStats, setCustomerActiveStats] = useState<{ layawaysCount: number; quotesCount: number } | null>(null);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"efectivo" | "tarjeta" | "transferencia" | "mixto" | "credito">("efectivo");
