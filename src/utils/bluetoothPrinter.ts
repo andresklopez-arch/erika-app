@@ -34,16 +34,25 @@ export interface BleConnectResult {
  */
 export function findWriteCharacteristic(characteristics: any[]): any {
   if (!characteristics || characteristics.length === 0) return null;
-  const writeChars = characteristics.filter(
-    (c) => c.properties && (c.properties.write || c.properties.writeWithoutResponse)
-  );
-  let char = writeChars.find((c) => {
+
+  // Filtrar características para EXCLUIR atributos genéricos de Bluetooth SIG (GAP/GATT/Device Name 00002aXX)
+  const validVendorChars = characteristics.filter((c) => {
+    if (!c.properties || (!c.properties.write && !c.properties.writeWithoutResponse)) return false;
+    const uuid = c.uuid.toLowerCase();
+    if (uuid.includes("00002a") || uuid.includes("00001800") || uuid.includes("00001801") || uuid.includes("0000180a")) {
+      return false;
+    }
+    return true;
+  });
+
+  const searchList = validVendorChars.length > 0 ? validVendorChars : characteristics;
+
+  let char = searchList.find((c) => {
     const uuidLower = c.uuid.toLowerCase();
     return KNOWN_PATTERNS.some((pat) => uuidLower.includes(pat));
   });
-  if (!char) char = writeChars.find((c) => c.properties.write);
-  if (!char) char = writeChars.find((c) => c.properties.writeWithoutResponse);
-  if (!char) char = writeChars[0];
+  if (!char) char = searchList.find((c) => c.properties && (c.properties.write || c.properties.writeWithoutResponse));
+  if (!char) char = searchList[0];
   return char;
 }
 
@@ -210,7 +219,7 @@ export async function getOrReconnectBlePrinter(
 }
 
 /**
- * Transmite datos ESC/POS en bloques asegurando acuse de recibo para tablets y PCs.
+ * Transmite datos ESC/POS en bloques asegurando transmisión robusta para tablets y PCs.
  */
 export async function sendBleBytes(
   char: any,
@@ -234,24 +243,25 @@ export async function sendBleBytes(
       if (newChar) activeChar = newChar;
     }
 
-    try {
-      // Priorizar writeValueWithResponse para garantizar recepción en tablets Android y PCs
-      if (activeChar.properties && activeChar.properties.write) {
-        await activeChar.writeValueWithResponse(chunk);
-      } else if (activeChar.properties && activeChar.properties.writeWithoutResponse) {
-        await activeChar.writeValueWithoutResponse(chunk);
-      } else {
-        await activeChar.writeValue(chunk);
-      }
-    } catch (writeErr: any) {
-      console.warn("[BLE] Reintentando transmisión de bloque con método secundario...", writeErr);
+    let written = false;
+    if (activeChar.properties && activeChar.properties.writeWithoutResponse) {
       try {
-        if (activeChar.properties && activeChar.properties.writeWithoutResponse) {
-          await activeChar.writeValueWithoutResponse(chunk);
+        await activeChar.writeValueWithoutResponse(chunk);
+        written = true;
+      } catch (errNoResp) {
+        console.warn("[BLE] writeValueWithoutResponse falló, probando writeValueWithResponse...", errNoResp);
+      }
+    }
+
+    if (!written) {
+      try {
+        if (activeChar.properties && activeChar.properties.write) {
+          await activeChar.writeValueWithResponse(chunk);
         } else {
           await activeChar.writeValue(chunk);
         }
-      } catch (fallbackErr) {
+      } catch (writeErr: any) {
+        console.warn("[BLE] Reintentando transmisión de bloque tras reconexión...", writeErr);
         if (device) {
           const server = await reconnectGattServer(device);
           const chars = await getCharacteristicsFromGattServer(server);
@@ -264,7 +274,6 @@ export async function sendBleBytes(
       }
     }
 
-    // Retardo controlado para evitar saturar el buffer de entrada de impresoras térmicas portátiles
     const effectiveDelay = Math.max(30, delayMs);
     await new Promise((r) => setTimeout(r, effectiveDelay));
   }
