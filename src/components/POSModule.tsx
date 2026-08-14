@@ -1681,7 +1681,7 @@ export default function POSModule() {
     // 1. Ráfaga TSPL para impresoras fijas en Print mode: LABEL (EC Line EC-MP-300)
     if (job.type === "ticket" && job.data?.items) {
       const itemsList = job.data.items || [];
-      const totalH = Math.max(50, 45 + (itemsList.length * 8));
+      const totalH = Math.max(30, 25 + (itemsList.length * 6));
       let tspl = `SIZE 72 mm, ${totalH} mm\r\nGAP 0,0\r\n${dirStr}CLS\r\nSET TEAR ON\r\n`;
       let y = 20;
       tspl += `TEXT 30,${y},"3",0,1,1,"${(businessProfile.name || config.business_name || "FERRETERIA ERIKA").toUpperCase()}"\r\n`;
@@ -1936,11 +1936,8 @@ export default function POSModule() {
       writeText((config.printer_footer_msg || "Gracias por su compra!") + "\n");
     }
 
-    // Avance de líneas explícito para asegurar que las impresoras portátiles 58mm/80mm vacíen el buffer
-    write([0x1b, 0x64, 0x06]); // ESC d 6
-    write([0x0a, 0x0a, 0x0a, 0x0a]); // Line Feeds
-    write([0x0c]); // Form Feed
-    writeText("PRINT 1,1\r\n"); // TSPL Flush por si está en modo LABEL
+    // Avance de exactamente 1 línea para evitar desperdicio de papel entre impresiones
+    write([0x1b, 0x64, 0x01]); // ESC d 1 (Exactamente 1 línea)
     if (config.printer_enable_autocut !== false) {
       try {
         write([0x1d, 0x56, 0x01]); // GS V 1 corte seguro

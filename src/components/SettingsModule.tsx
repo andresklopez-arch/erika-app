@@ -648,9 +648,8 @@ export default function SettingsModule() {
         writeText(`Fecha: ${new Date().toLocaleString()}\r\n`);
         writeText(`Buffer: ${printerBleChunkSize} bytes\r\n`);
         writeText(`Papel: ${printerPaperSize}\r\n`);
-        writeText("--------------------------------\r\n");
-        writeText("\r\n\r\n");
-        write([0x1b, 0x64, 0x03]); // ESC d 3 (Avance exacto de 3 líneas)
+        writeText("\r\n");
+        write([0x1b, 0x64, 0x01]); // ESC d 1 (Exactamente 1 línea de espacio)
 
         const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
         const bytes = new Uint8Array(totalLength);
