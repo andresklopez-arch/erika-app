@@ -63,6 +63,8 @@ const AuthContext = createContext<AuthContextType>({
       printer_ble_chunk_size: 20,
       printer_enable_autocut: true,
       printer_invert_180: true,
+      printer_margin_top_lines: 0,
+      printer_margin_bottom_lines: 1,
       low_stock_threshold: 5,
       max_cajero_discount_pct: 5,
     },
@@ -158,6 +160,8 @@ export default function AuthProvider({
         printer_ble_chunk_size: Number(localStorage.getItem("ERIKA_PRINTER_BLE_CHUNK_SIZE")) || 20,
         printer_enable_autocut: localStorage.getItem("ERIKA_PRINTER_ENABLE_AUTOCUT") !== "false",
         printer_invert_180: localStorage.getItem("ERIKA_PRINTER_INVERT_180") !== "false",
+        printer_margin_top_lines: Number(localStorage.getItem("ERIKA_PRINTER_TOP_LINES")) || 0,
+        printer_margin_bottom_lines: localStorage.getItem("ERIKA_PRINTER_BOTTOM_LINES") !== null ? Number(localStorage.getItem("ERIKA_PRINTER_BOTTOM_LINES")) : 1,
         low_stock_threshold: Number(localStorage.getItem("ERIKA_LOW_STOCK_THRESHOLD")) || 5,
         max_cajero_discount_pct: Number(localStorage.getItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT")) || 5,
       };
@@ -204,6 +208,8 @@ export default function AuthProvider({
         printer_ble_chunk_size: 20,
         printer_enable_autocut: true,
         printer_invert_180: true,
+        printer_margin_top_lines: 0,
+        printer_margin_bottom_lines: 1,
         low_stock_threshold: 5,
         max_cajero_discount_pct: 5,
       },
@@ -258,6 +264,8 @@ export default function AuthProvider({
         localStorage.setItem("ERIKA_PRINTER_PADDING", parsed.config.printer_padding || "8");
         localStorage.setItem("ERIKA_PRINTER_ENABLE_AUTOCUT", String(parsed.config.printer_enable_autocut !== false));
         localStorage.setItem("ERIKA_PRINTER_INVERT_180", String(parsed.config.printer_invert_180 !== false));
+        localStorage.setItem("ERIKA_PRINTER_TOP_LINES", String(parsed.config.printer_margin_top_lines ?? 0));
+        localStorage.setItem("ERIKA_PRINTER_BOTTOM_LINES", String(parsed.config.printer_margin_bottom_lines ?? 1));
         localStorage.setItem("ERIKA_THEME", parsed.config.theme);
       }
     } catch (e) {
@@ -341,6 +349,8 @@ export default function AuthProvider({
         localStorage.setItem("ERIKA_PRINTER_PADDING", result.settings.config.printer_padding || "8");
         localStorage.setItem("ERIKA_PRINTER_ENABLE_AUTOCUT", String(result.settings.config.printer_enable_autocut !== false));
         localStorage.setItem("ERIKA_PRINTER_INVERT_180", String(result.settings.config.printer_invert_180 !== false));
+        localStorage.setItem("ERIKA_PRINTER_TOP_LINES", String(result.settings.config.printer_margin_top_lines ?? 0));
+        localStorage.setItem("ERIKA_PRINTER_BOTTOM_LINES", String(result.settings.config.printer_margin_bottom_lines ?? 1));
         localStorage.setItem("ERIKA_THEME", result.settings.config.theme);
         localStorage.setItem("ERIKA_LOW_STOCK_THRESHOLD", String(result.settings.config.low_stock_threshold || 5));
         localStorage.setItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT", String(result.settings.config.max_cajero_discount_pct || 5));

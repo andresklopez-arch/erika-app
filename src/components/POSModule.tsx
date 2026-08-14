@@ -1677,13 +1677,15 @@ export default function POSModule() {
     
     const invertPrint = config.printer_invert_180 !== false;
     const dirStr = `DIRECTION ${invertPrint ? 1 : 0},0\r\n`;
+    const topLines = config.printer_margin_top_lines || 0;
+    const bottomLines = config.printer_margin_bottom_lines !== undefined ? config.printer_margin_bottom_lines : 1;
 
     // 1. Ráfaga TSPL para impresoras fijas en Print mode: LABEL (EC Line EC-MP-300)
     if (job.type === "ticket" && job.data?.items) {
       const itemsList = job.data.items || [];
-      const totalH = Math.max(30, 25 + (itemsList.length * 6));
+      const totalH = Math.max(30, 25 + (itemsList.length * 6) + (topLines * 4) + (bottomLines * 4));
       let tspl = `SIZE 72 mm, ${totalH} mm\r\nGAP 0,0\r\n${dirStr}CLS\r\nSET TEAR ON\r\n`;
-      let y = 20;
+      let y = 20 + (topLines * 12);
       tspl += `TEXT 30,${y},"3",0,1,1,"${(businessProfile.name || config.business_name || "FERRETERIA ERIKA").toUpperCase()}"\r\n`;
       y += 35;
       tspl += `TEXT 30,${y},"2",0,1,1,"Ticket #: ${job.data.realTicketId || Date.now()}"\r\n`;
@@ -1713,6 +1715,11 @@ export default function POSModule() {
     write([0x1b, 0x7b, invertPrint ? 0x01 : 0x00]); // ESC { orientation
     write([0x1b, 0x74, 0x00]); // Code page 437
     write([0x1b, 0x32]); // Line spacing default
+
+    // Líneas ANTES de imprimir (Encabezado)
+    if (topLines > 0) {
+      write([0x1b, 0x64, topLines]);
+    }
     
     const setAlign = (align: number) => {
       write([0x1b, 0x61, align]);
@@ -1936,8 +1943,10 @@ export default function POSModule() {
       writeText((config.printer_footer_msg || "Gracias por su compra!") + "\n");
     }
 
-    // Avance de exactamente 1 línea para evitar desperdicio de papel entre impresiones
-    write([0x1b, 0x64, 0x01]); // ESC d 1 (Exactamente 1 línea)
+    // Líneas DESPUÉS de imprimir (Pie / Avance configurable por usuario)
+    if (bottomLines > 0) {
+      write([0x1b, 0x64, bottomLines]);
+    }
     if (config.printer_enable_autocut !== false) {
       try {
         write([0x1d, 0x56, 0x01]); // GS V 1 corte seguro

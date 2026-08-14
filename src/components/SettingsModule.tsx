@@ -104,6 +104,19 @@ export default function SettingsModule() {
     }
     return true;
   });
+  const [printerMarginTopLines, setPrinterMarginTopLines] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      return Number(localStorage.getItem("ERIKA_PRINTER_TOP_LINES")) || 0;
+    }
+    return 0;
+  });
+  const [printerMarginBottomLines, setPrinterMarginBottomLines] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const b = localStorage.getItem("ERIKA_PRINTER_BOTTOM_LINES");
+      return b !== null ? Number(b) : 1;
+    }
+    return 1;
+  });
 
   interface ErrorLogItem {
     id: string;
@@ -359,6 +372,8 @@ export default function SettingsModule() {
       setPrinterBleChunkSize(businessSettings.config.printer_ble_chunk_size || 20);
       setPrinterEnableAutocut(businessSettings.config.printer_enable_autocut !== false);
       setPrinterInvert180(businessSettings.config.printer_invert_180 !== false);
+      setPrinterMarginTopLines(businessSettings.config.printer_margin_top_lines ?? 0);
+      setPrinterMarginBottomLines(businessSettings.config.printer_margin_bottom_lines ?? 1);
       setLowStockThreshold(String(businessSettings.config.low_stock_threshold || 5));
       setMaxCajeroDiscountPct(String(businessSettings.config.max_cajero_discount_pct || 5));
       /* eslint-enable react-hooks/set-state-in-effect */
@@ -510,6 +525,8 @@ export default function SettingsModule() {
         printer_ble_chunk_size: printerBleChunkSize,
         printer_enable_autocut: printerEnableAutocut,
         printer_invert_180: printerInvert180,
+        printer_margin_top_lines: printerMarginTopLines,
+        printer_margin_bottom_lines: printerMarginBottomLines,
       }
     });
     if (success) {
@@ -521,6 +538,8 @@ export default function SettingsModule() {
       localStorage.setItem("ERIKA_PRINTER_BLE_CHUNK_SIZE", String(printerBleChunkSize));
       localStorage.setItem("ERIKA_PRINTER_ENABLE_AUTOCUT", printerEnableAutocut ? "true" : "false");
       localStorage.setItem("ERIKA_PRINTER_INVERT_180", printerInvert180 ? "true" : "false");
+      localStorage.setItem("ERIKA_PRINTER_TOP_LINES", String(printerMarginTopLines));
+      localStorage.setItem("ERIKA_PRINTER_BOTTOM_LINES", String(printerMarginBottomLines));
       alert("✅ Configuración de Impresión guardada exitosamente.");
     }
   };
@@ -626,17 +645,27 @@ export default function SettingsModule() {
 
         const invertPrint = printerInvert180 || false;
 
+        const topLines = printerMarginTopLines || 0;
+        const bottomLines = printerMarginBottomLines !== undefined ? printerMarginBottomLines : 1;
+
         // 1. Comando de cambio de modo TSPL a ESCPOS con orientación
         writeText(`DIRECTION ${invertPrint ? 1 : 0},0\r\nSET PRINT MODE ESCPOS\r\nMODE ESCPOS\r\n`);
 
         // 2. Renderizado TSPL por si la impresora está en modo LABEL (Etiqueta)
-        writeText(`SIZE 72 mm, 60 mm\r\nGAP 0,0\r\nDIRECTION ${invertPrint ? 1 : 0},0\r\nCLS\r\nTEXT 40,20,"3",0,1,1,"FERRETERIA ERIKA"\r\nTEXT 40,60,"2",0,1,1,"EC-MP-300 TICKET OK"\r\nTEXT 40,90,"2",0,1,1,"----------------------------"\r\nTEXT 40,120,"2",0,1,1,"TICKET DE PRUEBA"\r\nPRINT 1,1\r\n`);
+        const tsplY0 = 20 + (topLines * 12);
+        writeText(`SIZE 72 mm, 60 mm\r\nGAP 0,0\r\nDIRECTION ${invertPrint ? 1 : 0},0\r\nCLS\r\nTEXT 40,${tsplY0},"3",0,1,1,"FERRETERIA ERIKA"\r\nTEXT 40,${tsplY0 + 35},"2",0,1,1,"EC-MP-300 TICKET OK"\r\nTEXT 40,${tsplY0 + 65},"2",0,1,1,"----------------------------"\r\nTEXT 40,${tsplY0 + 90},"2",0,1,1,"TICKET DE PRUEBA"\r\nPRINT 1,1\r\n`);
 
         // 3. Comandos ESC/POS estándar
         write([0x1b, 0x40]); // Init ESC @
         write([0x1b, 0x7b, invertPrint ? 0x01 : 0x00]); // ESC { n (0 = Normal, 1 = Invertido 180°)
         write([0x1b, 0x74, 0x00]); // CP437 Standard CodePage
         write([0x1b, 0x32]); // Default line spacing
+
+        // Líneas ANTES de imprimir
+        if (topLines > 0) {
+          write([0x1b, 0x64, topLines]);
+        }
+
         write([0x1b, 0x42, 0x03, 0x02]); // Beep EC-MP-300
         write([0x1b, 0x61, 0x01]); // Align Center
         write([0x1b, 0x45, 0x01]); // Bold
@@ -648,8 +677,11 @@ export default function SettingsModule() {
         writeText(`Fecha: ${new Date().toLocaleString()}\r\n`);
         writeText(`Buffer: ${printerBleChunkSize} bytes\r\n`);
         writeText(`Papel: ${printerPaperSize}\r\n`);
-        writeText("\r\n");
-        write([0x1b, 0x64, 0x01]); // ESC d 1 (Exactamente 1 línea de espacio)
+
+        // Líneas DESPUÉS de imprimir
+        if (bottomLines > 0) {
+          write([0x1b, 0x64, bottomLines]);
+        }
 
         const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
         const bytes = new Uint8Array(totalLength);
@@ -1379,6 +1411,50 @@ export default function SettingsModule() {
               <label htmlFor="printer-invert-checkbox" style={{ fontSize: "0.9rem", cursor: "pointer", userSelect: "none", color: "white" }}>
                 <strong>Girar Impresión 180° (Imp. de Cabeza)</strong> (Marque esta casilla para invertir la orientación si su modelo imprime al revés).
               </label>
+            </div>
+
+            {/* Submenú de Líneas de Espacio en Blanco (Márgenes de Impresión) */}
+            <div style={{ background: "rgba(255,255,255,0.03)", padding: "12px", borderRadius: "8px", border: "1px solid var(--glass-border)", marginTop: "10px" }}>
+              <h4 style={{ margin: "0 0 10px 0", fontSize: "0.9rem", color: "var(--color-primary)", display: "flex", alignItems: "center", gap: "8px" }}>
+                📐 Espacios de Línea por Defecto (Márgenes ANTES y DESPUÉS de Imprimir)
+              </h4>
+              <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: "200px" }}>
+                  <label style={{ display: "block", fontSize: "0.85rem", color: "white", marginBottom: "4px" }}>
+                    <strong>Líneas en Blanco ANTES de imprimir (Encabezado):</strong>
+                  </label>
+                  <select
+                    value={printerMarginTopLines}
+                    onChange={(e) => setPrinterMarginTopLines(Number(e.target.value))}
+                    style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.4)", color: "white", cursor: "pointer" }}
+                  >
+                    <option value={0}>0 Líneas (Sin espacio inicial)</option>
+                    <option value={1}>1 Línea (Recomendado)</option>
+                    <option value={2}>2 Líneas</option>
+                    <option value={3}>3 Líneas</option>
+                    <option value={4}>4 Líneas</option>
+                    <option value={5}>5 Líneas</option>
+                  </select>
+                </div>
+                <div style={{ flex: 1, minWidth: "200px" }}>
+                  <label style={{ display: "block", fontSize: "0.85rem", color: "white", marginBottom: "4px" }}>
+                    <strong>Líneas en Blanco DESPUÉS de imprimir (Pie / Avance):</strong>
+                  </label>
+                  <select
+                    value={printerMarginBottomLines}
+                    onChange={(e) => setPrinterMarginBottomLines(Number(e.target.value))}
+                    style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.4)", color: "white", cursor: "pointer" }}
+                  >
+                    <option value={0}>0 Líneas (Corte al ras)</option>
+                    <option value={1}>1 Línea (1 Espacio limpio por defecto)</option>
+                    <option value={2}>2 Líneas</option>
+                    <option value={3}>3 Líneas</option>
+                    <option value={4}>4 Líneas</option>
+                    <option value={5}>5 Líneas</option>
+                    <option value={6}>6 Líneas (Para guillotina autocorte)</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
             {connectionType === "system" && (
