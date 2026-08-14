@@ -1574,11 +1574,7 @@ export default function POSModule() {
           console.error("Error crítico al actualizar inventario:", invErr);
         }
 
-        alert(
-          `✅ ¡Cobro Exitoso por $${totalAmt.toFixed(2)} [Método: ${selectedMethod.toUpperCase()}]!\nEl dinero ha sido ingresado a la Caja.`,
-        );
-
-        // Impresión (completamente aislado)
+        // Impresión inmediata en segundo plano previa a cualquier notificación
         if (shouldPrint) {
           try {
             triggerPrint({
@@ -1597,11 +1593,14 @@ export default function POSModule() {
           }
         }
 
-        // WhatsApp option (Sugerencia 3)
-        const sendWpp = confirm("¿Deseas enviar el comprobante de compra digital por WhatsApp al cliente?");
-        if (sendWpp) {
-          sendWhatsApp("receipt");
-        }
+        // WhatsApp opcional (ejecutado tras liberar la impresión Bluetooth)
+        setTimeout(() => {
+          const sendWpp = confirm("¿Deseas enviar el comprobante de compra digital por WhatsApp al cliente?");
+          if (sendWpp) {
+            sendWhatsApp("receipt");
+          }
+        }, 1500);
+
         setPaymentReference("");
       }
 
