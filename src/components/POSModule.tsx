@@ -1675,9 +1675,42 @@ export default function POSModule() {
       chunks.push(encoder.encode(text));
     };
     
-    // Comando de cambio de modo TSPL por si la impresora está en modo LABEL
+    const invertPrint = config.printer_invert_180 || false;
+    const dirStr = `DIRECTION ${invertPrint ? 1 : 0},0\r\n`;
+
+    // 1. Ráfaga TSPL para impresoras fijas en Print mode: LABEL (EC Line EC-MP-300)
+    if (job.type === "ticket" && job.data?.items) {
+      const itemsList = job.data.items || [];
+      const totalH = Math.max(120, 80 + (itemsList.length * 30));
+      let tspl = `SIZE 72 mm, ${totalH} mm\r\nGAP 0,0\r\n${dirStr}CLS\r\nSET TEAR ON\r\n`;
+      let y = 20;
+      tspl += `TEXT 30,${y},"3",0,1,1,"${(businessProfile.name || config.business_name || "FERRETERIA ERIKA").toUpperCase()}"\r\n`;
+      y += 35;
+      tspl += `TEXT 30,${y},"2",0,1,1,"Ticket #: ${job.data.realTicketId || Date.now()}"\r\n`;
+      y += 25;
+      tspl += `TEXT 30,${y},"2",0,1,1,"Fecha: ${new Date().toLocaleDateString()}"\r\n`;
+      y += 25;
+      tspl += `TEXT 30,${y},"2",0,1,1,"----------------------------------------"\r\n`;
+      y += 25;
+      itemsList.forEach((item: any) => {
+        const itemP = Math.round(getItemFinalPrice(item, wholesaleRules));
+        const itemLine = `${item.qty}x ${item.name.substring(0, 20)}  $${itemP * item.qty}`;
+        tspl += `TEXT 30,${y},"2",0,1,1,"${itemLine}"\r\n`;
+        y += 25;
+      });
+      tspl += `TEXT 30,${y},"2",0,1,1,"----------------------------------------"\r\n`;
+      y += 25;
+      tspl += `TEXT 30,${y},"3",0,1,1,"TOTAL: $${Math.round(job.data.finalTotal || 0)}"\r\n`;
+      y += 35;
+      tspl += `TEXT 30,${y},"2",0,1,1,"${(config.printer_footer_msg || "Gracias por su compra!").toUpperCase()}"\r\n`;
+      tspl += "PRINT 1,1\r\n";
+      writeText(tspl);
+    }
+
+    // 2. Comandos ESC/POS estándar
     writeText("SET PRINT MODE ESCPOS\r\nMODE ESCPOS\r\n");
     write([0x1b, 0x40]); // Reset ESC @
+    write([0x1b, 0x7b, invertPrint ? 0x01 : 0x00]); // ESC { orientation
     write([0x1b, 0x74, 0x00]); // Code page 437
     write([0x1b, 0x32]); // Line spacing default
     
