@@ -1593,13 +1593,10 @@ export default function POSModule() {
           }
         }
 
-        // WhatsApp opcional (ejecutado tras liberar la impresión Bluetooth)
-        setTimeout(() => {
-          const sendWpp = confirm("¿Deseas enviar el comprobante de compra digital por WhatsApp al cliente?");
-          if (sendWpp) {
-            sendWhatsApp("receipt");
-          }
-        }, 1500);
+        toast.success(
+          `✅ ¡Cobro Exitoso por $${totalAmt.toFixed(2)} [Método: ${selectedMethod.toUpperCase()}]! Ticket impreso en EC-MP-300.`,
+          { duration: 4000 }
+        );
 
         setPaymentReference("");
       }
