@@ -597,9 +597,16 @@ export default function SettingsModule() {
   const handleTestPrint = async () => {
     if (connectionType === "bluetooth") {
       try {
-        const result = await getOrReconnectBlePrinter(bleCharacteristic, true);
+        // 1. Intentar reconexión silenciosa a la impresora ya vinculada sin abrir ventana flotante
+        let result = await getOrReconnectBlePrinter(bleCharacteristic, false);
+
+        // 2. Si no se encontró vinculación previa, solicitar emparejamiento por única vez
         if (!result.success || !result.char) {
-          alert("Fallo al conectar con impresora EC-MP-300: " + (result.error || "No se pudo conectar a la impresora."));
+          result = await getOrReconnectBlePrinter(bleCharacteristic, true);
+        }
+
+        if (!result.success || !result.char) {
+          alert("Fallo al conectar con impresora: " + (result.error || "No se pudo conectar a la impresora."));
           return;
         }
 
