@@ -515,6 +515,7 @@ export default function SettingsModule() {
       localStorage.setItem("ERIKA_PRINTER_DOUBLE_COPY", printerDoubleCopy ? "true" : "false");
       localStorage.setItem("ERIKA_PRINTER_BLE_CHUNK_SIZE", String(printerBleChunkSize));
       localStorage.setItem("ERIKA_PRINTER_ENABLE_AUTOCUT", printerEnableAutocut ? "true" : "false");
+      localStorage.setItem("ERIKA_PRINTER_INVERT_180", printerInvert180 ? "true" : "false");
       alert("✅ Configuración de Impresión guardada exitosamente.");
     }
   };
@@ -643,12 +644,8 @@ export default function SettingsModule() {
         writeText(`Buffer: ${printerBleChunkSize} bytes\r\n`);
         writeText(`Papel: ${printerPaperSize}\r\n`);
         writeText("--------------------------------\r\n");
-        writeText("Si lee esto, su EC-MP-300\r\nesta imprimiendo correctamente.\r\n");
-        writeText("\r\n\r\n\r\n");
-        write([0x1b, 0x64, 0x06]); // ESC d 6 (Avance 6 líneas)
-        write([0x0a, 0x0a, 0x0a, 0x0a]); // Line feeds
-        write([0x0c]); // Form Feed
-        writeText("PRINT 1,1\r\n"); // TSPL Flush backup
+        writeText("\r\n\r\n");
+        write([0x1b, 0x64, 0x03]); // ESC d 3 (Avance exacto de 3 líneas)
 
         const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
         const bytes = new Uint8Array(totalLength);
