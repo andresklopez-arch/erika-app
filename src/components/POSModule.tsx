@@ -1675,13 +1675,13 @@ export default function POSModule() {
       chunks.push(encoder.encode(text));
     };
     
-    const invertPrint = config.printer_invert_180 || false;
+    const invertPrint = config.printer_invert_180 !== false;
     const dirStr = `DIRECTION ${invertPrint ? 1 : 0},0\r\n`;
 
     // 1. Ráfaga TSPL para impresoras fijas en Print mode: LABEL (EC Line EC-MP-300)
     if (job.type === "ticket" && job.data?.items) {
       const itemsList = job.data.items || [];
-      const totalH = Math.max(120, 80 + (itemsList.length * 30));
+      const totalH = Math.max(50, 45 + (itemsList.length * 8));
       let tspl = `SIZE 72 mm, ${totalH} mm\r\nGAP 0,0\r\n${dirStr}CLS\r\nSET TEAR ON\r\n`;
       let y = 20;
       tspl += `TEXT 30,${y},"3",0,1,1,"${(businessProfile.name || config.business_name || "FERRETERIA ERIKA").toUpperCase()}"\r\n`;

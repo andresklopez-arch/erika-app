@@ -98,7 +98,12 @@ export default function SettingsModule() {
   const [printerDoubleCopy, setPrinterDoubleCopy] = useState<boolean>(false);
   const [printerBleChunkSize, setPrinterBleChunkSize] = useState<number>(20);
   const [printerEnableAutocut, setPrinterEnableAutocut] = useState<boolean>(true);
-  const [printerInvert180, setPrinterInvert180] = useState<boolean>(false);
+  const [printerInvert180, setPrinterInvert180] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("ERIKA_PRINTER_INVERT_180") !== "false";
+    }
+    return true;
+  });
 
   interface ErrorLogItem {
     id: string;
@@ -353,7 +358,7 @@ export default function SettingsModule() {
       setPrinterDoubleCopy(businessSettings.config.printer_double_copy_layaway_credit || false);
       setPrinterBleChunkSize(businessSettings.config.printer_ble_chunk_size || 20);
       setPrinterEnableAutocut(businessSettings.config.printer_enable_autocut !== false);
-      setPrinterInvert180(businessSettings.config.printer_invert_180 || false);
+      setPrinterInvert180(businessSettings.config.printer_invert_180 !== false);
       setLowStockThreshold(String(businessSettings.config.low_stock_threshold || 5));
       setMaxCajeroDiscountPct(String(businessSettings.config.max_cajero_discount_pct || 5));
       /* eslint-enable react-hooks/set-state-in-effect */
