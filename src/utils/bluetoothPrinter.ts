@@ -4,19 +4,22 @@
  */
 
 export const KNOWN_SERVICES = [
+  "0000fff0-0000-1000-8000-00805f9b34fb", // EC Line EC-MP-300 / Rongta primary service
+  "0000ffe0-0000-1000-8000-00805f9b34fb", // EC Line / HM-300 / OEM BLE service
+  "0000ff00-0000-1000-8000-00805f9b34fb",
   "000018f0-0000-1000-8000-00805f9b34fb",
   "0000e7e1-0000-1000-8000-00805f9b34fb",
   "0000ae30-0000-1000-8000-00805f9b34fb",
-  "0000ff00-0000-1000-8000-00805f9b34fb",
   "49535343-fe7d-4ae5-8fa9-9fafd205e455",
   "000018f1-0000-1000-8000-00805f9b34fb",
   "00001800-0000-1000-8000-00805f9b34fb",
   "00001801-0000-1000-8000-00805f9b34fb",
   "0000fee7-0000-1000-8000-00805f9b34fb",
   "0000af00-0000-1000-8000-00805f9b34fb",
+  "00001101-0000-1000-8000-00805f9b34fb", // SPP Bluetooth Serial
 ];
 
-export const KNOWN_PATTERNS = ["e7e2", "ae01", "ae02", "18f1", "2af1", "4954", "ff02", "ff01", "fee7"];
+export const KNOWN_PATTERNS = ["fff2", "fff1", "ffe1", "e7e2", "ae01", "ae02", "18f1", "2af1", "4954", "ff02", "ff01", "fee7", "1101"];
 
 export interface BleConnectResult {
   success: boolean;
