@@ -98,6 +98,7 @@ export default function SettingsModule() {
   const [printerDoubleCopy, setPrinterDoubleCopy] = useState<boolean>(false);
   const [printerBleChunkSize, setPrinterBleChunkSize] = useState<number>(20);
   const [printerEnableAutocut, setPrinterEnableAutocut] = useState<boolean>(true);
+  const [printerInvert180, setPrinterInvert180] = useState<boolean>(false);
 
   interface ErrorLogItem {
     id: string;
@@ -352,6 +353,7 @@ export default function SettingsModule() {
       setPrinterDoubleCopy(businessSettings.config.printer_double_copy_layaway_credit || false);
       setPrinterBleChunkSize(businessSettings.config.printer_ble_chunk_size || 20);
       setPrinterEnableAutocut(businessSettings.config.printer_enable_autocut !== false);
+      setPrinterInvert180(businessSettings.config.printer_invert_180 || false);
       setLowStockThreshold(String(businessSettings.config.low_stock_threshold || 5));
       setMaxCajeroDiscountPct(String(businessSettings.config.max_cajero_discount_pct || 5));
       /* eslint-enable react-hooks/set-state-in-effect */
@@ -502,6 +504,7 @@ export default function SettingsModule() {
         printer_double_copy_layaway_credit: printerDoubleCopy,
         printer_ble_chunk_size: printerBleChunkSize,
         printer_enable_autocut: printerEnableAutocut,
+        printer_invert_180: printerInvert180,
       }
     });
     if (success) {
@@ -608,14 +611,17 @@ export default function SettingsModule() {
         const write = (b: number[]) => chunks.push(new Uint8Array(b));
         const writeText = (t: string) => chunks.push(encoder.encode(t));
 
-        // 1. Comando de cambio de modo TSPL a ESCPOS
-        writeText("SET PRINT MODE ESCPOS\r\nMODE ESCPOS\r\n");
+        const invertPrint = printerInvert180 || false;
+
+        // 1. Comando de cambio de modo TSPL a ESCPOS con orientación
+        writeText(`DIRECTION ${invertPrint ? 1 : 0},0\r\nSET PRINT MODE ESCPOS\r\nMODE ESCPOS\r\n`);
 
         // 2. Renderizado TSPL por si la impresora está en modo LABEL (Etiqueta)
-        writeText("SIZE 72 mm, 60 mm\r\nGAP 0,0\r\nCLS\r\nTEXT 40,20,\"3\",0,1,1,\"FERRETERIA ERIKA\"\r\nTEXT 40,60,\"2\",0,1,1,\"EC-MP-300 TICKET OK\"\r\nTEXT 40,90,\"2\",0,1,1,\"----------------------------\"\r\nTEXT 40,120,\"2\",0,1,1,\"TICKET DE PRUEBA\"\r\nPRINT 1,1\r\n");
+        writeText(`SIZE 72 mm, 60 mm\r\nGAP 0,0\r\nDIRECTION ${invertPrint ? 1 : 0},0\r\nCLS\r\nTEXT 40,20,"3",0,1,1,"FERRETERIA ERIKA"\r\nTEXT 40,60,"2",0,1,1,"EC-MP-300 TICKET OK"\r\nTEXT 40,90,"2",0,1,1,"----------------------------"\r\nTEXT 40,120,"2",0,1,1,"TICKET DE PRUEBA"\r\nPRINT 1,1\r\n`);
 
         // 3. Comandos ESC/POS estándar
         write([0x1b, 0x40]); // Init ESC @
+        write([0x1b, 0x7b, invertPrint ? 0x01 : 0x00]); // ESC { n (0 = Normal, 1 = Invertido 180°)
         write([0x1b, 0x74, 0x00]); // CP437 Standard CodePage
         write([0x1b, 0x32]); // Default line spacing
         write([0x1b, 0x42, 0x03, 0x02]); // Beep EC-MP-300
@@ -1351,6 +1357,19 @@ export default function SettingsModule() {
               />
               <label htmlFor="printer-enable-autocut-checkbox" style={{ fontSize: "0.9rem", cursor: "pointer", userSelect: "none", color: "white" }}>
                 <strong>Corte de Papel Automático</strong> (Envía el comando de corte al final del ticket. Desactívelo para impresoras portátiles como la MPT-II para evitar ruidos de navaja).
+              </label>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "5px", background: "rgba(255,255,255,0.05)", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)" }}>
+              <input
+                type="checkbox"
+                id="printer-invert-checkbox"
+                checked={printerInvert180}
+                onChange={(e) => setPrinterInvert180(e.target.checked)}
+                style={{ width: "18px", height: "18px", cursor: "pointer" }}
+              />
+              <label htmlFor="printer-invert-checkbox" style={{ fontSize: "0.9rem", cursor: "pointer", userSelect: "none", color: "white" }}>
+                <strong>Girar Impresión 180° (Imp. de Cabeza)</strong> (Marque esta casilla para invertir la orientación si su modelo imprime al revés).
               </label>
             </div>
 

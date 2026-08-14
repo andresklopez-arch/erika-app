@@ -32,6 +32,7 @@ export const BusinessConfigSchema = z.object({
   printer_double_copy_layaway_credit: z.boolean().default(false),
   printer_ble_chunk_size: z.number().default(20),
   printer_enable_autocut: z.boolean().default(true),
+  printer_invert_180: z.boolean().default(false),
   low_stock_threshold: z.number().default(5),
   max_cajero_discount_pct: z.number().default(5),
 });
@@ -71,6 +72,7 @@ export const BusinessSettingsSchema = z.object({
     printer_double_copy_layaway_credit: false,
     printer_ble_chunk_size: 20,
     printer_enable_autocut: true,
+    printer_invert_180: false,
     low_stock_threshold: 5,
     max_cajero_discount_pct: 5,
   }),
