@@ -1351,15 +1351,8 @@ export default function POSModule() {
     if (activeTicket.items.length === 0)
       return alert("El ticket está vacío.");
 
-    let shouldPrint = true;
-    if (printerConnectionType === "bluetooth") {
-      const connected = await ensureBleConnection();
-      if (!connected) {
-        const proceed = confirm("⚠️ No se pudo conectar a la impresora Bluetooth. ¿Deseas guardar la venta de todos modos sin imprimir?");
-        if (!proceed) return;
-        shouldPrint = false;
-      }
-    }
+    // Al confirmar cobro, la venta se guarda inmediatamente y el ticket se envía a la impresora en segundo plano
+    const shouldPrint = true;
 
     const totalAmt = finalTotal;
     setIsProcessingPayment(true);
@@ -1948,6 +1941,11 @@ export default function POSModule() {
           }
 
           let result = await getOrReconnectBlePrinter(bleCharacteristic, false);
+
+          if (!result.success || !result.char) {
+            // Reintentar reconexión con permisos previamente concedidos
+            result = await getOrReconnectBlePrinter(bleCharacteristic, true);
+          }
 
           if (!result.success || !result.char) {
             console.warn("[POS BLE] No se pudo reconectar automáticamente la impresora Bluetooth.");
