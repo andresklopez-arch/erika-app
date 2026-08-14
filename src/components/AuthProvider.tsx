@@ -218,11 +218,15 @@ export default function AuthProvider({
         .eq("id", "erika_global")
         .single();
       if (data && !dbError) {
+        const rawConfig = { ...(data.config || {}) };
+        const localInvert = typeof window !== "undefined" ? localStorage.getItem("ERIKA_PRINTER_INVERT_180") : null;
+        rawConfig.printer_invert_180 = localInvert === "false" ? false : true;
+
         // Enforce types and validation rules using Zod Schema
         const parsed = BusinessSettingsSchema.parse({
           target_utility: Number(data.target_utility),
           monthly_goals: Number(data.monthly_goals),
-          config: data.config,
+          config: rawConfig,
         });
         
         setBusinessSettings(parsed);
@@ -272,6 +276,11 @@ export default function AuthProvider({
         ...businessSettings.config,
         ...(newSettings.config || {}),
       };
+      if (newSettings.config?.printer_invert_180 !== undefined) {
+        updatedConfig.printer_invert_180 = newSettings.config.printer_invert_180;
+      } else if (typeof window !== "undefined") {
+        updatedConfig.printer_invert_180 = localStorage.getItem("ERIKA_PRINTER_INVERT_180") !== "false";
+      }
 
       // Cast strings to numbers where required
       const numKeys = ["earn_rate", "earn_points", "redeem_rate", "wholesale_min_qty", "wholesale_discount"];
