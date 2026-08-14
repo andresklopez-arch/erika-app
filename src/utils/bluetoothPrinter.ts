@@ -238,3 +238,80 @@ export async function sendBleBytes(
 
   return true;
 }
+
+export type BleStatusType = "connected" | "standby" | "disconnected" | "unsupported";
+
+export function getBleStatus(cachedChar?: any): BleStatusType {
+  if (typeof window === "undefined" || !(navigator as any).bluetooth) {
+    return "unsupported";
+  }
+  if (cachedChar?.service?.device?.gatt?.connected) {
+    return "connected";
+  }
+  if (cachedChar?.service?.device) {
+    return "standby";
+  }
+  return "disconnected";
+}
+
+/**
+ * Inicia un bucle Keep-Alive silencioso que mantiene caliente la conexión Bluetooth GATT en segundo plano
+ */
+export function startBleKeepAlive(
+  getChar: () => any,
+  onStatusChange?: (status: BleStatusType, char?: any) => void,
+  intervalMs: number = 20000
+): () => void {
+  if (typeof window === "undefined") return () => {};
+
+  let isRunning = true;
+
+  const timer = setInterval(async () => {
+    if (!isRunning) return;
+    const currentChar = getChar();
+    if (!currentChar) {
+      if ((navigator as any).bluetooth?.getDevices) {
+        try {
+          const devices = await (navigator as any).bluetooth.getDevices();
+          if (devices && devices.length > 0) {
+            const dev = devices[0];
+            if (!dev.gatt?.connected) {
+              const server = await reconnectGattServer(dev);
+              const chars = await getCharacteristicsFromGattServer(server);
+              const newChar = findWriteCharacteristic(chars);
+              if (newChar && onStatusChange) {
+                onStatusChange("connected", newChar);
+                return;
+              }
+            }
+          }
+        } catch (e) {}
+      }
+      if (onStatusChange) onStatusChange(getBleStatus(currentChar), currentChar);
+      return;
+    }
+
+    const device = currentChar.service?.device;
+    if (device && !device.gatt?.connected) {
+      console.log("[BLE Keep-Alive] Reconectando silenciosamente servidor GATT en reposo...");
+      try {
+        const server = await reconnectGattServer(device);
+        const chars = await getCharacteristicsFromGattServer(server);
+        const newChar = findWriteCharacteristic(chars);
+        if (newChar && onStatusChange) {
+          onStatusChange("connected", newChar);
+        }
+      } catch (err) {
+        console.warn("[BLE Keep-Alive] Intento de ping silencioso falló:", err);
+        if (onStatusChange) onStatusChange("standby", currentChar);
+      }
+    } else if (device?.gatt?.connected) {
+      if (onStatusChange) onStatusChange("connected", currentChar);
+    }
+  }, intervalMs);
+
+  return () => {
+    isRunning = false;
+    clearInterval(timer);
+  };
+}

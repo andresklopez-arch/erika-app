@@ -14,7 +14,7 @@ import PosScannerModal from "./PosScannerModal";
 import PosCreditModal from "./PosCreditModal";
 import { useAuth, useBusinessProfile } from "./AuthProvider";
 import { CustomerSchema, CashSessionSchema } from "../lib/schemas";
-import { getOrReconnectBlePrinter, sendBleBytes } from "../utils/bluetoothPrinter";
+import { getOrReconnectBlePrinter, sendBleBytes, startBleKeepAlive, getBleStatus, BleStatusType } from "../utils/bluetoothPrinter";
 
 interface POSItem {
   id: string;
@@ -158,6 +158,25 @@ export default function POSModule() {
   const businessProfile = useBusinessProfile();
   const [globalCatalog, setGlobalCatalog] = useState<any[]>([]);
   const [offlinePendingCount, setOfflinePendingCount] = useState(0);
+  const [bleStatus, setBleStatus] = useState<BleStatusType>("disconnected");
+
+  useEffect(() => {
+    const pType = businessSettings?.config?.printer_type || localStorage.getItem("ERIKA_PRINTER_TYPE") || "system";
+    if (pType === "bluetooth") {
+      setBleStatus(getBleStatus(bleCharacteristic));
+      const stopKeepAlive = startBleKeepAlive(
+        () => bleCharacteristic,
+        (newStatus, newChar) => {
+          setBleStatus(newStatus);
+          if (newChar && newChar !== bleCharacteristic) {
+            setBleCharacteristic(newChar);
+          }
+        },
+        20000
+      );
+      return () => stopKeepAlive();
+    }
+  }, [businessSettings?.config?.printer_type, bleCharacteristic]);
 
   const [loyaltyRates, setLoyaltyRates] = useState({
     earnRate: 100, // $100 -> 1 pt
@@ -2567,10 +2586,10 @@ export default function POSModule() {
                 className="btn-primary"
                 style={{
                   background: printerConnectionType === "bluetooth"
-                    ? (bleCharacteristic ? "rgba(59, 130, 246, 0.15)" : "rgba(244, 63, 94, 0.15)")
+                    ? (bleStatus === "connected" ? "rgba(16, 185, 129, 0.2)" : bleStatus === "standby" ? "rgba(245, 158, 11, 0.2)" : "rgba(244, 63, 94, 0.2)")
                     : (isPrinterConnected ? "rgba(16, 185, 129, 0.15)" : "rgba(244, 63, 94, 0.15)"),
                   border: printerConnectionType === "bluetooth"
-                    ? (bleCharacteristic ? "1px solid #3b82f6" : "1px solid var(--color-primary)")
+                    ? (bleStatus === "connected" ? "1px solid #10b981" : bleStatus === "standby" ? "1px solid #f59e0b" : "1px solid #f43f5e")
                     : (isPrinterConnected ? "1px solid var(--color-secondary)" : "1px solid var(--color-primary)"),
                   padding: "6px 12px",
                   fontSize: "0.85rem",
@@ -2581,12 +2600,12 @@ export default function POSModule() {
               >
                 <span>
                   {printerConnectionType === "bluetooth"
-                    ? (bleCharacteristic ? "🔵" : "⚪")
+                    ? (bleStatus === "connected" ? "🟢" : bleStatus === "standby" ? "🟡" : "🔴")
                     : (isPrinterConnected ? "🟢" : "🔴")}
                 </span>
                 <span>
                   {printerConnectionType === "bluetooth"
-                    ? (bleCharacteristic ? "Bluetooth Listo" : "Bluetooth Off")
+                    ? (bleStatus === "connected" ? "BLE Conectado" : bleStatus === "standby" ? "BLE Standby" : "BLE Desconectado")
                     : (isPrinterConnected ? `Impresora Lista${silentKiosk ? " (Kiosco ⚡)" : ""}` : "Impresora Off")}
                 </span>
               </button>
