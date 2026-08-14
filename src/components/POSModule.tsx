@@ -206,6 +206,13 @@ export default function POSModule() {
       minQty: sWQ > 0 ? sWQ : 10,
       discountPct: sWP > 0 ? sWP : 10
     });
+
+    const savedPending = localStorage.getItem("ERIKA_PENDING_PRINT_JOB");
+    if (savedPending) {
+      try {
+        setPendingPrintJob(JSON.parse(savedPending));
+      } catch (e) {}
+    }
   }, []);
 
   const [tickets, setTickets] = useState<Ticket[]>([
@@ -2325,6 +2332,7 @@ export default function POSModule() {
   const triggerPrint = (job: any) => {
     if (!isPrinterConnected) {
       setPendingPrintJob(job);
+      try { localStorage.setItem("ERIKA_PENDING_PRINT_JOB", JSON.stringify(job)); } catch(e){}
       return;
     }
     
@@ -2335,8 +2343,9 @@ export default function POSModule() {
     
     const isLayaway = job.type === "layaway";
     const isCredit = job.type === "ticket" && job.data?.paymentMethod === "credito";
-    
-    if (doubleCopyEnabled && (isLayaway || isCredit)) {
+    const isWholesaleSale = job.type === "ticket" && job.data?.items?.some((i: any) => i.qty >= (wholesaleRules.minQty || 10));
+
+    if (doubleCopyEnabled && (isLayaway || isCredit || isWholesaleSale)) {
       setTimeout(() => {
         executePrintWindow({ ...job, isCopy: true });
       }, 1500);
@@ -2353,7 +2362,6 @@ export default function POSModule() {
       } else if (connType === "serial" && typeof navigator !== "undefined" && "serial" in navigator) {
         await (navigator.serial as any).requestPort();
       } else if (connType === "bluetooth" && typeof navigator !== "undefined" && "bluetooth" in navigator) {
-        // Invocación directa sin setTimeout previo para conservar el gesto del usuario en tablets
         const result = await getOrReconnectBlePrinter(bleCharacteristic, true);
         if (result.success && result.char) {
           setBleCharacteristic(result.char);
@@ -2375,10 +2383,10 @@ export default function POSModule() {
     setIsReconnecting(false);
     setShowPrinterModal(false);
     
-    // Si había un trabajo en cola, se reanuda inmediatamente
     if (pendingPrintJob) {
       const jobToRun = pendingPrintJob;
       setPendingPrintJob(null);
+      try { localStorage.removeItem("ERIKA_PENDING_PRINT_JOB"); } catch(e){}
       setTimeout(() => {
         executePrintWindow(jobToRun);
       }, 500);

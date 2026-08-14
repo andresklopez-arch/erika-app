@@ -1395,20 +1395,44 @@ export default function SettingsModule() {
             )}
 
             {connectionType === "bluetooth" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: "5px", background: "rgba(255,255,255,0.02)", padding: "12px", borderRadius: "8px", border: "1px solid var(--glass-border)" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", background: "rgba(255,255,255,0.02)", padding: "12px", borderRadius: "8px", border: "1px solid var(--glass-border)" }}>
                 <label style={{ display: "block", fontSize: "0.9rem", fontWeight: "bold" }}>Tamaño de Bloque Bluetooth (Buffer de Envío):</label>
                 <select
                   value={printerBleChunkSize}
                   onChange={(e) => setPrinterBleChunkSize(Number(e.target.value))}
                   style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}
                 >
-                  <option value={10}>10 bytes (Ultra seguro / Impresoras lentas)</option>
+                  <option value={10}>10 bytes (Ultra seguro / Impresoras muy lentas)</option>
                   <option value={20}>20 bytes (Estándar / Recomendado)</option>
-                  <option value={40}>40 bytes (Rápido)</option>
-                  <option value={60}>60 bytes (Ultra Rápido / Alta Gama)</option>
+                  <option value={32}>32 bytes (Rápido / 50% más acelerado)</option>
+                  <option value={40}>40 bytes (Muy Rápido)</option>
+                  <option value={64}>64 bytes (Ultra Rápido / Impresoras de Alta Gama)</option>
                 </select>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => setPrinterBleChunkSize(20)}
+                    style={{ padding: "5px 10px", fontSize: "0.75rem", borderRadius: "6px", border: printerBleChunkSize === 20 ? "1px solid #3b82f6" : "1px solid rgba(255,255,255,0.2)", background: printerBleChunkSize === 20 ? "rgba(59,130,246,0.2)" : "transparent", color: "white", cursor: "pointer", fontWeight: "bold" }}
+                  >
+                    ⚡ 20B (Estándar)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrinterBleChunkSize(32)}
+                    style={{ padding: "5px 10px", fontSize: "0.75rem", borderRadius: "6px", border: printerBleChunkSize === 32 ? "1px solid #10b981" : "1px solid rgba(255,255,255,0.2)", background: printerBleChunkSize === 32 ? "rgba(16,185,129,0.2)" : "transparent", color: "white", cursor: "pointer", fontWeight: "bold" }}
+                  >
+                    🚀 32B (Rápido)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPrinterBleChunkSize(64)}
+                    style={{ padding: "5px 10px", fontSize: "0.75rem", borderRadius: "6px", border: printerBleChunkSize === 64 ? "1px solid #8b5cf6" : "1px solid rgba(255,255,255,0.2)", background: printerBleChunkSize === 64 ? "rgba(139,92,246,0.2)" : "transparent", color: "white", cursor: "pointer", fontWeight: "bold" }}
+                  >
+                    🏎️ 64B (Ultra Rápido)
+                  </button>
+                </div>
                 <span style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)" }}>
-                  Reduzca este valor a 10 bytes si nota que los tickets largos salen incompletos o con caracteres extraños.
+                  Reduzca este valor a 10-20 bytes si nota que los tickets salen incompletos o con caracteres extraños.
                 </span>
               </div>
             )}
