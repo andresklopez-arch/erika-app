@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "./AuthProvider";
 import { LoggerService } from "../services/loggerService";
+import { getOrReconnectBlePrinter, sendBleBytes } from "../utils/bluetoothPrinter";
 
 export default function SettingsModule() {
   const { currentUser, businessSettings, updateBusinessSettings, bleCharacteristic, setBleCharacteristic } = useAuth();
@@ -519,97 +520,60 @@ export default function SettingsModule() {
     if (!checkAdmin()) return;
     if (connectionType === "bluetooth") {
       try {
-        if (typeof window === "undefined" || !(navigator as any).bluetooth) {
-          alert("Su navegador o sistema no soporta Web Bluetooth. Asegúrese de usar Google Chrome y tener el Bluetooth encendido.");
+        setIsScanning(true);
+        const result = await getOrReconnectBlePrinter(bleCharacteristic, true);
+        if (!result.success || !result.char) {
+          if (result.error && !result.error.includes("cancelada")) {
+            alert("⚠️ Error al vincular: " + result.error);
+          }
           return;
         }
-        setIsScanning(true);
-        const device = await (navigator as any).bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: [
-            "000018f0-0000-1000-8000-00805f9b34fb",
-            "0000e7e1-0000-1000-8000-00805f9b34fb",
-            "0000ae30-0000-1000-8000-00805f9b34fb"
-          ]
+
+        const char = result.char;
+        const device = result.device;
+        const name = device?.name || "Impresora Bluetooth";
+        setPrinterName(name);
+        setScannedPrinters([name]);
+        setBleCharacteristic(char);
+
+        const success = await updateBusinessSettings({
+          config: {
+            printer_connected: true,
+            printer_type: "bluetooth",
+            printer_name: name,
+            printer_paper_size: printerPaperSize,
+            printer_font_size: printerFontSize,
+            printer_font_family: printerFontFamily,
+            printer_fields: printerFields,
+            printer_footer_msg: printerFooterMsg,
+            printer_align: printerAlign,
+            printer_padding: printerPadding,
+            printer_margin_left: printerMarginLeft,
+            printer_margin_right: printerMarginRight,
+            printer_margin_top: printerMarginTop,
+            printer_margin_bottom: printerMarginBottom,
+            printer_zoom: printerZoom,
+            printer_double_copy_layaway_credit: printerDoubleCopy,
+            printer_ble_chunk_size: printerBleChunkSize,
+            printer_enable_autocut: printerEnableAutocut,
+          }
         });
-        
-        console.log("Conectando a GATT server de:", device.name);
-        const server = await device.gatt?.connect();
-        if (server) {
-          const services = await server.getPrimaryServices();
-          let allCharacteristics: any[] = [];
-          for (const service of services) {
-            try {
-              const characteristics = await service.getCharacteristics();
-              allCharacteristics.push(...characteristics);
-            } catch (e) {
-              console.warn("Error al leer características:", e);
-            }
-          }
-          const writeChars = allCharacteristics.filter(c => c.properties.write || c.properties.writeWithoutResponse);
-          const KNOWN_PATTERNS = ["e7e2", "ae01", "ae02", "18f1", "2af1", "4954"];
-          let char = writeChars.find(c => {
-            const uuidLower = c.uuid.toLowerCase();
-            return KNOWN_PATTERNS.some(pat => uuidLower.includes(pat));
-          });
-          if (!char) char = writeChars.find(c => c.properties.writeWithoutResponse);
-          if (!char) char = writeChars[0];
-          
-          if (char) {
-            const name = device.name || "MPT-II";
-            setPrinterName(name);
-            setScannedPrinters([name]);
-            setBleCharacteristic(char);
-            
-            const success = await updateBusinessSettings({
-              config: {
-                printer_connected: true,
-                printer_type: "bluetooth",
-                printer_name: name,
-                printer_paper_size: printerPaperSize,
-                printer_font_size: printerFontSize,
-                printer_font_family: printerFontFamily,
-                printer_fields: printerFields,
-                printer_footer_msg: printerFooterMsg,
-                printer_align: printerAlign,
-                printer_padding: printerPadding,
-                printer_margin_left: printerMarginLeft,
-                printer_margin_right: printerMarginRight,
-                printer_margin_top: printerMarginTop,
-                printer_margin_bottom: printerMarginBottom,
-                printer_zoom: printerZoom,
-                printer_double_copy_layaway_credit: printerDoubleCopy,
-                printer_ble_chunk_size: printerBleChunkSize,
-                printer_enable_autocut: printerEnableAutocut,
-              }
-            });
-            
-            if (success) {
-              localStorage.setItem("ERIKA_PRINTER_CONNECTED", "true");
-              localStorage.setItem("ERIKA_PRINTER_TYPE", "bluetooth");
-              localStorage.setItem("ERIKA_PRINTER_NAME", name);
-              localStorage.setItem("ERIKA_PRINTER_SILENT_KIOSK", silentKiosk ? "true" : "false");
-              localStorage.setItem("ERIKA_PRINTER_DOUBLE_COPY", printerDoubleCopy ? "true" : "false");
-              localStorage.setItem("ERIKA_PRINTER_BLE_CHUNK_SIZE", String(printerBleChunkSize));
-              localStorage.setItem("ERIKA_PRINTER_ENABLE_AUTOCUT", printerEnableAutocut ? "true" : "false");
-              alert(`✅ Impresora "${name}" vinculada y guardada como predeterminada con éxito.`);
-            } else {
-              alert(`✅ Vinculado a "${name}" localmente, pero hubo un error al guardar en la nube.`);
-            }
-          } else {
-            alert("⚠️ Dispositivo vinculado, pero no se encontró un canal de escritura de impresión térmica.");
-            try {
-              device.gatt?.disconnect();
-            } catch (discErr) {}
-          }
+
+        if (success) {
+          localStorage.setItem("ERIKA_PRINTER_CONNECTED", "true");
+          localStorage.setItem("ERIKA_PRINTER_TYPE", "bluetooth");
+          localStorage.setItem("ERIKA_PRINTER_NAME", name);
+          localStorage.setItem("ERIKA_PRINTER_SILENT_KIOSK", silentKiosk ? "true" : "false");
+          localStorage.setItem("ERIKA_PRINTER_DOUBLE_COPY", printerDoubleCopy ? "true" : "false");
+          localStorage.setItem("ERIKA_PRINTER_BLE_CHUNK_SIZE", String(printerBleChunkSize));
+          localStorage.setItem("ERIKA_PRINTER_ENABLE_AUTOCUT", printerEnableAutocut ? "true" : "false");
+          alert(`✅ Impresora "${name}" vinculada y guardada como predeterminada con éxito.`);
         } else {
-          alert("No se pudo conectar a la impresora.");
+          alert(`✅ Vinculado a "${name}" localmente, pero hubo un error al guardar en la nube.`);
         }
       } catch (err: any) {
         console.error(err);
-        if (err.name !== "NotFoundError") {
-          alert("Error al vincular: " + err.message);
-        }
+        alert("Error al vincular: " + err.message);
       } finally {
         setIsScanning(false);
       }
@@ -630,67 +594,20 @@ export default function SettingsModule() {
   const handleTestPrint = async () => {
     if (connectionType === "bluetooth") {
       try {
-        if (typeof window === "undefined" || !(navigator as any).bluetooth) {
-          alert("Web Bluetooth no soportado en este navegador.");
+        const result = await getOrReconnectBlePrinter(bleCharacteristic, true);
+        if (!result.success || !result.char) {
+          alert("Fallo al imprimir ticket de prueba: " + (result.error || "No se pudo conectar a la impresora."));
           return;
         }
-        
-        let device;
-        if (bleCharacteristic && bleCharacteristic.service?.device?.gatt?.connected) {
-          device = bleCharacteristic.service.device;
-        }
 
-        if (!device && (navigator as any).bluetooth.getDevices) {
-          try {
-            const devices = await (navigator as any).bluetooth.getDevices();
-            if (devices.length > 0) {
-              device = devices[0];
-            }
-          } catch (e) {}
-        }
-        
-        if (!device) {
-          device = await (navigator as any).bluetooth.requestDevice({
-            acceptAllDevices: true,
-            optionalServices: [
-              "000018f0-0000-1000-8000-00805f9b34fb",
-              "0000e7e1-0000-1000-8000-00805f9b34fb",
-              "0000ae30-0000-1000-8000-00805f9b34fb"
-            ]
-          });
-        }
-        
-        console.log("Conectando para ticket de prueba:", device.name);
-        const server = await device.gatt?.connect();
-        if (!server) throw new Error("No se pudo conectar al servidor GATT.");
-        
-        const services = await server.getPrimaryServices();
-        let allCharacteristics: any[] = [];
-        for (const service of services) {
-          try {
-            const characteristics = await service.getCharacteristics();
-            allCharacteristics.push(...characteristics);
-          } catch (e) {
-            console.warn("Error al leer características:", e);
-          }
-        }
-        
-        const writeChars = allCharacteristics.filter(c => c.properties.write || c.properties.writeWithoutResponse);
-        const KNOWN_PATTERNS = ["e7e2", "ae01", "ae02", "18f1", "2af1", "4954"];
-        let char = writeChars.find(c => {
-          const uuidLower = c.uuid.toLowerCase();
-          return KNOWN_PATTERNS.some(pat => uuidLower.includes(pat));
-        });
-        if (!char) char = writeChars.find(c => c.properties.writeWithoutResponse);
-        if (!char) char = writeChars[0];
-        
-        if (!char) throw new Error("No se encontró característica de escritura.");
-        
+        const char = result.char;
+        setBleCharacteristic(char);
+
         const encoder = new TextEncoder();
         const chunks: Uint8Array[] = [];
         const write = (b: number[]) => chunks.push(new Uint8Array(b));
         const writeText = (t: string) => chunks.push(encoder.encode(t));
-        
+
         write([0x1b, 0x40]); // Init
         write([0x1b, 0x61, 0x01]); // Align Center
         write([0x1b, 0x45, 0x01]); // Bold
@@ -705,36 +622,20 @@ export default function SettingsModule() {
         writeText("--------------------------------\n");
         writeText("Si lee esto, su impresora\nesta conectada correctamente.\n");
         writeText("\n\n\n\n");
-        
+
         if (printerEnableAutocut) {
           write([0x1d, 0x56, 0x41, 0x00]); // Cut
         }
-        
+
         const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
         const bytes = new Uint8Array(totalLength);
         let offset = 0;
-        chunks.forEach(c => {
+        chunks.forEach((c) => {
           bytes.set(c, offset);
           offset += c.length;
         });
-        
-        const chunkSize = printerBleChunkSize || 20;
-        for (let i = 0; i < bytes.length; i += chunkSize) {
-          const chunk = bytes.slice(i, i + chunkSize);
-          try {
-            if (char.properties.writeWithoutResponse) {
-              await char.writeValueWithoutResponse(chunk);
-            } else if (char.properties.write) {
-              await char.writeValueWithResponse(chunk);
-            } else {
-              await char.writeValue(chunk);
-            }
-          } catch (writeErr) {
-            await char.writeValue(chunk);
-          }
-          await new Promise(r => setTimeout(r, 20));
-        }
-        setBleCharacteristic(char);
+
+        await sendBleBytes(char, bytes, printerBleChunkSize || 20, 20);
         alert("✅ Ticket de prueba enviado a la impresora.");
       } catch (err: any) {
         console.error(err);

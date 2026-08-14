@@ -14,6 +14,7 @@ import PosScannerModal from "./PosScannerModal";
 import PosCreditModal from "./PosCreditModal";
 import { useAuth, useBusinessProfile } from "./AuthProvider";
 import { CustomerSchema, CashSessionSchema } from "../lib/schemas";
+import { getOrReconnectBlePrinter, sendBleBytes } from "../utils/bluetoothPrinter";
 
 interface POSItem {
   id: string;
@@ -1307,76 +1308,15 @@ export default function POSModule() {
 
   const ensureBleConnection = async (): Promise<boolean> => {
     if (printerConnectionType !== "bluetooth") return true;
-    if (bleCharacteristic && bleCharacteristic.service?.device?.gatt?.connected) return true;
-
     try {
-      if (typeof window === "undefined" || !(navigator as any).bluetooth) {
-        alert("Su navegador no soporta Web Bluetooth. Asegúrese de usar Google Chrome.");
-        return false;
-      }
-
-      let device;
-      if ((navigator as any).bluetooth.getDevices) {
-        try {
-          const devices = await (navigator as any).bluetooth.getDevices();
-          if (devices.length > 0) {
-            device = devices[0];
-            console.log("ensureBleConnection: usando getDevices pre-vinculado:", device.name);
-          }
-        } catch (err) {
-          console.warn("ensureBleConnection: getDevices falló:", err);
-        }
-      }
-
-      if (!device) {
-        console.log("ensureBleConnection: solicitando requestDevice...");
-        device = await (navigator as any).bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: [
-            "000018f0-0000-1000-8000-00805f9b34fb",
-            "0000e7e1-0000-1000-8000-00805f9b34fb",
-            "0000ae30-0000-1000-8000-00805f9b34fb"
-          ]
-        });
-      }
-
-      console.log("ensureBleConnection: conectando a GATT de:", device.name);
-      const server = await device.gatt?.connect();
-      if (!server) throw new Error("No se pudo conectar al GATT server");
-
-      const services = await server.getPrimaryServices();
-      let allCharacteristics: any[] = [];
-      for (const service of services) {
-        try {
-          const characteristics = await service.getCharacteristics();
-          allCharacteristics.push(...characteristics);
-        } catch (e) {
-          console.warn("Error al leer características:", e);
-        }
-      }
-      
-      const writeChars = allCharacteristics.filter(c => c.properties.write || c.properties.writeWithoutResponse);
-      const KNOWN_PATTERNS = ["e7e2", "ae01", "ae02", "18f1", "2af1", "4954"];
-      let char = writeChars.find(c => {
-        const uuidLower = c.uuid.toLowerCase();
-        return KNOWN_PATTERNS.some(pat => uuidLower.includes(pat));
-      });
-      if (!char) char = writeChars.find(c => c.properties.writeWithoutResponse);
-      if (!char) char = writeChars[0];
-
-      if (char) {
-        setBleCharacteristic(char);
-        console.log("ensureBleConnection: conexión exitosa, característica fijada:", char.uuid);
+      const result = await getOrReconnectBlePrinter(bleCharacteristic, false);
+      if (result.success && result.char) {
+        setBleCharacteristic(result.char);
         return true;
-      } else {
-        alert("⚠️ No se encontró un canal de escritura de impresión térmica.");
-        return false;
       }
-    } catch (err: any) {
-      console.error("ensureBleConnection error:", err);
-      if (err.name !== "NotFoundError") {
-        alert("❌ Error al conectar la impresora Bluetooth: " + err.message);
-      }
+      return false;
+    } catch (err) {
+      console.warn("ensureBleConnection falló:", err);
       return false;
     }
   };
@@ -1970,80 +1910,69 @@ export default function POSModule() {
             alert("Su navegador no soporta Web Bluetooth. Asegúrese de usar Google Chrome.");
             return;
           }
-          
-          let char = bleCharacteristic;
-          if (!char) {
-            let device;
-            if (typeof window !== "undefined" && (navigator as any).bluetooth?.getDevices) {
-              try {
-                const devices = await (navigator as any).bluetooth.getDevices();
-                if (devices.length > 0) {
-                  device = devices[0];
-                  console.log("Reconectando a impresora Bluetooth mediante getDevices:", device.name);
-                }
-              } catch (getDevicesErr) {
-                console.warn("Fallo al obtener dispositivos pre-vinculados:", getDevicesErr);
-              }
-            }
 
-            if (!device) {
-              console.log("No se encontraron dispositivos pre-vinculados, solicitando requestDevice...");
-              device = await (navigator as any).bluetooth.requestDevice({
-                acceptAllDevices: true,
-                optionalServices: [
-                  "000018f0-0000-1000-8000-00805f9b34fb",
-                  "0000e7e1-0000-1000-8000-00805f9b34fb",
-                  "0000ae30-0000-1000-8000-00805f9b34fb"
-                ]
-              });
-            }
-            
-            console.log("Conectando a GATT server de:", device.name);
-            const server = await device.gatt?.connect();
-            if (!server) throw new Error("No se pudo conectar al GATT server");
-            
-            const services = await server.getPrimaryServices();
-            let allCharacteristics: any[] = [];
-            for (const service of services) {
-              try {
-                const characteristics = await service.getCharacteristics();
-                allCharacteristics.push(...characteristics);
-              } catch (e) {
-                console.warn("Error al leer características:", e);
-              }
-            }
-            const writeChars = allCharacteristics.filter(c => c.properties.write || c.properties.writeWithoutResponse);
-            const KNOWN_PATTERNS = ["e7e2", "ae01", "ae02", "18f1", "2af1", "4954"];
-            char = writeChars.find(c => {
-              const uuidLower = c.uuid.toLowerCase();
-              return KNOWN_PATTERNS.some(pat => uuidLower.includes(pat));
-            });
-            if (!char) char = writeChars.find(c => c.properties.writeWithoutResponse);
-            if (!char) char = writeChars[0];
+          let result = await getOrReconnectBlePrinter(bleCharacteristic, false);
 
-            if (!char) throw new Error("No se encontró una característica de escritura en el dispositivo.");
-            setBleCharacteristic(char);
+          if (!result.success || !result.char) {
+            console.warn("[POS BLE] No se pudo reconectar automáticamente la impresora Bluetooth.");
+            toast((t) => (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <span><b>⚠️ Impresora Bluetooth Desconectada</b></span>
+                <span style={{ fontSize: "0.85rem" }}>Verifique que la impresora esté encendida.</span>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <button
+                    onClick={async () => {
+                      toast.dismiss(t.id);
+                      const res = await getOrReconnectBlePrinter(bleCharacteristic, true);
+                      if (res.success && res.char) {
+                        setBleCharacteristic(res.char);
+                        const bytes = generateEscPosBytes(job, config);
+                        await sendBleBytes(res.char, bytes, config.printer_ble_chunk_size || 20, 20);
+                        toast.success("✅ Ticket impreso con éxito");
+                      } else if (res.error) {
+                        toast.error("Error al reconectar: " + res.error);
+                      }
+                    }}
+                    style={{
+                      background: "#3b82f6",
+                      color: "#fff",
+                      border: "none",
+                      padding: "6px 12px",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                      fontSize: "0.85rem"
+                    }}
+                  >
+                    👆 Reconectar e Imprimir
+                  </button>
+                  <button
+                    onClick={() => {
+                      toast.dismiss(t.id);
+                      window.print();
+                    }}
+                    style={{
+                      background: "#4b5563",
+                      color: "#fff",
+                      border: "none",
+                      padding: "6px 12px",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      fontSize: "0.85rem"
+                    }}
+                  >
+                    🖨️ Sistema
+                  </button>
+                </div>
+              </div>
+            ), { duration: 12000 });
+            return;
           }
-          
+
+          const char = result.char;
+          setBleCharacteristic(char);
           const bytes = generateEscPosBytes(job, config);
-          
-          const chunkSize = config.printer_ble_chunk_size || 20;
-          for (let i = 0; i < bytes.length; i += chunkSize) {
-            const chunk = bytes.slice(i, i + chunkSize);
-            try {
-              if (char.properties.writeWithoutResponse) {
-                await char.writeValueWithoutResponse(chunk);
-              } else if (char.properties.write) {
-                await char.writeValueWithResponse(chunk);
-              } else {
-                await char.writeValue(chunk);
-              }
-            } catch (writeErr) {
-              console.warn("Fallo al escribir sin respuesta, reintentando con writeValue estándar:", writeErr);
-              await char.writeValue(chunk);
-            }
-            await new Promise(resolve => setTimeout(resolve, 20));
-          }
+          await sendBleBytes(char, bytes, config.printer_ble_chunk_size || 20, 20);
           console.log("✅ Impresión Bluetooth directa completada.");
         } catch (err: any) {
           console.error("Error al imprimir por Bluetooth:", err);
@@ -2052,7 +1981,7 @@ export default function POSModule() {
           }
         }
       };
-      
+
       printDirectBle();
       return;
     }
@@ -2398,49 +2327,20 @@ export default function POSModule() {
   const handleReconnectPrinter = async (type?: string) => {
     setIsReconnecting(true);
     const connType = type || printerConnectionType;
-    
-    // Simular un retardo para la detección física
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    
+
     try {
       if (connType === "usb" && typeof navigator !== "undefined" && "usb" in navigator) {
         await (navigator.usb as any).requestDevice({ filters: [] });
       } else if (connType === "serial" && typeof navigator !== "undefined" && "serial" in navigator) {
         await (navigator.serial as any).requestPort();
       } else if (connType === "bluetooth" && typeof navigator !== "undefined" && "bluetooth" in navigator) {
-        const device = await (navigator as any).bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: [
-            "000018f0-0000-1000-8000-00805f9b34fb",
-            "0000e7e1-0000-1000-8000-00805f9b34fb",
-            "0000ae30-0000-1000-8000-00805f9b34fb"
-          ]
-        });
-        console.log("Conectando a GATT server de:", device.name);
-        const server = await device.gatt?.connect();
-        if (server) {
-          const services = await server.getPrimaryServices();
-          let allCharacteristics: any[] = [];
-          for (const service of services) {
-            try {
-              const characteristics = await service.getCharacteristics();
-              allCharacteristics.push(...characteristics);
-            } catch (e) {
-              console.warn("Error al leer características:", e);
-            }
-          }
-          const writeChars = allCharacteristics.filter(c => c.properties.write || c.properties.writeWithoutResponse);
-          const KNOWN_PATTERNS = ["e7e2", "ae01", "ae02", "18f1", "2af1", "4954"];
-          let char = writeChars.find(c => {
-            const uuidLower = c.uuid.toLowerCase();
-            return KNOWN_PATTERNS.some(pat => uuidLower.includes(pat));
-          });
-          if (!char) char = writeChars.find(c => c.properties.writeWithoutResponse);
-          if (!char) char = writeChars[0];
-
-          if (char) {
-            setBleCharacteristic(char);
-          }
+        // Invocación directa sin setTimeout previo para conservar el gesto del usuario en tablets
+        const result = await getOrReconnectBlePrinter(bleCharacteristic, true);
+        if (result.success && result.char) {
+          setBleCharacteristic(result.char);
+          toast.success("✅ Impresora Bluetooth vinculada con éxito");
+        } else if (result.error && !result.error.includes("cancelada")) {
+          toast.error("Error de conexión: " + result.error);
         }
       }
     } catch (e) {

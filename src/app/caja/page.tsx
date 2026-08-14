@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../components/AuthProvider";
 import ProtectedRoute from "../../components/ProtectedRoute";
+import { getOrReconnectBlePrinter, sendBleBytes } from "../../utils/bluetoothPrinter";
 
 interface Denominations {
   b1000: number;
@@ -296,60 +297,18 @@ export default function CajaModule() {
     
     if (type === "bluetooth") {
       try {
-        if (typeof window === "undefined" || !(navigator as any).bluetooth) {
-          alert("Web Bluetooth no soportado en este navegador. Por favor use Google Chrome.");
+        const result = await getOrReconnectBlePrinter(undefined, true);
+        if (!result.success || !result.char) {
+          alert("Fallo al imprimir por Bluetooth: " + (result.error || "No se pudo conectar a la impresora."));
           return;
         }
-        
-        let device;
-        if ((navigator as any).bluetooth.getDevices) {
-          const devices = await (navigator as any).bluetooth.getDevices();
-          if (devices.length > 0) {
-            device = devices[0];
-          }
-        }
-        
-        if (!device) {
-          device = await (navigator as any).bluetooth.requestDevice({
-            acceptAllDevices: true,
-            optionalServices: [
-              "000018f0-0000-1000-8000-00805f9b34fb",
-              "0000e7e1-0000-1000-8000-00805f9b34fb",
-              "0000ae30-0000-1000-8000-00805f9b34fb"
-            ]
-          });
-        }
-        
-        console.log("Conectando a GATT server de:", device.name);
-        const server = await device.gatt?.connect();
-        if (!server) throw new Error("No se pudo conectar al servidor GATT.");
-        
-        const services = await server.getPrimaryServices();
-        let allCharacteristics: any[] = [];
-        for (const service of services) {
-          try {
-            const characteristics = await service.getCharacteristics();
-            allCharacteristics.push(...characteristics);
-          } catch (e) {
-            console.warn("Error al leer características:", e);
-          }
-        }
-        const writeChars = allCharacteristics.filter(c => c.properties.write || c.properties.writeWithoutResponse);
-        const KNOWN_PATTERNS = ["e7e2", "ae01", "ae02", "18f1", "2af1", "4954"];
-        let char = writeChars.find(c => {
-          const uuidLower = c.uuid.toLowerCase();
-          return KNOWN_PATTERNS.some(pat => uuidLower.includes(pat));
-        });
-        if (!char) char = writeChars.find(c => c.properties.writeWithoutResponse);
-        if (!char) char = writeChars[0];
 
-        if (!char) throw new Error("No se encontró característica de escritura.");
-        
+        const char = result.char;
         const encoder = new TextEncoder();
         const chunks: Uint8Array[] = [];
         const write = (b: number[]) => chunks.push(new Uint8Array(b));
         const writeText = (t: string) => chunks.push(encoder.encode(t));
-        
+
         write([0x1b, 0x40]);
         write([0x1b, 0x61, 0x01]);
         write([0x1b, 0x45, 0x01]);
@@ -359,17 +318,17 @@ export default function CajaModule() {
         writeText("TICKET DE CORTE DE CAJA\n");
         write([0x1b, 0x45, 0x00]);
         writeText(divider);
-        
+
         write([0x1b, 0x61, 0x00]);
         writeText(`Fecha: ${ticketData.date}\n`);
         writeText(`Cajero: ${ticketData.cajero}\n`);
         writeText(divider);
-        
+
         const formatRow = (label: string, value: string) => {
           const spaces = maxCols - label.length - value.length;
           return label + (spaces > 0 ? " ".repeat(spaces) : " ") + value + "\n";
         };
-        
+
         writeText(formatRow("Fondo Inicial:", `$${ticketData.fondo}`));
         writeText(formatRow("Ventas Totales:", `$${ticketData.ventas.toFixed(2)}`));
         writeText(formatRow("  ↳ Efec:", `$${ticketData.ventasEfectivo.toFixed(2)}`));
@@ -378,46 +337,31 @@ export default function CajaModule() {
         writeText(formatRow("Ingresos (+):", `$${ticketData.ingresos.toFixed(2)}`));
         writeText(formatRow("Retiros (-):", `$${ticketData.retiros.toFixed(2)}`));
         writeText(divider);
-        
+
         writeText(formatRow("SISTEMA:", `$${ticketData.esperado.toFixed(2)}`));
         writeText(formatRow("FISICO:", `$${ticketData.fisico.toFixed(2)}`));
         writeText(divider);
-        
+
         write([0x1b, 0x61, 0x01]);
         write([0x1b, 0x45, 0x01]);
         writeText(`DESCUADRE: $${ticketData.descuadre.toFixed(2)}\n`);
         write([0x1b, 0x45, 0x00]);
-        
+
         writeText("\n\n\n\n");
         if (localStorage.getItem("ERIKA_PRINTER_ENABLE_AUTOCUT") !== "false") {
           write([0x1d, 0x56, 0x41, 0x00]);
         }
-        
+
         const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
         const bytes = new Uint8Array(totalLength);
         let offset = 0;
-        chunks.forEach(c => {
+        chunks.forEach((c) => {
           bytes.set(c, offset);
           offset += c.length;
         });
-        
+
         const chunkSize = Number(localStorage.getItem("ERIKA_PRINTER_BLE_CHUNK_SIZE")) || 20;
-        for (let i = 0; i < bytes.length; i += chunkSize) {
-          const chunk = bytes.slice(i, i + chunkSize);
-          try {
-            if (char.properties.writeWithoutResponse) {
-              await char.writeValueWithoutResponse(chunk);
-            } else if (char.properties.write) {
-              await char.writeValueWithResponse(chunk);
-            } else {
-              await char.writeValue(chunk);
-            }
-          } catch (writeErr) {
-            console.warn("Fallo al escribir sin respuesta, reintentando con writeValue estándar:", writeErr);
-            await char.writeValue(chunk);
-          }
-          await new Promise(r => setTimeout(r, 20));
-        }
+        await sendBleBytes(char, bytes, chunkSize, 20);
         alert("✅ Reporte de corte impreso por Bluetooth exitosamente.");
       } catch (err: any) {
         console.error(err);
