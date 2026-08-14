@@ -1686,6 +1686,8 @@ export default function POSModule() {
       chunks.push(encoder.encode(text));
     };
     
+    // Comando de cambio de modo TSPL por si la impresora está en modo LABEL
+    writeText("SET PRINT MODE ESCPOS\r\nMODE ESCPOS\r\n");
     write([0x1b, 0x40]); // Reset ESC @
     write([0x1b, 0x74, 0x00]); // Code page 437
     write([0x1b, 0x32]); // Line spacing default
