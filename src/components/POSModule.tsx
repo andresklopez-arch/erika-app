@@ -1915,7 +1915,10 @@ export default function POSModule() {
     }
 
     // Avance de líneas explícito para asegurar que las impresoras portátiles 58mm/80mm vacíen el buffer
-    write([0x1b, 0x64, 0x04]); // ESC d 4
+    write([0x1b, 0x64, 0x06]); // ESC d 6
+    write([0x0a, 0x0a, 0x0a, 0x0a]); // Line Feeds
+    write([0x0c]); // Form Feed
+    writeText("PRINT 1,1\r\n"); // TSPL Flush por si está en modo LABEL
     if (config.printer_enable_autocut !== false) {
       try {
         write([0x1d, 0x56, 0x01]); // GS V 1 corte seguro

@@ -635,6 +635,7 @@ export default function SettingsModule() {
         write([0x1b, 0x64, 0x06]); // ESC d 6 (Avance 6 líneas)
         write([0x0a, 0x0a, 0x0a, 0x0a]); // Line feeds
         write([0x0c]); // Form Feed
+        writeText("PRINT 1,1\r\n"); // TSPL Flush backup
 
         const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
         const bytes = new Uint8Array(totalLength);
