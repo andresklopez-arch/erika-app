@@ -668,7 +668,7 @@ export default function SettingsModule() {
         alert("Fallo al imprimir ticket de prueba: " + err.message);
       }
     } else {
-      alert("La prueba de impresión rápida está diseñada para Bluetooth Directo. En modo de Sistema se realiza al imprimir tickets reales.");
+      testPrint();
     }
   };
 
@@ -1764,9 +1764,9 @@ export default function SettingsModule() {
                 💾 Guardar Configuración de Impresión
               </button>
               <button
-                onClick={testPrint}
+                onClick={handleTestPrint}
                 className="btn-primary"
-                style={{ flex: 1, background: "transparent", border: "1px solid var(--color-secondary)", color: "var(--color-secondary)" }}
+                style={{ flex: 1, background: "transparent", border: "1px solid var(--color-secondary)", color: "var(--color-secondary)", fontWeight: "bold" }}
               >
                 📄 Prueba
               </button>

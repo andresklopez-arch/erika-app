@@ -115,8 +115,18 @@ export async function reconnectGattServer(device: any): Promise<any> {
   }
 
   console.log(`[BLE] Conectando servidor GATT a "${device.name || "Impresora"}"...`);
+
+  const connectWithTimeout = (timeoutMs: number) => {
+    return Promise.race([
+      device.gatt.connect(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Tiempo de espera agotado al conectar por Bluetooth.")), timeoutMs)
+      )
+    ]);
+  };
+
   try {
-    const server = await device.gatt.connect();
+    const server: any = await connectWithTimeout(4000);
     if (!server || !server.connected) {
       throw new Error("El servidor GATT no reportó estado conectado tras connect().");
     }
@@ -127,8 +137,8 @@ export async function reconnectGattServer(device: any): Promise<any> {
       device.gatt.disconnect();
     } catch (discErr) {}
 
-    await new Promise((r) => setTimeout(r, 350));
-    const server = await device.gatt.connect();
+    await new Promise((r) => setTimeout(r, 250));
+    const server: any = await connectWithTimeout(3000);
     if (!server || !server.connected) {
       throw new Error("No se pudo conectar con el servicio Bluetooth de la impresora.");
     }
