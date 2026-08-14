@@ -1909,12 +1909,15 @@ export default function POSModule() {
       setAlign(1);
       writeText((config.printer_footer_msg || "Gracias por su compra!") + "\n");
     }
-    
-    writeText("\n\n\n\n");
+
+    // Avance de líneas explícito para asegurar que las impresoras portátiles 58mm/80mm vacíen el buffer
+    write([0x1b, 0x64, 0x04]); // ESC d 4
     if (config.printer_enable_autocut !== false) {
-      write([0x1d, 0x56, 0x41, 0x00]);
+      try {
+        write([0x1d, 0x56, 0x01]); // GS V 1 corte seguro
+      } catch (e) {}
     }
-    
+
     const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
     const result = new Uint8Array(totalLength);
     let offset = 0;
@@ -1922,7 +1925,7 @@ export default function POSModule() {
       result.set(chunk, offset);
       offset += chunk.length;
     });
-    
+
     return result;
   };
 
