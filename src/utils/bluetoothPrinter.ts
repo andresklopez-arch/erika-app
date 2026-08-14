@@ -1,6 +1,6 @@
 /**
  * Utilería centralizada para impresión por Web Bluetooth (GATT BLE) en Erika POS.
- * Optimizado para compatibilidad total con Windows PC y Android Tablets.
+ * Optimizado para compatibilidad total con EC Line EC-MP-300, Windows PC y Android Tablets.
  */
 
 export const KNOWN_SERVICES = [
@@ -24,9 +24,28 @@ export const KNOWN_PATTERNS = ["fff2", "fff1", "ffe1", "e7e2", "ae01", "ae02", "
 export interface BleConnectResult {
   success: boolean;
   char?: any;
+  allVendorChars?: any[];
   device?: any;
   error?: string;
   userGestureRequired?: boolean;
+  diagInfo?: string;
+}
+
+/**
+ * Encuentra todas las características de escritura del fabricante excluyendo atributos genéricos del sistema.
+ */
+export function findAllVendorWriteCharacteristics(characteristics: any[]): any[] {
+  if (!characteristics || characteristics.length === 0) return [];
+
+  return characteristics.filter((c) => {
+    if (!c.properties || (!c.properties.write && !c.properties.writeWithoutResponse)) return false;
+    const uuid = c.uuid.toLowerCase();
+    // Excluir atributos genéricos del sistema Bluetooth (Device Name 2a00, Appearance 2a01, GATT 1800, 1801)
+    if (uuid.includes("00002a") || uuid.includes("00001800") || uuid.includes("00001801") || uuid.includes("0000180a")) {
+      return false;
+    }
+    return true;
+  });
 }
 
 /**
@@ -35,24 +54,18 @@ export interface BleConnectResult {
 export function findWriteCharacteristic(characteristics: any[]): any {
   if (!characteristics || characteristics.length === 0) return null;
 
-  // Filtrar características para EXCLUIR atributos genéricos de Bluetooth SIG (GAP/GATT/Device Name 00002aXX)
-  const validVendorChars = characteristics.filter((c) => {
-    if (!c.properties || (!c.properties.write && !c.properties.writeWithoutResponse)) return false;
-    const uuid = c.uuid.toLowerCase();
-    if (uuid.includes("00002a") || uuid.includes("00001800") || uuid.includes("00001801") || uuid.includes("0000180a")) {
-      return false;
-    }
-    return true;
-  });
-
+  const validVendorChars = findAllVendorWriteCharacteristics(characteristics);
   const searchList = validVendorChars.length > 0 ? validVendorChars : characteristics;
 
   let char = searchList.find((c) => {
     const uuidLower = c.uuid.toLowerCase();
     return KNOWN_PATTERNS.some((pat) => uuidLower.includes(pat));
   });
-  if (!char) char = searchList.find((c) => c.properties && (c.properties.write || c.properties.writeWithoutResponse));
+
+  if (!char) char = searchList.find((c) => c.properties && c.properties.write);
+  if (!char) char = searchList.find((c) => c.properties && c.properties.writeWithoutResponse);
   if (!char) char = searchList[0];
+
   return char;
 }
 
@@ -144,9 +157,10 @@ export async function getOrReconnectBlePrinter(
       try {
         const server = await reconnectGattServer(device);
         const chars = await getCharacteristicsFromGattServer(server);
+        const vendorChars = findAllVendorWriteCharacteristics(chars);
         const char = findWriteCharacteristic(chars);
         if (char) {
-          return { success: true, char, device };
+          return { success: true, char, allVendorChars: vendorChars, device };
         }
       } catch (err: any) {
         console.warn("[BLE] No se pudo reutilizar característica guardada:", err);
@@ -164,9 +178,10 @@ export async function getOrReconnectBlePrinter(
             console.log("[BLE] Reconectando dispositivo pre-vinculado:", dev.name);
             const server = await reconnectGattServer(dev);
             const chars = await getCharacteristicsFromGattServer(server);
+            const vendorChars = findAllVendorWriteCharacteristics(chars);
             const char = findWriteCharacteristic(chars);
             if (char) {
-              return { success: true, char, device: dev };
+              return { success: true, char, allVendorChars: vendorChars, device: dev };
             }
           } catch (e) {
             console.warn("[BLE] Falló reconexión a:", dev.name, e);
@@ -187,14 +202,20 @@ export async function getOrReconnectBlePrinter(
       });
       const server = await reconnectGattServer(device);
       const chars = await getCharacteristicsFromGattServer(server);
+      const vendorChars = findAllVendorWriteCharacteristics(chars);
       const char = findWriteCharacteristic(chars);
+
+      const charUuids = chars.map((c: any) => c.uuid.substring(0, 8)).join(", ");
+      const diagInfo = `Dispositivo: ${device.name || "EC-MP-300"}\nCanales detectados (${chars.length}): ${charUuids}`;
+
       if (!char) {
         return {
           success: false,
-          error: "Dispositivo vinculado pero no se encontró canal de impresión térmico.",
+          diagInfo,
+          error: `Dispositivo '${device.name || "EC-MP-300"}' vinculado pero no se encontró canal de impresión térmico.\n\nDetalles:\n${diagInfo}`,
         };
       }
-      return { success: true, char, device };
+      return { success: true, char, allVendorChars: vendorChars, device, diagInfo };
     } catch (err: any) {
       console.error("[BLE] Error en requestDevice:", err);
       if (err.name === "NotFoundError") {
@@ -219,63 +240,68 @@ export async function getOrReconnectBlePrinter(
 }
 
 /**
- * Transmite datos ESC/POS en bloques asegurando transmisión robusta para tablets y PCs.
+ * Transmite datos ESC/POS en bloques asegurando transmisión robusta para EC Line EC-MP-300, tablets y PCs.
  */
 export async function sendBleBytes(
   char: any,
   bytes: Uint8Array,
   chunkSize: number = 20,
-  delayMs: number = 35
+  delayMs: number = 35,
+  allVendorCharacteristics?: any[]
 ): Promise<boolean> {
   if (!char) throw new Error("No hay característica Bluetooth válida.");
 
-  let activeChar = char;
+  const targets = (allVendorCharacteristics && allVendorCharacteristics.length > 0)
+    ? allVendorCharacteristics
+    : [char];
 
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.slice(i, i + chunkSize);
+  for (const activeChar of targets) {
+    let currentChar = activeChar;
 
-    const device = activeChar.service?.device;
-    if (device && !device.gatt?.connected) {
-      console.warn("[BLE] Conexión caída durante transmisión, reconectando...");
-      const server = await reconnectGattServer(device);
-      const chars = await getCharacteristicsFromGattServer(server);
-      const newChar = findWriteCharacteristic(chars);
-      if (newChar) activeChar = newChar;
-    }
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.slice(i, i + chunkSize);
 
-    let written = false;
-    if (activeChar.properties && activeChar.properties.writeWithoutResponse) {
-      try {
-        await activeChar.writeValueWithoutResponse(chunk);
-        written = true;
-      } catch (errNoResp) {
-        console.warn("[BLE] writeValueWithoutResponse falló, probando writeValueWithResponse...", errNoResp);
+      const device = currentChar.service?.device;
+      if (device && !device.gatt?.connected) {
+        console.warn("[BLE] Conexión caída durante transmisión, reconectando...");
+        const server = await reconnectGattServer(device);
+        const chars = await getCharacteristicsFromGattServer(server);
+        const newChar = findWriteCharacteristic(chars);
+        if (newChar) currentChar = newChar;
       }
-    }
 
-    if (!written) {
-      try {
-        if (activeChar.properties && activeChar.properties.write) {
-          await activeChar.writeValueWithResponse(chunk);
-        } else {
-          await activeChar.writeValue(chunk);
-        }
-      } catch (writeErr: any) {
-        console.warn("[BLE] Reintentando transmisión de bloque tras reconexión...", writeErr);
-        if (device) {
-          const server = await reconnectGattServer(device);
-          const chars = await getCharacteristicsFromGattServer(server);
-          const newChar = findWriteCharacteristic(chars);
-          if (newChar) {
-            activeChar = newChar;
-            await activeChar.writeValue(chunk);
-          }
+      let written = false;
+
+      // 1. Probar writeValueWithResponse primero (garantizado para EC Line EC-MP-300 en Android/Windows)
+      if (currentChar.properties && currentChar.properties.write) {
+        try {
+          await currentChar.writeValueWithResponse(chunk);
+          written = true;
+        } catch (errWithResp) {
+          console.warn("[BLE] writeValueWithResponse falló, probando writeValueWithoutResponse...", errWithResp);
         }
       }
-    }
 
-    const effectiveDelay = Math.max(30, delayMs);
-    await new Promise((r) => setTimeout(r, effectiveDelay));
+      // 2. Probar writeValueWithoutResponse
+      if (!written && currentChar.properties && currentChar.properties.writeWithoutResponse) {
+        try {
+          await currentChar.writeValueWithoutResponse(chunk);
+          written = true;
+        } catch (errNoResp) {
+          console.warn("[BLE] writeValueWithoutResponse falló...", errNoResp);
+        }
+      }
+
+      // 3. Fallback genérico
+      if (!written) {
+        try {
+          await currentChar.writeValue(chunk);
+        } catch (fallbackErr) {}
+      }
+
+      const effectiveDelay = Math.max(30, delayMs);
+      await new Promise((r) => setTimeout(r, effectiveDelay));
+    }
   }
 
   return true;

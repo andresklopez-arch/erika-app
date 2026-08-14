@@ -596,7 +596,7 @@ export default function SettingsModule() {
       try {
         const result = await getOrReconnectBlePrinter(bleCharacteristic, true);
         if (!result.success || !result.char) {
-          alert("Fallo al imprimir ticket de prueba: " + (result.error || "No se pudo conectar a la impresora."));
+          alert("Fallo al conectar con impresora EC-MP-300: " + (result.error || "No se pudo conectar a la impresora."));
           return;
         }
 
@@ -608,24 +608,24 @@ export default function SettingsModule() {
         const write = (b: number[]) => chunks.push(new Uint8Array(b));
         const writeText = (t: string) => chunks.push(encoder.encode(t));
 
-        write([0x1b, 0x40]); // Init
+        write([0x1b, 0x40]); // Init ESC @
+        write([0x1b, 0x42, 0x03, 0x02]); // Beep EC-MP-300
         write([0x1b, 0x61, 0x01]); // Align Center
         write([0x1b, 0x45, 0x01]); // Bold
-        writeText("FERRETERIA ERIKA\n");
-        writeText("TICKET DE PRUEBA BLE\n");
+        writeText("FERRETERIA ERIKA\r\n");
+        writeText("EC-MP-300 PRUEBA OK\r\n");
         write([0x1b, 0x45, 0x00]); // Bold off
-        writeText("--------------------------------\n");
+        writeText("--------------------------------\r\n");
         write([0x1b, 0x61, 0x00]); // Align Left
-        writeText(`Fecha: ${new Date().toLocaleString()}\n`);
-        writeText(`Buffer: ${printerBleChunkSize} bytes\n`);
-        writeText(`Papel: ${printerPaperSize}\n`);
-        writeText("--------------------------------\n");
-        writeText("Si lee esto, su impresora\nesta conectada correctamente.\n");
-        writeText("\n\n\n\n");
-
-        if (printerEnableAutocut) {
-          write([0x1d, 0x56, 0x41, 0x00]); // Cut
-        }
+        writeText(`Fecha: ${new Date().toLocaleString()}\r\n`);
+        writeText(`Buffer: ${printerBleChunkSize} bytes\r\n`);
+        writeText(`Papel: ${printerPaperSize}\r\n`);
+        writeText("--------------------------------\r\n");
+        writeText("Si lee esto, su EC-MP-300\r\nesta imprimiendo correctamente.\r\n");
+        writeText("\r\n\r\n\r\n");
+        write([0x1b, 0x64, 0x05]); // ESC d 5 (Avance 5 líneas)
+        write([0x0a, 0x0a, 0x0a, 0x0a]); // Line feeds
+        writeText("PRINT 1,1\r\n"); // TSPL Flush backup
 
         const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
         const bytes = new Uint8Array(totalLength);
@@ -635,8 +635,9 @@ export default function SettingsModule() {
           offset += c.length;
         });
 
-        await sendBleBytes(char, bytes, printerBleChunkSize || 20, 20);
-        alert("✅ Ticket de prueba enviado a la impresora.");
+        await sendBleBytes(char, bytes, printerBleChunkSize || 20, 35, result.allVendorChars);
+        const infoMsg = result.diagInfo ? `\n\n${result.diagInfo}` : "";
+        alert("✅ Orden enviada a todos los canales térmicos de la EC-MP-300." + infoMsg);
       } catch (err: any) {
         console.error(err);
         alert("Fallo al imprimir ticket de prueba: " + err.message);

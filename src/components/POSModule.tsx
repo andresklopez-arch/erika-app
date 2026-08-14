@@ -2001,7 +2001,7 @@ export default function POSModule() {
           const char = result.char;
           setBleCharacteristic(char);
           const bytes = generateEscPosBytes(job, config);
-          await sendBleBytes(char, bytes, config.printer_ble_chunk_size || 20, 20);
+          await sendBleBytes(char, bytes, config.printer_ble_chunk_size || 20, 35, result.allVendorChars);
           console.log("✅ Impresión Bluetooth directa completada.");
         } catch (err: any) {
           console.error("Error al imprimir por Bluetooth:", err);
