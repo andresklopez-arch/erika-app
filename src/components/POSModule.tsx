@@ -1686,7 +1686,9 @@ export default function POSModule() {
       chunks.push(encoder.encode(text));
     };
     
-    write([0x1b, 0x40]);
+    write([0x1b, 0x40]); // Reset ESC @
+    write([0x1b, 0x74, 0x00]); // Code page 437
+    write([0x1b, 0x32]); // Line spacing default
     
     const setAlign = (align: number) => {
       write([0x1b, 0x61, align]);

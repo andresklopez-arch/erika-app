@@ -609,6 +609,8 @@ export default function SettingsModule() {
         const writeText = (t: string) => chunks.push(encoder.encode(t));
 
         write([0x1b, 0x40]); // Init ESC @
+        write([0x1b, 0x74, 0x00]); // CP437 Standard CodePage
+        write([0x1b, 0x32]); // Default line spacing
         write([0x1b, 0x42, 0x03, 0x02]); // Beep EC-MP-300
         write([0x1b, 0x61, 0x01]); // Align Center
         write([0x1b, 0x45, 0x01]); // Bold
@@ -623,8 +625,9 @@ export default function SettingsModule() {
         writeText("--------------------------------\r\n");
         writeText("Si lee esto, su EC-MP-300\r\nesta imprimiendo correctamente.\r\n");
         writeText("\r\n\r\n\r\n");
-        write([0x1b, 0x64, 0x05]); // ESC d 5 (Avance 5 líneas)
+        write([0x1b, 0x64, 0x06]); // ESC d 6 (Avance 6 líneas)
         write([0x0a, 0x0a, 0x0a, 0x0a]); // Line feeds
+        write([0x0c]); // Form Feed
         writeText("PRINT 1,1\r\n"); // TSPL Flush backup
 
         const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
