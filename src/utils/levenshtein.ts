@@ -5,7 +5,13 @@ export function normalizeText(text: string): string {
     .toLowerCase();
 }
 
-export function levenshteinDistance(a: string, b: string): number {
+export function levenshteinDistance(aStr: string, bStr: string): number {
+  // Array.from() itera por punto de código Unicode, no por unidad UTF-16 como
+  // charAt()/length. Sin esto, un solo emoji (par subrogado) en un nombre de
+  // producto se contaba como 2 "caracteres" distintos, inflando la distancia
+  // calculada y arruinando la búsqueda difusa para esos productos.
+  const a = Array.from(aStr);
+  const b = Array.from(bStr);
   const matrix = [];
   let i, j;
   if (a.length === 0) return b.length;
@@ -19,7 +25,7 @@ export function levenshteinDistance(a: string, b: string): number {
   }
   for (i = 1; i <= b.length; i++) {
     for (j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+      if (b[i - 1] === a[j - 1]) {
         matrix[i][j] = matrix[i - 1][j - 1];
       } else {
         matrix[i][j] = Math.min(

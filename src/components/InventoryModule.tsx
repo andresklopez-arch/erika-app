@@ -350,46 +350,47 @@ export default function InventoryModule() {
     else if (!isReset) setIsLoadingMore(true);
 
     try {
-      let dbQuery = supabase
-        .from("inventory")
-        .select("*", { count: "exact" })
-        .or("deleted.is.null,deleted.eq.false");
-
-      // Apply supplier filter
-      if (selectedSupplierFilter) {
-        dbQuery = dbQuery.eq("supplier", selectedSupplierFilter);
-      }
-
-      // Apply discount filter
-      if (showOnlyDiscounts) {
-        dbQuery = dbQuery.gt("discount_pct", 0);
-      }
-
-      // Apply search query
       const cleanQuery = queryStr.trim();
-      if (cleanQuery) {
-        const tokens = normalizeString(cleanQuery).split(/\s+/).filter(Boolean);
+      const tokens = cleanQuery ? normalizeString(cleanQuery).split(/\s+/).filter(Boolean) : [];
+      const limit = 50;
+
+      // nameSearchField busca por "name_search" (columna generada, sin acentos,
+      // requiere haber corrido supabase_fix_accent_insensitive_search.sql). Si
+      // esa columna todavía no existe en la BD, se reintenta automáticamente
+      // contra "name" (comportamiento anterior, sensible a acentos) para que la
+      // búsqueda nunca quede rota mientras se aplica la migración.
+      const runQuery = (nameSearchField: "name_search" | "name") => {
+        let q = supabase
+          .from("inventory")
+          .select("*", { count: "exact" })
+          .or("deleted.is.null,deleted.eq.false");
+
+        if (selectedSupplierFilter) {
+          q = q.eq("supplier", selectedSupplierFilter);
+        }
+        if (showOnlyDiscounts) {
+          q = q.gt("discount_pct", 0);
+        }
         tokens.forEach((token) => {
-          dbQuery = dbQuery.or(
-            `name.ilike.%${token}%,code.ilike.%${token}%,location.ilike.%${token}%,supplier.ilike.%${token}%`
+          q = q.or(
+            `${nameSearchField}.ilike.%${token}%,code.ilike.%${token}%,location.ilike.%${token}%,supplier.ilike.%${token}%`
           );
         });
+        if (sortColumn && sortColumn !== "margin") {
+          q = q.order(sortColumn, { ascending: sortAscending });
+        } else {
+          q = q.order("name", { ascending: true });
+        }
+        const from = pageNum * limit;
+        const to = from + limit - 1;
+        return q.range(from, to);
+      };
+
+      let { data, count, error } = await runQuery("name_search");
+      if (error && tokens.length > 0 && /name_search/.test(error.message || "")) {
+        console.warn("[Inventario] La columna 'name_search' aún no existe (falta correr la migración de acentos); usando búsqueda sin normalizar.");
+        ({ data, count, error } = await runQuery("name"));
       }
-
-      // Apply sorting (if not margin)
-      if (sortColumn && sortColumn !== "margin") {
-        dbQuery = dbQuery.order(sortColumn, { ascending: sortAscending });
-      } else {
-        // Fallback or sort by name
-        dbQuery = dbQuery.order("name", { ascending: true });
-      }
-
-      const limit = 50;
-      const from = pageNum * limit;
-      const to = from + limit - 1;
-      dbQuery = dbQuery.range(from, to);
-
-      const { data, count, error } = await dbQuery;
 
       if (error) {
         console.error("Error fetching inventory:", error);
