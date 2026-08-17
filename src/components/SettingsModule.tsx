@@ -648,22 +648,28 @@ export default function SettingsModule() {
 
         const encoder = new TextEncoder();
         const chunks: Uint8Array[] = [];
+
+        const sanitizeForThermal = (str: string): string => {
+          if (!str) return "";
+          return str
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/¡/g, "!")
+            .replace(/¿/g, "?")
+            .replace(/ñ/g, "n")
+            .replace(/Ñ/g, "N")
+            .replace(/[^\x20-\x7E\r\n\t]/g, "");
+        };
+
         const write = (b: number[]) => chunks.push(new Uint8Array(b));
-        const writeText = (t: string) => chunks.push(encoder.encode(t));
+        const writeText = (t: string) => chunks.push(encoder.encode(sanitizeForThermal(t)));
 
         const invertPrint = printerInvert180 || false;
 
         const topLines = printerMarginTopLines || 0;
         const bottomLines = printerMarginBottomLines !== undefined ? printerMarginBottomLines : 1;
 
-        // 1. Comando de cambio de modo TSPL a ESCPOS con orientación
-        writeText(`DIRECTION ${invertPrint ? 1 : 0},0\r\nSET PRINT MODE ESCPOS\r\nMODE ESCPOS\r\n`);
-
-        // 2. Renderizado TSPL por si la impresora está en modo LABEL (Etiqueta)
-        const tsplY0 = 20 + (topLines * 12);
-        writeText(`SIZE 72 mm, 60 mm\r\nGAP 0,0\r\nDIRECTION ${invertPrint ? 1 : 0},0\r\nCLS\r\nTEXT 40,${tsplY0},"3",0,1,1,"FERRETERIA ERIKA"\r\nTEXT 40,${tsplY0 + 35},"2",0,1,1,"EC-MP-300 TICKET OK"\r\nTEXT 40,${tsplY0 + 65},"2",0,1,1,"----------------------------"\r\nTEXT 40,${tsplY0 + 90},"2",0,1,1,"TICKET DE PRUEBA"\r\nPRINT 1,1\r\n`);
-
-        // 3. Comandos ESC/POS estándar
+        // Comandos ESC/POS estándar limpios
         write([0x1b, 0x40]); // Init ESC @
         write([0x1b, 0x7b, invertPrint ? 0x01 : 0x00]); // ESC { n (0 = Normal, 1 = Invertido 180°)
         write([0x1b, 0x74, 0x00]); // CP437 Standard CodePage
