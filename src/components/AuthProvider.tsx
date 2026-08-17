@@ -159,7 +159,9 @@ export default function AuthProvider({
         printer_double_copy_layaway_credit: localStorage.getItem("ERIKA_PRINTER_DOUBLE_COPY") === "true",
         printer_ble_chunk_size: Number(localStorage.getItem("ERIKA_PRINTER_BLE_CHUNK_SIZE")) || 20,
         printer_enable_autocut: localStorage.getItem("ERIKA_PRINTER_ENABLE_AUTOCUT") !== "false",
-        printer_invert_180: localStorage.getItem("ERIKA_PRINTER_INVERT_180") !== "false",
+        printer_invert_180: typeof window !== "undefined" && localStorage.getItem("ERIKA_PRINTER_INVERT_180") !== null
+          ? localStorage.getItem("ERIKA_PRINTER_INVERT_180") === "true"
+          : true,
         printer_margin_top_lines: Number(localStorage.getItem("ERIKA_PRINTER_TOP_LINES")) || 0,
         printer_margin_bottom_lines: localStorage.getItem("ERIKA_PRINTER_BOTTOM_LINES") !== null ? Number(localStorage.getItem("ERIKA_PRINTER_BOTTOM_LINES")) : 1,
         low_stock_threshold: Number(localStorage.getItem("ERIKA_LOW_STOCK_THRESHOLD")) || 5,
@@ -225,8 +227,10 @@ export default function AuthProvider({
         .single();
       if (data && !dbError) {
         const rawConfig = { ...(data.config || {}) };
-        const localInvert = typeof window !== "undefined" ? localStorage.getItem("ERIKA_PRINTER_INVERT_180") : null;
-        rawConfig.printer_invert_180 = localInvert === "false" ? false : true;
+        if (rawConfig.printer_invert_180 === undefined) {
+          const localInvert = typeof window !== "undefined" ? localStorage.getItem("ERIKA_PRINTER_INVERT_180") : null;
+          rawConfig.printer_invert_180 = localInvert !== null ? localInvert === "true" : true;
+        }
 
         // Enforce types and validation rules using Zod Schema
         const parsed = BusinessSettingsSchema.parse({

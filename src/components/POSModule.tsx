@@ -1675,7 +1675,11 @@ export default function POSModule() {
       chunks.push(encoder.encode(text));
     };
     
-    const invertPrint = config.printer_invert_180 !== false;
+    const invertPrint = config.printer_invert_180 !== undefined
+      ? config.printer_invert_180
+      : (typeof window !== "undefined" && localStorage.getItem("ERIKA_PRINTER_INVERT_180") !== null
+          ? localStorage.getItem("ERIKA_PRINTER_INVERT_180") === "true"
+          : true);
     const dirStr = `DIRECTION ${invertPrint ? 1 : 0},0\r\n`;
     const topLines = config.printer_margin_top_lines || 0;
     const bottomLines = config.printer_margin_bottom_lines !== undefined ? config.printer_margin_bottom_lines : 1;

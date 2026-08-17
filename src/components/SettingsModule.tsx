@@ -100,7 +100,8 @@ export default function SettingsModule() {
   const [printerEnableAutocut, setPrinterEnableAutocut] = useState<boolean>(true);
   const [printerInvert180, setPrinterInvert180] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem("ERIKA_PRINTER_INVERT_180") !== "false";
+      const saved = localStorage.getItem("ERIKA_PRINTER_INVERT_180");
+      if (saved !== null) return saved === "true";
     }
     return true;
   });
@@ -371,7 +372,12 @@ export default function SettingsModule() {
       setPrinterDoubleCopy(businessSettings.config.printer_double_copy_layaway_credit || false);
       setPrinterBleChunkSize(businessSettings.config.printer_ble_chunk_size || 20);
       setPrinterEnableAutocut(businessSettings.config.printer_enable_autocut !== false);
-      setPrinterInvert180(businessSettings.config.printer_invert_180 !== false);
+      if (businessSettings.config.printer_invert_180 !== undefined) {
+        setPrinterInvert180(businessSettings.config.printer_invert_180);
+      } else if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("ERIKA_PRINTER_INVERT_180");
+        if (saved !== null) setPrinterInvert180(saved === "true");
+      }
       setPrinterMarginTopLines(businessSettings.config.printer_margin_top_lines ?? 0);
       setPrinterMarginBottomLines(businessSettings.config.printer_margin_bottom_lines ?? 1);
       setLowStockThreshold(String(businessSettings.config.low_stock_threshold || 5));
@@ -1392,7 +1398,13 @@ export default function SettingsModule() {
                 type="checkbox"
                 id="printer-enable-autocut-checkbox"
                 checked={printerEnableAutocut}
-                onChange={(e) => setPrinterEnableAutocut(e.target.checked)}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setPrinterEnableAutocut(val);
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("ERIKA_PRINTER_ENABLE_AUTOCUT", val ? "true" : "false");
+                  }
+                }}
                 style={{ width: "18px", height: "18px", cursor: "pointer" }}
               />
               <label htmlFor="printer-enable-autocut-checkbox" style={{ fontSize: "0.9rem", cursor: "pointer", userSelect: "none", color: "white" }}>
@@ -1405,7 +1417,13 @@ export default function SettingsModule() {
                 type="checkbox"
                 id="printer-invert-checkbox"
                 checked={printerInvert180}
-                onChange={(e) => setPrinterInvert180(e.target.checked)}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setPrinterInvert180(val);
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("ERIKA_PRINTER_INVERT_180", val ? "true" : "false");
+                  }
+                }}
                 style={{ width: "18px", height: "18px", cursor: "pointer" }}
               />
               <label htmlFor="printer-invert-checkbox" style={{ fontSize: "0.9rem", cursor: "pointer", userSelect: "none", color: "white" }}>
@@ -1425,7 +1443,13 @@ export default function SettingsModule() {
                   </label>
                   <select
                     value={printerMarginTopLines}
-                    onChange={(e) => setPrinterMarginTopLines(Number(e.target.value))}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setPrinterMarginTopLines(val);
+                      if (typeof window !== "undefined") {
+                        localStorage.setItem("ERIKA_PRINTER_TOP_LINES", String(val));
+                      }
+                    }}
                     style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.4)", color: "white", cursor: "pointer" }}
                   >
                     <option value={0}>0 Líneas (Sin espacio inicial)</option>
@@ -1442,7 +1466,13 @@ export default function SettingsModule() {
                   </label>
                   <select
                     value={printerMarginBottomLines}
-                    onChange={(e) => setPrinterMarginBottomLines(Number(e.target.value))}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setPrinterMarginBottomLines(val);
+                      if (typeof window !== "undefined") {
+                        localStorage.setItem("ERIKA_PRINTER_BOTTOM_LINES", String(val));
+                      }
+                    }}
                     style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.4)", color: "white", cursor: "pointer" }}
                   >
                     <option value={0}>0 Líneas (Corte al ras)</option>
