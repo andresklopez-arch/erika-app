@@ -375,6 +375,7 @@ export default function AuthProvider({
       }
     } catch (e) {
       console.error("Fallo de red al actualizar configuracion:", e);
+      alert("❌ No se pudo guardar la configuración: fallo de red o de conexión. Verifica tu internet e inténtalo de nuevo.");
       return false;
     }
   };

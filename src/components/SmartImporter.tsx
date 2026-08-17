@@ -387,6 +387,24 @@ export default function SmartImporter({
 
   // Guardado final e inserción de datos
   const handleImport = async () => {
+    // Antes las advertencias se calculaban y mostraban en rojo, pero el botón
+    // no las revisaba: se podía importar de todos modos con filas sin código
+    // ni nombre. Los datos faltantes se bloquean (fila inválida); el resto de
+    // advertencias (precio en $0, margen negativo, stock negativo) se confirman
+    // porque pueden ser decisiones de negocio legítimas.
+    if (emptyNameOrCodeCount > 0) {
+      alert(
+        `❌ No se puede importar: ${emptyNameOrCodeCount} producto(s) no tienen código o nombre. Corrige esas filas antes de continuar.`
+      );
+      return;
+    }
+    if (warningsList.length > 0) {
+      const proceed = window.confirm(
+        `Se encontraron advertencias antes de importar:\n\n${warningsList.join("\n")}\n\n¿Deseas continuar con la importación de todos modos?`
+      );
+      if (!proceed) return;
+    }
+
     setIsProcessing(true);
     try {
       // 1. Identificar proveedores únicos ingresados que no están en la base de datos

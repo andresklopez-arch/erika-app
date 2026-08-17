@@ -41,30 +41,31 @@ const getCryptoKey = async (): Promise<CryptoKey> => {
 };
 
 const encryptData = async (data: any): Promise<string> => {
-  try {
-    const key = await getCryptoKey();
-    const enc = new TextEncoder();
-    const encodedData = enc.encode(JSON.stringify(data));
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encrypted = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: iv },
-      key,
-      encodedData
-    );
-    
-    const combined = new Uint8Array(iv.length + encrypted.byteLength);
-    combined.set(iv, 0);
-    combined.set(new Uint8Array(encrypted), iv.length);
-    
-    let binary = "";
-    for (let i = 0; i < combined.length; i++) {
-      binary += String.fromCharCode(combined[i]);
-    }
-    return btoa(binary);
-  } catch (err) {
-    console.error("AES encryption failed, falling back to basic:", err);
-    return "";
+  // Antes esta función atrapaba cualquier error y devolvía "" en su lugar. Eso
+  // causaba pérdida silenciosa de datos: saveTransactionOffline guardaba un
+  // registro con payload vacío y lo daba por exitoso, y luego getOfflineTransactions
+  // no podía desencriptarlo (payload ""), descartándolo silenciosamente sin
+  // sincronizar jamás. Ahora se deja que el error se propague para que el
+  // llamador (p. ej. el checkout del POS) se entere y avise al cajero.
+  const key = await getCryptoKey();
+  const enc = new TextEncoder();
+  const encodedData = enc.encode(JSON.stringify(data));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv },
+    key,
+    encodedData
+  );
+
+  const combined = new Uint8Array(iv.length + encrypted.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(encrypted), iv.length);
+
+  let binary = "";
+  for (let i = 0; i < combined.length; i++) {
+    binary += String.fromCharCode(combined[i]);
   }
+  return btoa(binary);
 };
 
 const decryptData = async (encryptedStr: string): Promise<any> => {
@@ -216,6 +217,22 @@ export const getOfflineTransactions = async (): Promise<any[]> => {
   });
 };
 
+export const deleteOfflineTransaction = async (id: number): Promise<void> => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      const store = tx.objectStore(STORE_NAME);
+      const request = store.delete(id);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    } catch (err) {
+      reject(err);
+    }
+  });
+};
+
 export const clearOfflineTransactions = async (): Promise<void> => {
   const db = await initDB();
   return new Promise((resolve, reject) => {
@@ -289,6 +306,22 @@ export const getOfflineInvoiceClaims = async (): Promise<any[]> => {
   });
 };
 
+export const deleteOfflineInvoiceClaim = async (id: number): Promise<void> => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction("invoice_claims", "readwrite");
+      const store = tx.objectStore("invoice_claims");
+      const request = store.delete(id);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    } catch (err) {
+      reject(err);
+    }
+  });
+};
+
 export const clearOfflineInvoiceClaims = async (): Promise<void> => {
   const db = await initDB();
   return new Promise((resolve, reject) => {
@@ -318,21 +351,43 @@ export const syncOfflineInvoiceClaims = async (): Promise<number> => {
     const { error } = await supabase.from("invoice_claims").insert(data);
     if (!error) {
       synced++;
+      // Se borra únicamente el registro que ya se confirmó en el servidor,
+      // no todo el store: así un fallo en otro registro del mismo lote no
+      // provoca que este se vuelva a insertar duplicado en el próximo intento.
+      try {
+        await deleteOfflineInvoiceClaim(id);
+      } catch (delErr) {
+        console.error("Error eliminando invoice claim offline ya sincronizado:", delErr);
+      }
     } else {
       console.error("Error syncing invoice claim", error);
     }
   }
 
-  if (synced === pending.length) {
-    await clearOfflineInvoiceClaims();
-  }
-
   return synced;
 };
 
+// Evita que dos disparadores concurrentes (el listener "online" y el mensaje
+// SYNC_SALES del Service Worker, por ejemplo) corran syncOfflineTransactions
+// al mismo tiempo, lo cual duplicaba ventas e inventario descontado dos veces.
+let isSyncingTransactions = false;
+
 export const syncOfflineTransactions = async (): Promise<number> => {
   if (!navigator.onLine) return 0;
+  if (isSyncingTransactions) {
+    console.warn("syncOfflineTransactions ya está en curso, se omite esta invocación concurrente.");
+    return 0;
+  }
+  isSyncingTransactions = true;
 
+  try {
+    return await runSyncOfflineTransactions();
+  } finally {
+    isSyncingTransactions = false;
+  }
+};
+
+const runSyncOfflineTransactions = async (): Promise<number> => {
   // 1. Sincronizar transacciones de caja
   const pending = await getOfflineTransactions();
   let synced = 0;
@@ -343,6 +398,16 @@ export const syncOfflineTransactions = async (): Promise<number> => {
       const { error } = await supabase.from("cash_transactions").insert(data);
       if (!error) {
         synced++;
+        // Se borra únicamente este registro ya confirmado en el servidor. Antes
+        // sólo se limpiaba todo el store si TODOS los pendientes sincronizaban
+        // sin error; un solo fallo en el lote hacía que, en el siguiente intento,
+        // se reinsertaran (y se volviera a descontar inventario de) las ventas
+        // que ya se habían sincronizado correctamente.
+        try {
+          await deleteOfflineTransaction(id);
+        } catch (delErr) {
+          console.error("Error eliminando transacción offline ya sincronizada:", delErr);
+        }
         // Guardar en la bitácora local de sincronización (Sugerencia 3)
         try {
           const logKey = "ERIKA_OFFLINE_SYNC_LOG";
@@ -404,9 +469,6 @@ export const syncOfflineTransactions = async (): Promise<number> => {
           console.error("Error updating offline sync log with error details:", logErr);
         }
       }
-    }
-    if (synced === pending.length) {
-      await clearOfflineTransactions();
     }
   }
 

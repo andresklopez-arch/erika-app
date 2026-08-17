@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import toast from "react-hot-toast";
 import { CustomerSchema } from "../lib/schemas";
@@ -36,12 +36,16 @@ export default function CustomersModule() {
 
   const [limit, setLimit] = useState(20);
   const [hasMore, setHasMore] = useState(true);
+  // Evita que una búsqueda más lenta y ya obsoleta sobrescriba los resultados
+  // de una búsqueda más reciente (p. ej. escribir "Juan" y luego "Jose" rápido).
+  const latestSearchRequestId = useRef(0);
 
   const fetchCustomers = async (currentLimit = limit, searchVal = searchQuery) => {
+    const requestId = ++latestSearchRequestId.current;
     let query = supabase
       .from("customers")
       .select("*")
-      .not("deleted", "eq", true);
+      .or("deleted.is.null,deleted.eq.false");
 
     const cleanSearch = (searchVal || "").trim();
     if (cleanSearch !== "") {
@@ -72,6 +76,11 @@ export default function CustomersModule() {
         error = null;
       }
     }
+    if (requestId !== latestSearchRequestId.current) {
+      // Llegó una respuesta de una búsqueda vieja después de una más nueva; se descarta.
+      return;
+    }
+
     if (!error && data) {
       const hasMoreRows = data.length > currentLimit;
       const sliceData = hasMoreRows ? data.slice(0, currentLimit) : data;
@@ -379,6 +388,27 @@ export default function CustomersModule() {
         fetchCustomers();
       }
     } else {
+      const cleanName = newCustomer.name.trim();
+      const cleanPhone = newCustomer.phone.trim();
+      // Detección básica de duplicados: nombre igual (sin importar mayúsculas/
+      // espacios) o mismo teléfono. No bloquea la creación (puede haber dos
+      // clientes con el mismo nombre legítimamente), pero avisa antes de crear
+      // un registro que podría fragmentar el saldo/historial de un cliente ya existente.
+      const { data: possibleDupes } = await supabase
+        .from("customers")
+        .select("id, name, phone")
+        .or("deleted.is.null,deleted.eq.false");
+      const dupe = (possibleDupes || []).find((c: { name?: string; phone?: string }) =>
+        c.name?.trim().toLowerCase() === cleanName.toLowerCase() ||
+        (cleanPhone !== "" && c.phone?.trim() === cleanPhone)
+      );
+      if (dupe) {
+        const proceed = window.confirm(
+          `⚠️ Ya existe un cliente similar: "${dupe.name}" (Tel: ${dupe.phone || "N/A"}).\n\n¿Seguro que quieres crear un cliente nuevo de todos modos? (Esto puede fragmentar el crédito/historial del cliente existente)`
+        );
+        if (!proceed) return;
+      }
+
       const { error } = await supabase.from("customers").insert([newCustomer]);
       if (error) {
         alert("Error al insertar: " + error.message);

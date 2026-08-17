@@ -33,7 +33,9 @@ export default function ReportsModule() {
      costs: 0,
      payments: 0, // abonos
      losses: 0,
-     pureProfit: 0
+     pureProfit: 0,
+     estimatedCostCount: 0, // ventas sin costo real registrado, estimadas al 70% del precio
+     totalSaleCount: 0
   });
   const [cashSessions, setCashSessions] = useState<CashSession[]>([]);
   const [searchCajero, setSearchCajero] = useState("");
@@ -69,6 +71,7 @@ export default function ReportsModule() {
         const { data: txs } = await supabase.from("cash_transactions").select("amount, description").eq("type", "sale").gte("created_at", firstDayOfMonth);
         let sales = 0;
         let costs = 0;
+        let estimatedCostCount = 0;
         if (txs) {
            txs.forEach((t: any) => {
             sales += t.amount;
@@ -77,6 +80,7 @@ export default function ReportsModule() {
                costs += parseFloat(costMatch[1]);
             } else {
                costs += t.amount * 0.70; // fallback para ventas antiguas sin costo registrado
+               estimatedCostCount++;
             }
          });
         }
@@ -94,7 +98,9 @@ export default function ReportsModule() {
            costs,
            payments: totalPayments,
            losses: totalLosses,
-           pureProfit: sales - costs - totalLosses
+           pureProfit: sales - costs - totalLosses,
+           estimatedCostCount,
+           totalSaleCount: txs ? txs.length : 0
         });
 
         const { data: sessions } = await supabase.from("cash_sessions").select("*").order("closed_at", { ascending: false }).limit(50);
@@ -633,6 +639,11 @@ export default function ReportsModule() {
              <p style={{ fontSize: "0.8rem", color: "var(--color-secondary)", marginTop: "10px", fontStyle: "italic" }}>
                  * Este es el dinero 100% libre que ganó el negocio después de pagar el costo de los productos y los gastos internos. Los abonos a proveedores por deudas atrasadas fueron de ${netProfit.payments.toFixed(2)}.
              </p>
+             {netProfit.estimatedCostCount > 0 && (
+               <p style={{ fontSize: "0.8rem", color: "#f59e0b", marginTop: "5px", fontStyle: "italic" }}>
+                 ⚠️ {netProfit.estimatedCostCount} de {netProfit.totalSaleCount} venta(s) de este mes no tienen costo real registrado; su costo se ESTIMÓ automáticamente al 70% del precio de venta. La utilidad neta mostrada puede no ser exacta para esas ventas.
+               </p>
+             )}
           </div>
         </div>
       </div>

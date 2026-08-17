@@ -498,17 +498,29 @@ export default function SettingsModule() {
   };
 
   const toggleTheme = async (newTheme: string) => {
+    const previousTheme = theme;
     setTheme(newTheme);
     if (newTheme === "light") {
       document.documentElement.setAttribute("data-theme", "light");
     } else {
       document.documentElement.removeAttribute("data-theme");
     }
-    await updateBusinessSettings({
+    const success = await updateBusinessSettings({
       config: {
         theme: newTheme,
       }
     });
+    if (!success) {
+      // Revertir el cambio optimista de UI: si el guardado se rechazó (p. ej.
+      // por permisos), el tema ya no debe quedar "cambiado" solo visualmente
+      // mientras la base de datos sigue con el valor anterior.
+      setTheme(previousTheme);
+      if (previousTheme === "light") {
+        document.documentElement.setAttribute("data-theme", "light");
+      } else {
+        document.documentElement.removeAttribute("data-theme");
+      }
+    }
   };
 
   const saveBusinessProfile = async () => {

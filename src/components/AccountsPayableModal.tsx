@@ -188,16 +188,27 @@ export default function AccountsPayableModal({ onClose }: AccountsPayableModalPr
     const newStatus = newBalance === 0 ? 'paid' : paymentModalDebt.status;
 
     // 1. Insert Payment
-    await supabase.from("supplier_payments").insert({
+    const { error: payError } = await supabase.from("supplier_payments").insert({
         debt_id: paymentModalDebt.id,
         amount: payAmt,
         notes: paymentNotes + (calculatedInterest > 0 ? ` (Incluye mora: $${calculatedInterest.toFixed(2)})` : "")
     });
 
+    if (payError) {
+        return alert("❌ Error al registrar el abono: " + payError.message);
+    }
+
     // 2. Update Debt Balance
-    await supabase.from("supplier_debts")
+    const { error: balanceError } = await supabase.from("supplier_debts")
         .update({ balance: newBalance, status: newStatus })
         .eq("id", paymentModalDebt.id);
+
+    if (balanceError) {
+        return alert(
+            "⚠️ Se registró el abono, pero no se pudo actualizar el saldo de la deuda. Revisa manualmente: " +
+            balanceError.message
+        );
+    }
 
     alert(`✅ Abono de $${payAmt.toFixed(2)} registrado con éxito.`);
     

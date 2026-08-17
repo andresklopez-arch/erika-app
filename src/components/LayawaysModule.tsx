@@ -146,18 +146,24 @@ export default function LayawaysModule() {
     )
       return;
 
+    const failedItems: string[] = [];
     for (const item of layaway.items) {
       // Find current stock by name
-      const { data: currentStock } = await supabase
+      const { data: currentStock, error: findError } = await supabase
         .from("inventory")
         .select("stock")
         .eq("name", item.name)
         .single();
-      if (currentStock) {
-        await supabase
-          .from("inventory")
-          .update({ stock: currentStock.stock + item.qty })
-          .eq("name", item.name);
+      if (findError || !currentStock) {
+        failedItems.push(item.name);
+        continue;
+      }
+      const { error: updateError } = await supabase
+        .from("inventory")
+        .update({ stock: currentStock.stock + item.qty })
+        .eq("name", item.name);
+      if (updateError) {
+        failedItems.push(item.name);
       }
     }
 
@@ -166,7 +172,14 @@ export default function LayawaysModule() {
       .update({ status: "cancelled" })
       .eq("id", layaway.id);
     if (error) return alert("Error al cancelar.");
-    alert("❌ Apartado cancelado. Productos devueltos.");
+
+    if (failedItems.length > 0) {
+      alert(
+        `⚠️ Apartado cancelado, pero NO se pudo restaurar el stock de: ${failedItems.join(", ")}. Ajusta el inventario manualmente.`
+      );
+    } else {
+      alert("❌ Apartado cancelado. Productos devueltos.");
+    }
     fetchLayaways();
   };
 

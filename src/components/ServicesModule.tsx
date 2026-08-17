@@ -48,7 +48,7 @@ export default function ServicesModule() {
       let { data, error } = await supabase
         .from("services")
         .select("*")
-        .not("deleted", "eq", true)
+        .or("deleted.is.null,deleted.eq.false")
         .order("scheduled_at", { ascending: true });
 
       if (error) {
@@ -88,7 +88,10 @@ export default function ServicesModule() {
     if (service) {
       setEditingService(service);
       const sDate = new Date(service.scheduled_at);
-      const localDate = sDate.toISOString().split("T")[0];
+      // Antes se usaba toISOString() (fecha en UTC) junto con toTimeString()
+      // (hora local): cerca de la medianoche esto desalineaba la fecha mostrada
+      // respecto a la hora, y al reguardar sin cambios la cita se recorría un día.
+      const localDate = `${sDate.getFullYear()}-${String(sDate.getMonth() + 1).padStart(2, "0")}-${String(sDate.getDate()).padStart(2, "0")}`;
       const localTime = sDate.toTimeString().split(" ")[0].substring(0, 5);
 
       setFormData({

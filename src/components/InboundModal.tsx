@@ -77,15 +77,31 @@ export default function InboundModal({ onClose, onSuccess }: InboundModalProps) 
   const handleSave = async () => {
     if (entries.length === 0) return alert("No hay artículos en la lista de recepción");
     setIsSaving(true);
-    
-    let hasError = false;
+
+    // Si el mismo producto aparece en dos líneas de esta recepción (dos renglones
+    // de una misma factura), cada entrada tenía el mismo "entry.item.stock"
+    // desactualizado (tomado al abrir el modal), así que la segunda escritura
+    // sobrescribía a la primera en vez de sumarse. Aquí se agrupa por producto
+    // y se suma la cantidad recibida antes de escribir una sola vez por producto.
+    const aggregatedById = new Map<string, { item: InventoryItem; totalQty: number; lastCost: number }>();
     for (const entry of entries) {
-      const newStock = entry.item.stock + entry.qtyReceived;
-      const finalCost = applyIva ? entry.newCost * 1.16 : entry.newCost;
+      const existing = aggregatedById.get(entry.item.id);
+      if (existing) {
+        existing.totalQty += entry.qtyReceived;
+        existing.lastCost = entry.newCost;
+      } else {
+        aggregatedById.set(entry.item.id, { item: entry.item, totalQty: entry.qtyReceived, lastCost: entry.newCost });
+      }
+    }
+
+    let hasError = false;
+    for (const { item, totalQty, lastCost } of aggregatedById.values()) {
+      const newStock = item.stock + totalQty;
+      const finalCost = applyIva ? lastCost * 1.16 : lastCost;
       const { error } = await supabase
         .from("inventory")
         .update({ stock: newStock, cost: finalCost })
-        .eq("id", entry.item.id);
+        .eq("id", item.id);
       if (error) {
          console.error(error);
          hasError = true;

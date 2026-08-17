@@ -33,6 +33,21 @@ export default function ClientCaptureModal({ onClose, onSuccess }: ClientCapture
       }
     }
 
+    const cleanName = name.trim();
+    const { data: possibleDupes } = await supabase
+      .from("customers")
+      .select("id, name, phone")
+      .or("deleted.is.null,deleted.eq.false");
+    const dupe = (possibleDupes || []).find(
+      (c: { name?: string }) => c.name?.trim().toLowerCase() === cleanName.toLowerCase()
+    );
+    if (dupe) {
+      const proceed = window.confirm(
+        `⚠️ Ya existe un cliente con el nombre "${dupe.name}".\n\n¿Seguro que quieres crear un cliente nuevo de todos modos? (Esto puede fragmentar el crédito/historial del cliente existente)`
+      );
+      if (!proceed) return;
+    }
+
     setIsSubmitting(true);
     const { error } = await supabase.from("customers").insert({
       name,

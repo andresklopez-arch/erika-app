@@ -306,7 +306,18 @@ export async function sendBleBytes(
       if (!written) {
         try {
           await currentChar.writeValue(chunk);
-        } catch (fallbackErr) {}
+          written = true;
+        } catch (fallbackErr) {
+          console.warn("[BLE] writeValue (fallback genérico) también falló.", fallbackErr);
+        }
+      }
+
+      // Si los tres métodos de escritura fallaron, el chunk nunca llegó a la
+      // impresora. Antes esto se ignoraba y la función igual devolvía `true`,
+      // haciendo creer que el ticket se imprimió completo cuando en realidad
+      // quedó parcial o en blanco.
+      if (!written) {
+        throw new Error("No se pudo enviar un fragmento de datos a la impresora Bluetooth tras 3 intentos.");
       }
 
       const effectiveDelay = Math.max(30, delayMs);

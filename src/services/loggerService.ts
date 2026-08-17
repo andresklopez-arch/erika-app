@@ -19,11 +19,15 @@ export const LoggerService = {
   /**
    * Guarda un registro permanente en la nube de cualquier artículo cancelado en caja
    */
+  // Devuelve true/false para que el llamador sepa si el registro de
+  // pérdida/merma realmente se guardó antes de decirle al usuario que se
+  // registró. Antes se disparaba sin esperar la respuesta ("fire and forget")
+  // y la UI mostraba éxito sin importar si esto fallaba.
   logCancellation: async (
     itemName: string,
     qty: number,
     user: string = "Admin",
-  ) => {
+  ): Promise<boolean> => {
     try {
       const { error } = await supabase.from("mermas_y_cancelaciones").insert({
         articulo: itemName,
@@ -34,8 +38,10 @@ export const LoggerService = {
 
       if (error) throw error;
       console.log("✅ Log de seguridad sincronizado en la nube.");
+      return true;
     } catch (err) {
       console.error("❌ Fallo crítico al sincronizar el log en Supabase:", err);
+      return false;
     }
   },
 };

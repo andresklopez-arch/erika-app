@@ -260,19 +260,43 @@ export default function InventoryModule() {
     const c = parseFloat(newProductCost) || 0;
     const p = parseFloat(newProductPrice) || 0;
     const s = parseInt(newProductStock) || 0;
-    
-    await supabase.from("inventory").insert({
-      code: newProductCode || `SKU-${Date.now()}`,
+    // Se distingue "el usuario dejó el precio vacío" (autoprecio) de "el usuario
+    // escribió 0 a propósito" (artículo de regalo/muestra); antes `p > 0` trataba
+    // ambos casos igual y sobrescribía cualquier 0 explícito con costo x 1.5.
+    const priceWasProvided = newProductPrice.trim() !== "";
+
+    let finalCode = newProductCode || `SKU-${Date.now()}`;
+    if (newProductCode) {
+      // El importador masivo ya auto-sufija códigos duplicados (-1, -2...);
+      // la creación manual no tenía ningún chequeo, así que un código repetido
+      // fallaba de forma invisible (ver bug de error silenciado, ya corregido
+      // arriba) en vez de avisar o generar un código alterno.
+      const { data: dupe } = await supabase
+        .from("inventory")
+        .select("id, name")
+        .eq("code", finalCode)
+        .maybeSingle();
+      if (dupe) {
+        return alert(`❌ El código "${finalCode}" ya está en uso por "${dupe.name}". Usa un código distinto.`);
+      }
+    }
+
+    const { error } = await supabase.from("inventory").insert({
+      code: finalCode,
       name: newProductName,
       cost: c,
-      price: p > 0 ? p : c * 1.5,
+      price: priceWasProvided ? p : c * 1.5,
       stock: s,
       minStock: 5,
       location: "Pendiente",
       supplier: "Pendiente",
-      autoPriced: p > 0 ? false : true
+      autoPriced: !priceWasProvided
     });
-    
+
+    if (error) {
+      return alert("❌ Error al crear el producto: " + error.message);
+    }
+
     alert("✅ Producto creado con éxito");
     setShowCreateModal(false);
     fetchInventory(0, debouncedSearchQuery, true, true);
@@ -296,7 +320,7 @@ export default function InventoryModule() {
       const { data, error } = await supabase
         .from("inventory")
         .select("*")
-        .not("deleted", "eq", true)
+        .or("deleted.is.null,deleted.eq.false")
         .order("name", { ascending: true })
         .range(from, from + limit - 1);
 
@@ -329,7 +353,7 @@ export default function InventoryModule() {
       let dbQuery = supabase
         .from("inventory")
         .select("*", { count: "exact" })
-        .not("deleted", "eq", true);
+        .or("deleted.is.null,deleted.eq.false");
 
       // Apply supplier filter
       if (selectedSupplierFilter) {
@@ -702,9 +726,23 @@ export default function InventoryModule() {
         });
       }
 
+      // Se vuelve a leer el stock actual del producto principal justo antes de
+      // escribir, en vez de usar el valor cacheado desde que se cargó la página.
+      // Antes, si una venta de POS descontaba stock entre que se abrió esta
+      // pantalla y se dio clic en "Combinar aquí", la fusión sobrescribía ese
+      // descuento real con una suma basada en el valor viejo, "resucitando" stock
+      // que ya se había vendido.
+      const { data: freshPrincipal, error: freshErr } = await supabase
+        .from("inventory")
+        .select("stock")
+        .eq("id", principalItem.id)
+        .single();
+      if (freshErr) throw freshErr;
+      const freshNewStock = (freshPrincipal?.stock ?? principalItem.stock) + totalStockToTransfer;
+
       const { error: updateError } = await supabase
         .from("inventory")
-        .update({ stock: newStock })
+        .update({ stock: freshNewStock })
         .eq("id", principalItem.id);
 
       if (updateError) throw updateError;
@@ -2453,6 +2491,13 @@ export default function InventoryModule() {
 
               const inserts: any[] = [];
               const updates: any[] = [];
+              // Si el archivo importado trae dos filas para el mismo producto
+              // (mismo código o nombre), ambas encontraban "existing" desde la
+              // misma foto estática de dbAllItems y generaban dos entradas en
+              // `updates` con el mismo id: el upsert final sólo conservaba la
+              // última, perdiendo la cantidad de la primera fila. Este mapa
+              // recuerda el índice ya encolado por id para acumular sobre él.
+              const pendingUpdateIndexById = new Map<string, number>();
 
               for (const p of newProducts) {
                 // Usar el código/nombre ORIGINAL del Excel para todo el proceso de import.
@@ -2502,39 +2547,59 @@ export default function InventoryModule() {
                     }
 
                     // Option: sustituir
-                    undoLog.push({ 
-                      id: existing.id, 
-                      cost: existing.cost, 
-                      price: existing.price, 
-                      stock: existing.stock, 
-                      supplier: existing.supplier, 
-                      location: existing.location, 
-                      priceChanged: existing.priceChanged,
-                      deleted: existing.deleted || false,
-                      deleted_at: existing.deleted_at || null
-                    });
-                    
+                    const pendingIdx = pendingUpdateIndexById.get(existing.id);
+                    // Si el mismo producto ya fue tocado por una fila anterior de
+                    // este mismo archivo, se acumula sobre lo ya encolado (no
+                    // sobre la foto vieja de la BD), para no perder esa cantidad.
+                    const baseStock = pendingIdx !== undefined ? updates[pendingIdx].stock : (existing.stock || 0);
                     const inflationFlag = p.cost > existing.cost ? "up" : null;
-                    const newStock = accumulateStock ? (existing.stock || 0) + p.stock : p.stock;
-                    
-                    if ((existing.stock || 0) <= existing.minStock && newStock > existing.minStock) {
+                    const newStock = accumulateStock ? baseStock + p.stock : p.stock;
+
+                    if (baseStock <= existing.minStock && newStock > existing.minStock) {
                       rescuedCount++;
                     }
 
-                    updates.push({
-                      id: existing.id,
-                      code: p.code || existing.code,
-                      name: p.name,
-                      cost: p.cost,
-                      price: p.price,
-                      stock: newStock,
-                      supplier: p.supplier || existing.supplier,
-                      location: p.location || existing.location,
-                      priceChanged: inflationFlag,
-                      deleted: false,
-                      deleted_at: null,
-                      autoPriced: p.autoPriced !== undefined ? p.autoPriced : existing.autoPriced,
-                    });
+                    if (pendingIdx !== undefined) {
+                      updates[pendingIdx] = {
+                        ...updates[pendingIdx],
+                        code: p.code || updates[pendingIdx].code,
+                        name: p.name,
+                        cost: p.cost,
+                        price: p.price,
+                        stock: newStock,
+                        supplier: p.supplier || updates[pendingIdx].supplier,
+                        location: p.location || updates[pendingIdx].location,
+                        priceChanged: inflationFlag,
+                        autoPriced: p.autoPriced !== undefined ? p.autoPriced : updates[pendingIdx].autoPriced,
+                      };
+                    } else {
+                      undoLog.push({
+                        id: existing.id,
+                        cost: existing.cost,
+                        price: existing.price,
+                        stock: existing.stock,
+                        supplier: existing.supplier,
+                        location: existing.location,
+                        priceChanged: existing.priceChanged,
+                        deleted: existing.deleted || false,
+                        deleted_at: existing.deleted_at || null
+                      });
+                      pendingUpdateIndexById.set(existing.id, updates.length);
+                      updates.push({
+                        id: existing.id,
+                        code: p.code || existing.code,
+                        name: p.name,
+                        cost: p.cost,
+                        price: p.price,
+                        stock: newStock,
+                        supplier: p.supplier || existing.supplier,
+                        location: p.location || existing.location,
+                        priceChanged: inflationFlag,
+                        deleted: false,
+                        deleted_at: null,
+                        autoPriced: p.autoPriced !== undefined ? p.autoPriced : existing.autoPriced,
+                      });
+                    }
                     updatedCount++;
                   } else {
                     let uniqueCode = pCode || `SKU-${Date.now()}`;
@@ -2589,10 +2654,19 @@ export default function InventoryModule() {
                 }
               }
 
-              // Ejecutar actualizaciones en lote
+              // Ejecutar actualizaciones en lote. Se atrapa el error aquí mismo
+              // (en vez de relanzarlo) porque antes, si esto fallaba, saltaba
+              // directo al catch general y NUNCA se guardaba el registro de
+              // deshacer (undoLog) de los inserts que ya se habían confirmado
+              // arriba — dejando datos ya escritos sin forma de deshacerlos, y
+              // un mensaje de error que sugería que nada se había guardado.
+              let updateError: { message: string } | null = null;
               if (updates.length > 0) {
-                const { error: updateError } = await supabase.from("inventory").upsert(updates);
-                if (updateError) throw updateError;
+                const result = await supabase.from("inventory").upsert(updates);
+                updateError = result.error;
+                if (updateError) {
+                  console.error("[Import] Falló el upsert de actualizaciones:", updateError);
+                }
               }
 
               if (undoLog.length > 0) {
@@ -2607,11 +2681,11 @@ export default function InventoryModule() {
               await fetchInventory(0, debouncedSearchQuery, true, true);
               await loadAllItems();
               setPage(0);
-              
+
               let rescueMsg = "";
               if (rescuedCount > 0) rescueMsg = `\n🎉 ¡Excelente! Se han rescatado ${rescuedCount} productos de su estado CRÍTICO.`;
-              
-              let alertMsg = `✅ ERIKA Procesó la Importación en la NUBE.\n\n`;
+
+              let alertMsg = updateError ? `⚠️ ERIKA procesó la importación con errores.\n\n` : `✅ ERIKA Procesó la Importación en la NUBE.\n\n`;
               if (importOption === "nuevo") {
                 alertMsg += `🆕 Nuevos: ${newCount} productos agregados.`;
               } else if (importOption === "complementar") {
@@ -2621,6 +2695,9 @@ export default function InventoryModule() {
               }
               if (failedInserts > 0) {
                 alertMsg += `\n\n⚠️ ${failedInserts} artículo(s) no pudieron guardarse (código duplicado u otro error). Revisa la consola para ver cuáles.`;
+              }
+              if (updateError) {
+                alertMsg += `\n\n❌ Las actualizaciones de productos existentes NO se guardaron: ${updateError.message}. Los productos nuevos sí se agregaron. Puedes usar "Deshacer" y volver a intentar.`;
               }
               alert(alertMsg);
             } catch (err: any) {

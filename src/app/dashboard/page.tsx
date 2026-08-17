@@ -297,7 +297,7 @@ export default function Dashboard() {
       }
 
       // Fetch Overdue Customers (Credit limit exceeded)
-      let { data: custs, error: custsError } = await supabase.from("customers").select("*").gt("balance", 0).not("deleted", "eq", true);
+      let { data: custs, error: custsError } = await supabase.from("customers").select("*").gt("balance", 0).or("deleted.is.null,deleted.eq.false");
       if (custsError) {
          console.warn("Fallo el filtro de base de datos 'deleted' en deudores del Dashboard, usando fallback local:", custsError.message);
          const fallback = await supabase.from("customers").select("*").gt("balance", 0);
@@ -370,7 +370,7 @@ export default function Dashboard() {
       let { data: customerData, error: customerDataError } = await supabase
         .from("customers")
         .select("*")
-        .not("deleted", "eq", true)
+        .or("deleted.is.null,deleted.eq.false")
         .order("balance", { ascending: false })
         .limit(5);
       

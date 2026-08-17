@@ -81,18 +81,31 @@ export default function LayawayModal({ show, onClose }: { show: boolean; onClose
 
   const handleCancel = async (layaway: any) => {
     if (!window.confirm("¿Seguro que deseas cancelar este apartado? La mercancía regresará al inventario físico.")) return;
-    
+
+    const failedItems: string[] = [];
     for (const item of layaway.items) {
       // Find current stock by name
-      const { data: currentStock } = await supabase.from("inventory").select("stock").eq("name", item.name).single();
-      if (currentStock) {
-        await supabase.from("inventory").update({ stock: currentStock.stock + item.qty }).eq("name", item.name);
+      const { data: currentStock, error: findError } = await supabase.from("inventory").select("stock").eq("name", item.name).single();
+      if (findError || !currentStock) {
+        failedItems.push(item.name);
+        continue;
+      }
+      const { error: updateError } = await supabase.from("inventory").update({ stock: currentStock.stock + item.qty }).eq("name", item.name);
+      if (updateError) {
+        failedItems.push(item.name);
       }
     }
 
     const { error } = await supabase.from("layaways").update({ status: "cancelled" }).eq("id", layaway.id);
     if (error) return alert("Error al cancelar.");
-    alert("❌ Apartado cancelado. Productos devueltos.");
+
+    if (failedItems.length > 0) {
+      alert(
+        `⚠️ Apartado cancelado, pero NO se pudo restaurar el stock de: ${failedItems.join(", ")}. Ajusta el inventario manualmente.`
+      );
+    } else {
+      alert("❌ Apartado cancelado. Productos devueltos.");
+    }
     fetchLayaways();
   };
 

@@ -67,7 +67,10 @@ export default function SearchModule({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isFocused && results.length > 0) {
+      // Requiere Alt para no secuestrar los dígitos "1", "2", "3" cuando el
+      // cajero está escribiendo un nombre/código de producto que los contiene
+      // (p. ej. "Cable Calibre 12", "Clavo 2 pulgadas") en este mismo input.
+      if (isFocused && results.length > 0 && e.altKey) {
         if (e.key === "1" && results[0]) {
           e.preventDefault();
           saveToHistory(results[0]);
@@ -139,7 +142,7 @@ export default function SearchModule({
                   marginBottom: "10px",
                 }}
               >
-                Resultados (Presiona 1, 2 o 3)
+                Resultados (Alt+1, Alt+2 o Alt+3)
               </p>
               {results.map((r, i) => (
                 <div

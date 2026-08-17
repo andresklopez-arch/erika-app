@@ -743,7 +743,7 @@ export default function POSModule() {
         setGlobalCatalog(allData);
       }
 
-      let { data: custData, error: custError } = await supabase.from("customers").select("*").not("deleted", "eq", true);
+      let { data: custData, error: custError } = await supabase.from("customers").select("*").or("deleted.is.null,deleted.eq.false");
       if (custError) {
         console.warn("Fallo el filtro de base de datos 'deleted' en clientes, usando fallback local:", custError.message);
         const fallback = await supabase.from("customers").select("*");
@@ -1049,8 +1049,12 @@ export default function POSModule() {
             item: `${itemToRemove.qty}x ${itemToRemove.name} (MERMA) - Pérdida: $${(itemToRemove.cost * itemToRemove.qty).toFixed(2)}`,
           },
         ]);
-        LoggerService.logCancellation(itemToRemove.name, itemToRemove.qty);
-        alert("⚠️ Registrado como Pérdida/Merma Financiera en el Historial.");
+        const logOk = await LoggerService.logCancellation(itemToRemove.name, itemToRemove.qty, currentUser?.name);
+        if (logOk) {
+          alert("⚠️ Registrado como Pérdida/Merma Financiera en el Historial.");
+        } else {
+          alert("❌ No se pudo registrar la Pérdida/Merma en el Historial (sin conexión o error de base de datos). El artículo se quitó del ticket, pero avisa a un administrador para registrarlo manualmente.");
+        }
       } else return;
     }
     setTickets(
@@ -1992,8 +1996,13 @@ export default function POSModule() {
                       if (res.success && res.char) {
                         setBleCharacteristic(res.char);
                         const bytes = generateEscPosBytes(job, config);
-                        await sendBleBytes(res.char, bytes, config.printer_ble_chunk_size || 20, 20);
-                        toast.success("✅ Ticket impreso con éxito");
+                        try {
+                          await sendBleBytes(res.char, bytes, config.printer_ble_chunk_size || 20, 20);
+                          toast.success("✅ Ticket impreso con éxito");
+                        } catch (printErr: any) {
+                          console.error("Error al reintentar impresión Bluetooth:", printErr);
+                          toast.error("❌ Falló la impresión: " + (printErr?.message || printErr));
+                        }
                       } else if (res.error) {
                         toast.error("Error al reconectar: " + res.error);
                       }
@@ -3501,7 +3510,7 @@ export default function POSModule() {
                    alert(`✅ Canje exitoso. Se descontaron ${pointsToRedeem} puntos y se aplicó un descuento de $${discountAmount.toFixed(2)}.`);
                    
                    // Reload customers to refresh points
-                   let { data: custData, error: custError } = await supabase.from("customers").select("*").not("deleted", "eq", true);
+                   let { data: custData, error: custError } = await supabase.from("customers").select("*").or("deleted.is.null,deleted.eq.false");
                    if (custError) {
                      console.warn("Fallo el filtro de base de datos 'deleted' al recargar clientes (puntos), usando fallback local:", custError.message);
                      const fallback = await supabase.from("customers").select("*");
