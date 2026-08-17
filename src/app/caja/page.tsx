@@ -303,11 +303,23 @@ export default function CajaModule() {
           return;
         }
 
+        const sanitizeForThermal = (str: string): string => {
+          if (!str) return "";
+          return str
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/¡/g, "!")
+            .replace(/¿/g, "?")
+            .replace(/ñ/g, "n")
+            .replace(/Ñ/g, "N")
+            .replace(/[^\x20-\x7E\r\n\t]/g, "");
+        };
+
         const char = result.char;
         const encoder = new TextEncoder();
         const chunks: Uint8Array[] = [];
         const write = (b: number[]) => chunks.push(new Uint8Array(b));
-        const writeText = (t: string) => chunks.push(encoder.encode(t));
+        const writeText = (t: string) => chunks.push(encoder.encode(sanitizeForThermal(t)));
 
         write([0x1b, 0x40]);
         write([0x1b, 0x61, 0x01]);
@@ -331,9 +343,9 @@ export default function CajaModule() {
 
         writeText(formatRow("Fondo Inicial:", `$${ticketData.fondo}`));
         writeText(formatRow("Ventas Totales:", `$${ticketData.ventas.toFixed(2)}`));
-        writeText(formatRow("  ↳ Efec:", `$${ticketData.ventasEfectivo.toFixed(2)}`));
-        writeText(formatRow("  ↳ Tarj:", `$${ticketData.ventasTarjeta.toFixed(2)}`));
-        writeText(formatRow("  ↳ Trans:", `$${ticketData.ventasTransferencia.toFixed(2)}`));
+        writeText(formatRow("  -> Efec:", `$${ticketData.ventasEfectivo.toFixed(2)}`));
+        writeText(formatRow("  -> Tarj:", `$${ticketData.ventasTarjeta.toFixed(2)}`));
+        writeText(formatRow("  -> Trans:", `$${ticketData.ventasTransferencia.toFixed(2)}`));
         writeText(formatRow("Ingresos (+):", `$${ticketData.ingresos.toFixed(2)}`));
         writeText(formatRow("Retiros (-):", `$${ticketData.retiros.toFixed(2)}`));
         writeText(divider);
@@ -347,7 +359,10 @@ export default function CajaModule() {
         writeText(`DESCUADRE: $${ticketData.descuadre.toFixed(2)}\n`);
         write([0x1b, 0x45, 0x00]);
 
-        writeText("\n\n\n\n");
+        const bottomLines = Number(localStorage.getItem("ERIKA_PRINTER_BOTTOM_LINES")) || 1;
+        if (bottomLines > 0) {
+          write([0x1b, 0x64, bottomLines]);
+        }
         if (localStorage.getItem("ERIKA_PRINTER_ENABLE_AUTOCUT") !== "false") {
           write([0x1d, 0x56, 0x41, 0x00]);
         }
