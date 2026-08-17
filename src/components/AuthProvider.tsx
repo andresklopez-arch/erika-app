@@ -227,9 +227,11 @@ export default function AuthProvider({
         .single();
       if (data && !dbError) {
         const rawConfig = { ...(data.config || {}) };
-        if (rawConfig.printer_invert_180 === undefined) {
-          const localInvert = typeof window !== "undefined" ? localStorage.getItem("ERIKA_PRINTER_INVERT_180") : null;
-          rawConfig.printer_invert_180 = localInvert !== null ? localInvert === "true" : true;
+        const localInvert = typeof window !== "undefined" ? localStorage.getItem("ERIKA_PRINTER_INVERT_180") : null;
+        if (localInvert !== null) {
+          rawConfig.printer_invert_180 = localInvert === "true";
+        } else if (rawConfig.printer_invert_180 === undefined) {
+          rawConfig.printer_invert_180 = true;
         }
 
         // Enforce types and validation rules using Zod Schema
@@ -291,7 +293,10 @@ export default function AuthProvider({
       if (newSettings.config?.printer_invert_180 !== undefined) {
         updatedConfig.printer_invert_180 = newSettings.config.printer_invert_180;
       } else if (typeof window !== "undefined") {
-        updatedConfig.printer_invert_180 = localStorage.getItem("ERIKA_PRINTER_INVERT_180") !== "false";
+        const localInvert = localStorage.getItem("ERIKA_PRINTER_INVERT_180");
+        if (localInvert !== null) {
+          updatedConfig.printer_invert_180 = localInvert === "true";
+        }
       }
 
       // Cast strings to numbers where required

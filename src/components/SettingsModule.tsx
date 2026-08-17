@@ -372,11 +372,13 @@ export default function SettingsModule() {
       setPrinterDoubleCopy(businessSettings.config.printer_double_copy_layaway_credit || false);
       setPrinterBleChunkSize(businessSettings.config.printer_ble_chunk_size || 20);
       setPrinterEnableAutocut(businessSettings.config.printer_enable_autocut !== false);
-      if (businessSettings.config.printer_invert_180 !== undefined) {
-        setPrinterInvert180(businessSettings.config.printer_invert_180);
-      } else if (typeof window !== "undefined") {
+      if (typeof window !== "undefined") {
         const saved = localStorage.getItem("ERIKA_PRINTER_INVERT_180");
-        if (saved !== null) setPrinterInvert180(saved === "true");
+        if (saved !== null) {
+          setPrinterInvert180(saved === "true");
+        } else if (businessSettings.config.printer_invert_180 !== undefined) {
+          setPrinterInvert180(businessSettings.config.printer_invert_180);
+        }
       }
       setPrinterMarginTopLines(businessSettings.config.printer_margin_top_lines ?? 0);
       setPrinterMarginBottomLines(businessSettings.config.printer_margin_bottom_lines ?? 1);
@@ -1422,6 +1424,13 @@ export default function SettingsModule() {
                   setPrinterInvert180(val);
                   if (typeof window !== "undefined") {
                     localStorage.setItem("ERIKA_PRINTER_INVERT_180", val ? "true" : "false");
+                  }
+                  if (currentUser?.role === "admin") {
+                    updateBusinessSettings({
+                      config: {
+                        printer_invert_180: val,
+                      }
+                    }).catch(() => {});
                   }
                 }}
                 style={{ width: "18px", height: "18px", cursor: "pointer" }}
