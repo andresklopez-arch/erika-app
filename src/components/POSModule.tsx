@@ -1833,6 +1833,13 @@ export default function POSModule() {
       setBold(true);
       writeText(`TOTAL: $${Math.round(finalTotal)}\n`);
       setBold(false);
+      
+      const clientName = job.data.customerName || (job.data.customer && job.data.customer.name);
+      if (clientName && clientName !== "Venta Mostrador" && clientName !== "Desconocido") {
+        setBold(true);
+        writeText(`Cliente: ${clientName}\n`);
+        setBold(false);
+      }
       setAlign(0);
       
       writeText(divider);
@@ -2229,6 +2236,11 @@ export default function POSModule() {
               ` : ""}
               <div class="divider"></div>
               <div style="display:flex; justify-content:space-between; font-size: 1.1em;"><strong>TOTAL:</strong><strong>$${Math.round(finalTotal)}</strong></div>
+              ${(job.data.customerName || (job.data.customer && job.data.customer.name)) && (job.data.customerName !== "Venta Mostrador") ? `
+              <div style="display:flex; justify-content:space-between; margin-top: 4px; font-size: 1em;">
+                <strong>Cliente:</strong><span>${job.data.customerName || job.data.customer?.name}</span>
+              </div>
+              ` : ""}
               
               ${showWarranty ? `
               <div class="center" style="font-size: 0.85em; margin-top: 10px; opacity: 0.8;">
