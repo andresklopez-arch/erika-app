@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { supabase } from "@/lib/supabaseClient";
 
 export async function POST(request: Request) {
   try {
@@ -7,6 +8,31 @@ export async function POST(request: Request) {
 
     if (!ticketId || !rfc || !items || items.length === 0) {
       return NextResponse.json({ error: "Faltan datos requeridos para facturar." }, { status: 400 });
+    }
+
+    // El ticketId es un token público (compartido por el cliente vía link/QR), así que
+    // en vez de exigir un PIN, verificamos contra el registro real en la base de datos
+    // que el total/artículos a facturar coincidan con lo que realmente se vendió —
+    // así un cliente no puede enviar items/total arbitrarios para timbrar un CFDI falso.
+    const { data: ticket, error: ticketError } = await supabase
+      .from("quotes")
+      .select("id, status, total, items")
+      .eq("id", ticketId)
+      .single();
+
+    if (ticketError || !ticket) {
+      return NextResponse.json({ error: "El ticket no existe o no se pudo verificar." }, { status: 404 });
+    }
+
+    if (ticket.status !== "ticket") {
+      return NextResponse.json({ error: "Este ticket ya fue facturado o no está disponible para facturar." }, { status: 409 });
+    }
+
+    const submittedTotal = Number(total);
+    const storedTotal = Number(ticket.total);
+    // Tolerancia de 1 centavo por redondeos de punto flotante.
+    if (!Number.isFinite(submittedTotal) || Math.abs(submittedTotal - storedTotal) > 0.01) {
+      return NextResponse.json({ error: "El total enviado no coincide con el ticket registrado." }, { status: 400 });
     }
 
     // Configuración de Facturama (Sandbox o Producción)

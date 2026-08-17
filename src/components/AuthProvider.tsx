@@ -67,6 +67,7 @@ const AuthContext = createContext<AuthContextType>({
       printer_margin_bottom_lines: 1,
       low_stock_threshold: 5,
       max_cajero_discount_pct: 5,
+      iva_rate: 0.16,
     },
   },
   updateBusinessSettings: async () => false,
@@ -166,6 +167,7 @@ export default function AuthProvider({
         printer_margin_bottom_lines: localStorage.getItem("ERIKA_PRINTER_BOTTOM_LINES") !== null ? Number(localStorage.getItem("ERIKA_PRINTER_BOTTOM_LINES")) : 1,
         low_stock_threshold: Number(localStorage.getItem("ERIKA_LOW_STOCK_THRESHOLD")) || 5,
         max_cajero_discount_pct: Number(localStorage.getItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT")) || 5,
+        iva_rate: Number(localStorage.getItem("ERIKA_IVA_RATE")) || 0.16,
       };
 
       return {
@@ -214,6 +216,7 @@ export default function AuthProvider({
         printer_margin_bottom_lines: 1,
         low_stock_threshold: 5,
         max_cajero_discount_pct: 5,
+        iva_rate: 0.16,
       },
     };
   });
@@ -363,6 +366,7 @@ export default function AuthProvider({
         localStorage.setItem("ERIKA_THEME", result.settings.config.theme);
         localStorage.setItem("ERIKA_LOW_STOCK_THRESHOLD", String(result.settings.config.low_stock_threshold || 5));
         localStorage.setItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT", String(result.settings.config.max_cajero_discount_pct || 5));
+        localStorage.setItem("ERIKA_IVA_RATE", String(result.settings.config.iva_rate ?? 0.16));
         
         return true;
       } else {

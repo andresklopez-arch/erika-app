@@ -8,7 +8,11 @@ interface Props {
   finalTotal: number;
   customers: any[];
   activeTicketId: number;
+  items: any[];
+  globalCatalog: any[];
+  currentUserName?: string;
   onSuccess: () => void;
+  onInventoryReduced?: () => void;
   reloadCustomers: () => void;
 }
 
@@ -18,10 +22,15 @@ export default function PosCreditModal({
   finalTotal,
   customers,
   activeTicketId,
+  items,
+  globalCatalog,
+  currentUserName,
   onSuccess,
+  onInventoryReduced,
   reloadCustomers,
 }: Props) {
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -41,6 +50,7 @@ export default function PosCreditModal({
   if (!show) return null;
 
   const handleConfirm = async () => {
+    if (isSubmitting) return;
     if (!selectedCustomerId) return alert("Selecciona un cliente.");
     const customer = customers.find((c) => c.id === selectedCustomerId);
     if (customer.balance + finalTotal > customer.credit_limit) {
@@ -62,28 +72,69 @@ export default function PosCreditModal({
       alert("⚠️ Sobregiro autorizado por Administrador.");
     }
 
-    const { error: txError } = await supabase
-      .from("credit_transactions")
-      .insert({
-        customer_id: customer.id,
-        type: "charge",
-        amount: finalTotal,
-        notes: `Venta a Crédito Ticket #${activeTicketId}`,
-      });
+    setIsSubmitting(true);
+    try {
+      const { error: txError } = await supabase
+        .from("credit_transactions")
+        .insert({
+          customer_id: customer.id,
+          type: "charge",
+          amount: finalTotal,
+          notes: `Venta a Crédito Ticket #${activeTicketId}`,
+        });
 
-    await supabase
-      .from("customers")
-      .update({
-        balance: customer.balance + finalTotal,
-      })
-      .eq("id", customer.id);
+      if (txError) return alert("Error al cobrar a crédito: " + txError.message);
 
-    if (txError) return alert("Error al cobrar a crédito: " + txError.message);
+      const { error: balanceError } = await supabase
+        .from("customers")
+        .update({
+          balance: customer.balance + finalTotal,
+        })
+        .eq("id", customer.id);
 
-    alert(`✅ Venta a crédito registrada a ${customer.name}.`);
-    setSelectedCustomerId("");
-    onSuccess();
-    reloadCustomers();
+      if (balanceError) {
+        return alert(
+          "⚠️ Se registró el cargo pero falló la actualización del saldo del cliente. Revisa manualmente: " +
+            balanceError.message,
+        );
+      }
+
+      // Descontar existencias, igual que en ventas de contado/tarjeta.
+      try {
+        const { error: rpcErr } = await supabase.rpc("reduce_inventory_stock", {
+          items: items.map((item) => {
+            const invItem = globalCatalog.find((i) => i.name === item.name);
+            return { id: invItem ? invItem.id : null, qty: item.qty };
+          }).filter((item) => item.id !== null),
+          ref_id: activeTicketId.toString(),
+          user_name: currentUserName || "Venta Mostrador",
+          move_type: "sale",
+        });
+
+        if (rpcErr) {
+          for (const item of items) {
+            const invItem = globalCatalog.find((i) => i.name === item.name);
+            if (invItem) {
+              await supabase
+                .from("inventory")
+                .update({ stock: invItem.stock - item.qty })
+                .eq("id", invItem.id);
+            }
+          }
+        }
+        onInventoryReduced?.();
+      } catch (invErr) {
+        console.error("Error crítico al actualizar inventario en venta a crédito:", invErr);
+        alert("⚠️ La venta a crédito se registró, pero el inventario NO se pudo actualizar. Revisa y ajusta el stock manualmente.");
+      }
+
+      alert(`✅ Venta a crédito registrada a ${customer.name}.`);
+      setSelectedCustomerId("");
+      onSuccess();
+      reloadCustomers();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -128,15 +179,17 @@ export default function PosCreditModal({
         <div style={{ display: "flex", gap: "10px" }}>
           <button
             className="btn-primary"
-            style={{ flex: 1 }}
+            style={{ flex: 1, opacity: isSubmitting ? 0.6 : 1 }}
             onClick={handleConfirm}
+            disabled={isSubmitting}
           >
-            Confirmar
+            {isSubmitting ? "Procesando..." : "Confirmar"}
           </button>
           <button
             className="btn-primary"
             style={{ flex: 1, background: "#ef4444" }}
             onClick={onClose}
+            disabled={isSubmitting}
           >
             Cancelar
           </button>

@@ -5,6 +5,14 @@ import { useAuth } from "./AuthProvider";
 import { LoggerService } from "../services/loggerService";
 import { getOrReconnectBlePrinter, sendBleBytes } from "../utils/bluetoothPrinter";
 
+// A diferencia de `Number(x) || fallback`, esto no pisa un 0 explícito con el
+// valor por defecto (Number("0") || 5 evaluaba a 5, impidiendo desactivar
+// descuentos/puntos poniéndolos en cero).
+function parseNumOr(value: string, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export default function SettingsModule() {
   const { currentUser, businessSettings, updateBusinessSettings, bleCharacteristic, setBleCharacteristic } = useAuth();
 
@@ -24,6 +32,7 @@ export default function SettingsModule() {
   const [wholesaleDiscount, setWholesaleDiscount] = useState("10");
   const [lowStockThreshold, setLowStockThreshold] = useState("5");
   const [maxCajeroDiscountPct, setMaxCajeroDiscountPct] = useState("5");
+  const [ivaRatePct, setIvaRatePct] = useState("16");
 
   const [targetUtility, setTargetUtility] = useState("30");
   const [monthlyGoals, setMonthlyGoals] = useState("0");
@@ -382,8 +391,9 @@ export default function SettingsModule() {
       }
       setPrinterMarginTopLines(businessSettings.config.printer_margin_top_lines ?? 0);
       setPrinterMarginBottomLines(businessSettings.config.printer_margin_bottom_lines ?? 1);
-      setLowStockThreshold(String(businessSettings.config.low_stock_threshold || 5));
-      setMaxCajeroDiscountPct(String(businessSettings.config.max_cajero_discount_pct || 5));
+      setLowStockThreshold(String(businessSettings.config.low_stock_threshold ?? 5));
+      setMaxCajeroDiscountPct(String(businessSettings.config.max_cajero_discount_pct ?? 5));
+      setIvaRatePct(String((businessSettings.config.iva_rate ?? 0.16) * 100));
       /* eslint-enable react-hooks/set-state-in-effect */
 
       // Pre-cargar lista de impresoras escaneadas si ya hay una guardada
@@ -427,9 +437,9 @@ export default function SettingsModule() {
     if (!checkAdmin()) return;
     const success = await updateBusinessSettings({
       config: {
-        earn_rate: Number(earnRate) || 100,
-        earn_points: Number(earnPoints) || 1,
-        redeem_rate: Number(redeemRate) || 10,
+        earn_rate: parseNumOr(earnRate, 100),
+        earn_points: parseNumOr(earnPoints, 1),
+        redeem_rate: parseNumOr(redeemRate, 10),
       }
     });
     if (success) {
@@ -441,8 +451,8 @@ export default function SettingsModule() {
     if (!checkAdmin()) return;
     const success = await updateBusinessSettings({
       config: {
-        wholesale_min_qty: Number(wholesaleMinQty) || 10,
-        wholesale_discount: Number(wholesaleDiscount) || 10,
+        wholesale_min_qty: parseNumOr(wholesaleMinQty, 10),
+        wholesale_discount: parseNumOr(wholesaleDiscount, 10),
       }
     });
     if (success) {
@@ -454,12 +464,25 @@ export default function SettingsModule() {
     if (!checkAdmin()) return;
     const success = await updateBusinessSettings({
       config: {
-        low_stock_threshold: Number(lowStockThreshold) || 5,
-        max_cajero_discount_pct: Number(maxCajeroDiscountPct) || 5,
+        low_stock_threshold: parseNumOr(lowStockThreshold, 5),
+        max_cajero_discount_pct: parseNumOr(maxCajeroDiscountPct, 5),
       }
     });
     if (success) {
       alert("✅ Umbral de existencias y límite de descuento autónomo actualizados.");
+    }
+  };
+
+  const saveIvaConfig = async () => {
+    if (!checkAdmin()) return;
+    const pct = parseNumOr(ivaRatePct, 16);
+    const success = await updateBusinessSettings({
+      config: {
+        iva_rate: Math.min(Math.max(pct, 0), 50) / 100,
+      }
+    });
+    if (success) {
+      alert("✅ Tasa de IVA actualizada. Se aplicará en los próximos cobros.");
     }
   };
 
@@ -1326,6 +1349,22 @@ export default function SettingsModule() {
             </p>
             <button className="btn-primary" onClick={saveInventoryAlertConfig} style={{ width: "100%", background: "transparent", border: "1px solid #ef4444", color: "#ef4444" }}>
               💾 Guardar Configuración
+            </button>
+          </div>
+
+          <div className="glass-panel" style={{ border: "1px solid #f59e0b" }}>
+            <h3 style={{ margin: "0 0 20px 0", color: "#f59e0b", display: "flex", alignItems: "center", gap: "10px" }}>
+              🧾 Tasa de IVA
+            </h3>
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Porcentaje de IVA (%):</label>
+              <input type="number" step="0.1" value={ivaRatePct} onChange={e => setIvaRatePct(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
+            </div>
+            <p style={{ fontSize: "0.75rem", opacity: 0.7, marginBottom: "20px" }}>
+              Estándar en México: 16%. Zona fronteriza: 8%. Se usa en todos los cobros con IVA activado.
+            </p>
+            <button className="btn-primary" onClick={saveIvaConfig} style={{ width: "100%", background: "transparent", border: "1px solid #f59e0b", color: "#f59e0b" }}>
+              💾 Guardar Tasa de IVA
             </button>
           </div>
 

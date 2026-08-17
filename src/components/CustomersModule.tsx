@@ -3,10 +3,11 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import toast from "react-hot-toast";
 import { CustomerSchema } from "../lib/schemas";
-import { useBusinessProfile } from "./AuthProvider";
+import { useBusinessProfile, useAuth } from "./AuthProvider";
 
 export default function CustomersModule() {
   const businessProfile = useBusinessProfile();
+  const { currentUser } = useAuth();
   const [customers, setCustomers] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [customerServices, setCustomerServices] = useState<any[]>([]);
@@ -340,6 +341,17 @@ export default function CustomersModule() {
       "¿Seguro que deseas enviar esta cotización a la Caja para cobrar? (Ingresa tu PIN)",
     );
     if (!pass) return;
+
+    if (pass !== currentUser?.pin) {
+      const { data: staffUser, error: staffError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("pin", pass)
+        .single();
+      if (staffError || !staffUser) {
+        return alert("❌ PIN incorrecto. Operación cancelada.");
+      }
+    }
 
     const { error } = await supabase
       .from("quotes")

@@ -37,6 +37,7 @@ export const BusinessConfigSchema = z.object({
   printer_margin_bottom_lines: z.number().default(1),
   low_stock_threshold: z.number().default(5),
   max_cajero_discount_pct: z.number().default(5),
+  iva_rate: z.number().min(0).max(0.5).default(0.16),
 });
 
 export const BusinessSettingsSchema = z.object({
@@ -79,6 +80,7 @@ export const BusinessSettingsSchema = z.object({
     printer_margin_bottom_lines: 1,
     low_stock_threshold: 5,
     max_cajero_discount_pct: 5,
+    iva_rate: 0.16,
   }),
 });
 

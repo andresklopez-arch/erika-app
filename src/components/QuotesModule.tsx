@@ -1,10 +1,11 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { useBusinessProfile } from "./AuthProvider";
+import { useBusinessProfile, useAuth } from "./AuthProvider";
 
 export default function QuotesModule() {
   const businessProfile = useBusinessProfile();
+  const { currentUser } = useAuth();
   const [quotes, setQuotes] = useState<any[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
 
@@ -26,6 +27,17 @@ export default function QuotesModule() {
       "¿Seguro que deseas enviar esta cotización a la Caja para cobrar? (Ingresa tu PIN)",
     );
     if (!pass) return;
+
+    if (pass !== currentUser?.pin) {
+      const { data: staffUser, error: staffError } = await supabase
+        .from("users")
+        .select("id")
+        .eq("pin", pass)
+        .single();
+      if (staffError || !staffUser) {
+        return alert("❌ PIN incorrecto. Operación cancelada.");
+      }
+    }
 
     const { error } = await supabase
       .from("quotes")

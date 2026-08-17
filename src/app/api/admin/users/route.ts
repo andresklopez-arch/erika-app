@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
 import { z } from "zod";
+import { getClientKey, getLockRemainingMs, recordFailedAttempt, clearAttempts } from "@/lib/rateLimit";
 
 // Zod schema for validating user input
 const UserInputSchema = z.object({
@@ -29,6 +30,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Se requiere el PIN de administrador." }, { status: 401 });
     }
 
+    const rateLimitKey = getClientKey(request, "admin-users");
+    const lockRemainingMs = getLockRemainingMs(rateLimitKey);
+    if (lockRemainingMs > 0) {
+      return NextResponse.json(
+        { error: `Demasiados intentos fallidos. Intenta de nuevo en ${Math.ceil(lockRemainingMs / 60000)} minuto(s).` },
+        { status: 429 },
+      );
+    }
+
     // Verificar en el servidor si el PIN pertenece a un administrador
     const { data: adminUser, error: adminError } = await supabase
       .from("users")
@@ -37,8 +47,10 @@ export async function POST(request: Request) {
       .single();
 
     if (adminError || !adminUser || adminUser.role !== "admin") {
+      recordFailedAttempt(rateLimitKey);
       return NextResponse.json({ error: "Acceso Denegado. Solo administradores pueden gestionar usuarios." }, { status: 403 });
     }
+    clearAttempts(rateLimitKey);
 
     // Validar el payload con Zod
     const validationResult = UserInputSchema.safeParse(user);
@@ -80,6 +92,15 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Parámetros incompletos." }, { status: 400 });
     }
 
+    const rateLimitKey = getClientKey(request, "admin-users");
+    const lockRemainingMs = getLockRemainingMs(rateLimitKey);
+    if (lockRemainingMs > 0) {
+      return NextResponse.json(
+        { error: `Demasiados intentos fallidos. Intenta de nuevo en ${Math.ceil(lockRemainingMs / 60000)} minuto(s).` },
+        { status: 429 },
+      );
+    }
+
     // Verificar en el servidor si el PIN pertenece a un administrador
     const { data: adminUser, error: adminError } = await supabase
       .from("users")
@@ -88,8 +109,10 @@ export async function PUT(request: Request) {
       .single();
 
     if (adminError || !adminUser || adminUser.role !== "admin") {
+      recordFailedAttempt(rateLimitKey);
       return NextResponse.json({ error: "Acceso Denegado. Solo administradores pueden gestionar usuarios." }, { status: 403 });
     }
+    clearAttempts(rateLimitKey);
 
     // Validar el payload con Zod
     const validationResult = UserInputSchema.safeParse(user);
@@ -133,6 +156,15 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Parámetros incompletos." }, { status: 400 });
     }
 
+    const rateLimitKey = getClientKey(request, "admin-users");
+    const lockRemainingMs = getLockRemainingMs(rateLimitKey);
+    if (lockRemainingMs > 0) {
+      return NextResponse.json(
+        { error: `Demasiados intentos fallidos. Intenta de nuevo en ${Math.ceil(lockRemainingMs / 60000)} minuto(s).` },
+        { status: 429 },
+      );
+    }
+
     // Verificar en el servidor si el PIN pertenece a un administrador
     const { data: adminUser, error: adminError } = await supabase
       .from("users")
@@ -141,8 +173,10 @@ export async function DELETE(request: Request) {
       .single();
 
     if (adminError || !adminUser || adminUser.role !== "admin") {
+      recordFailedAttempt(rateLimitKey);
       return NextResponse.json({ error: "Acceso Denegado. Solo administradores pueden gestionar usuarios." }, { status: 403 });
     }
+    clearAttempts(rateLimitKey);
 
     // Eliminar de la base de datos
     const { error: dbError } = await supabase

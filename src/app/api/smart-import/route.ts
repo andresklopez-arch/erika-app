@@ -1,12 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
+import { supabase } from "@/lib/supabaseClient";
+import { getClientKey, getLockRemainingMs, recordFailedAttempt, clearAttempts } from "@/lib/rateLimit";
+
+const MAX_FILE_BYTES = 15 * 1024 * 1024; // 15MB, margen razonable para fotos/PDFs de listas de precios
 
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
+    const pin = formData.get("pin") as string | null;
+
+    if (!pin) {
+      return NextResponse.json({ error: "Se requiere PIN de usuario." }, { status: 401 });
+    }
+
+    const rateLimitKey = getClientKey(req, "smart-import");
+    const lockRemainingMs = getLockRemainingMs(rateLimitKey);
+    if (lockRemainingMs > 0) {
+      return NextResponse.json(
+        { error: `Demasiados intentos fallidos. Intenta de nuevo en ${Math.ceil(lockRemainingMs / 60000)} minuto(s).` },
+        { status: 429 },
+      );
+    }
+
+    const { data: staffUser, error: staffError } = await supabase
+      .from("users")
+      .select("role")
+      .eq("pin", pin)
+      .single();
+
+    if (staffError || !staffUser) {
+      recordFailedAttempt(rateLimitKey);
+      return NextResponse.json({ error: "PIN inválido." }, { status: 403 });
+    }
+    clearAttempts(rateLimitKey);
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    }
+
+    if (file.size > MAX_FILE_BYTES) {
+      return NextResponse.json({ error: "El archivo excede el tamaño máximo permitido (15MB)." }, { status: 413 });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;

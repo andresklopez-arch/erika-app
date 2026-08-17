@@ -1361,11 +1361,11 @@ export default function POSModule() {
     if (!isOffline) {
       const itemsExceedingStock = activeTicket.items.filter(item => {
          const invItem = globalCatalog.find(i => i.name === item.name);
-         return invItem && item.qty > invItem.stock;
+         return !invItem || item.qty > invItem.stock;
       });
 
       if (itemsExceedingStock.length > 0) {
-         const itemNames = itemsExceedingStock.map(i => `• ${i.name} (Venta: ${i.qty}, Stock: ${globalCatalog.find(cat => cat.name === i.name)?.stock || 0})`).join("\n");
+         const itemNames = itemsExceedingStock.map(i => `• ${i.name} (Venta: ${i.qty}, Stock: ${globalCatalog.find(cat => cat.name === i.name)?.stock ?? 0})`).join("\n");
          
          const pin = await getPinAsync(
            "⚠️ STOCK INSUFICIENTE",
@@ -1572,6 +1572,10 @@ export default function POSModule() {
           }
         } catch (invErr) {
           console.error("Error crítico al actualizar inventario:", invErr);
+          toast.error(
+            "⚠️ El cobro se realizó, pero el inventario NO se pudo actualizar. Revisa y ajusta el stock manualmente.",
+            { duration: 8000 },
+          );
         }
 
         // Impresión inmediata en segundo plano previa a cualquier notificación
@@ -1645,7 +1649,7 @@ export default function POSModule() {
   const increaseFactor = activeTicket.discountPct < 0 ? (1 + Math.abs(activeTicket.discountPct) / 100) : 1;
 
   const rawTotal = activeTicket.items.reduce((sum, item) => {
-    const p = Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor);
+    const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
     return sum + p * item.qty;
   }, 0);
   
@@ -1660,7 +1664,7 @@ export default function POSModule() {
   
   const discountAmount = activeTicket.discountPct < 0 ? 0 : rawTotal * (activeTicket.discountPct / 100);
   const subtotalNeto = rawTotal - discountAmount;
-  const iva = applyIva ? subtotalNeto * 0.16 : 0;
+  const iva = applyIva ? subtotalNeto * (businessSettings?.config?.iva_rate ?? 0.16) : 0;
   const finalTotal = Math.round(subtotalNeto + iva);
   const subtotal = subtotalNeto;
 
@@ -1779,7 +1783,7 @@ export default function POSModule() {
       writeText(divider);
       
       items.forEach((item: any) => {
-        const p = Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor);
+        const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
         const itemTotal = `${Math.round(p * item.qty)}`;
         const nameText = `${item.qty}x ${item.name}`;
         
@@ -1815,12 +1819,12 @@ export default function POSModule() {
       writeText(divider);
       
       const subtotalVal = items.reduce((sum: number, i: any) => {
-         const p = Math.round(getItemFinalPrice(i, wholesaleRules) * increaseFactor);
+         const p = (getItemFinalPrice(i, wholesaleRules) * increaseFactor);
          return sum + (p * i.qty);
       }, 0);
       const discountVal = subtotalVal * (printDiscountPct / 100);
       const subtotalNeto = subtotalVal - discountVal;
-      const iva = applyIva ? subtotalNeto * 0.16 : 0;
+      const iva = applyIva ? subtotalNeto * (businessSettings?.config?.iva_rate ?? 0.16) : 0;
       
       setAlign(2);
       writeText(`Subtotal: ${Math.round(subtotalVal)}\n`);
@@ -1871,7 +1875,7 @@ export default function POSModule() {
       writeText(divider);
       
       items.forEach((item: any) => {
-        const p = Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor);
+        const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
         const itemTotal = `${Math.round(p * item.qty)}`;
         const nameText = `${item.qty}x ${item.name}`;
         
@@ -1907,12 +1911,12 @@ export default function POSModule() {
       writeText(divider);
       
       const subtotalVal = items.reduce((sum: number, i: any) => {
-         const p = Math.round(getItemFinalPrice(i, wholesaleRules) * increaseFactor);
+         const p = (getItemFinalPrice(i, wholesaleRules) * increaseFactor);
          return sum + (p * i.qty);
       }, 0);
       const discountVal = subtotalVal * (printDiscountPct / 100);
       const subtotalNeto = subtotalVal - discountVal;
-      const iva = applyIva ? subtotalNeto * 0.16 : 0;
+      const iva = applyIva ? subtotalNeto * (businessSettings?.config?.iva_rate ?? 0.16) : 0;
       
       setAlign(2);
       writeText(`Subtotal: ${Math.round(subtotalVal)}\n`);
@@ -2054,12 +2058,12 @@ export default function POSModule() {
         const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
         const printDiscountPct = discountPct < 0 ? 0 : discountPct;
         const subtotalVal = items.reduce((sum: number, item: any) => {
-           const p = Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor);
+           const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
            return sum + (p * item.qty);
         }, 0);
         const discountAmt = subtotalVal * (printDiscountPct / 100);
         const subtotalNeto = subtotalVal - discountAmt;
-        const iva = applyIva ? subtotalNeto * 0.16 : 0;
+        const iva = applyIva ? subtotalNeto * (businessSettings?.config?.iva_rate ?? 0.16) : 0;
 
         setReceiptToPrint({
           type: "ticket",
@@ -2067,7 +2071,7 @@ export default function POSModule() {
           customerName: customers.find(c => c.id === selectedCustomerId)?.name || "",
           items: items.map((i: any) => ({
              ...i,
-             price: Math.round(getItemFinalPrice(i, wholesaleRules) * increaseFactor),
+             price: (getItemFinalPrice(i, wholesaleRules) * increaseFactor),
              discountPct: 0
           })),
           subtotal: subtotalVal,
@@ -2083,19 +2087,19 @@ export default function POSModule() {
         const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
         const printDiscountPct = discountPct < 0 ? 0 : discountPct;
         const subtotalVal = items.reduce((sum: number, item: any) => {
-           const p = Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor);
+           const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
            return sum + (p * item.qty);
         }, 0);
         const discountAmt = subtotalVal * (printDiscountPct / 100);
         const subtotalNeto = subtotalVal - discountAmt;
-        const iva = applyIva ? subtotalNeto * 0.16 : 0;
+        const iva = applyIva ? subtotalNeto * (businessSettings?.config?.iva_rate ?? 0.16) : 0;
 
         setReceiptToPrint({
           type: "layaway",
           customerName: customer?.name || "Desconocido",
           items: items.map((i: any) => ({
              ...i,
-             price: Math.round(getItemFinalPrice(i, wholesaleRules) * increaseFactor),
+             price: (getItemFinalPrice(i, wholesaleRules) * increaseFactor),
              discountPct: 0
           })),
           subtotal: subtotalVal,
@@ -2151,7 +2155,7 @@ export default function POSModule() {
       const printDiscountPct = discountPct < 0 ? 0 : discountPct;
       
       const itemsHtml = items.map((i: any) => {
-        const p = Math.round(getItemFinalPrice(i, wholesaleRules) * increaseFactor);
+        const p = (getItemFinalPrice(i, wholesaleRules) * increaseFactor);
         return `
         <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
           <span>${i.qty}x ${i.name} ${(i.discountPct || 0) > 0 ? `(-${i.discountPct}%)` : ''}</span>
@@ -2160,12 +2164,12 @@ export default function POSModule() {
       }).join("");
       
       const subtotalVal = items.reduce((sum: number, i: any) => {
-         const p = Math.round(getItemFinalPrice(i, wholesaleRules) * increaseFactor);
+         const p = (getItemFinalPrice(i, wholesaleRules) * increaseFactor);
          return sum + (p * i.qty);
       }, 0);
       const discountVal = subtotalVal * (printDiscountPct / 100);
       const subtotalNeto = subtotalVal - discountVal;
-      const iva = applyIva ? subtotalNeto * 0.16 : 0;
+      const iva = applyIva ? subtotalNeto * (businessSettings?.config?.iva_rate ?? 0.16) : 0;
 
       const html = `
         <html>
@@ -2270,7 +2274,7 @@ export default function POSModule() {
       const printDiscountPct = discountPct < 0 ? 0 : discountPct;
       
       const itemsHtml = items.map((item: any) => {
-        const p = Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor);
+        const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
         return `
         <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
           <div style="flex: 2;">${item.qty}x ${item.name}</div>
@@ -2279,12 +2283,12 @@ export default function POSModule() {
       }).join("");
       
       const subtotalVal = items.reduce((sum: number, item: any) => {
-         const p = Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor);
+         const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
          return sum + (p * item.qty);
       }, 0);
       const discountVal = subtotalVal * (printDiscountPct / 100);
       const subtotalNeto = subtotalVal - discountVal;
-      const iva = applyIva ? subtotalNeto * 0.16 : 0;
+      const iva = applyIva ? subtotalNeto * (businessSettings?.config?.iva_rate ?? 0.16) : 0;
       
       const ticketHtml = `
         <html>
@@ -2460,7 +2464,7 @@ export default function POSModule() {
     const discountPct = activeTicket.discountPct || 0;
     const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
     const itemsText = activeTicket.items.map(i => {
-      const p = Math.round(getItemFinalPrice(i, wholesaleRules) * increaseFactor);
+      const p = (getItemFinalPrice(i, wholesaleRules) * increaseFactor);
       return `▪️ ${i.qty}x ${i.name} - ${Math.round(p * i.qty)}`;
     }).join("\n");
     const totalText = applyIva 
@@ -2491,7 +2495,7 @@ export default function POSModule() {
     if (rawPrintDiscountPct < 0) {
       return {
         ...item,
-        price: Math.round(getItemFinalPrice(item, wholesaleRules) * printIncreaseFactor),
+        price: (getItemFinalPrice(item, wholesaleRules) * printIncreaseFactor),
         discountPct: 0
       };
     }
@@ -3074,7 +3078,7 @@ export default function POSModule() {
                           fontSize: "1.1rem",
                         }}
                       >
-                        ${(Math.round(getItemFinalPrice(item, wholesaleRules) * increaseFactor) * item.qty).toFixed(activeTicket.discountPct < 0 ? 0 : 2)}
+                        ${((getItemFinalPrice(item, wholesaleRules) * increaseFactor) * item.qty).toFixed(activeTicket.discountPct < 0 ? 0 : 2)}
                       </strong>
                       {(item.discountPct || 0) > 0 && (
                         <span style={{ fontSize: "0.75rem", color: "#ef4444", display: "block", textAlign: "right", marginTop: "2px" }}>
@@ -3727,14 +3731,47 @@ export default function POSModule() {
               border: "1px solid #10b981",
               color: "#10b981",
             }}
-            onClick={() => {
+            onClick={async () => {
               if (activeTicket.items.length === 0) return alert("El ticket está vacío.");
               if (!selectedCustomerId) return alert("❌ Debes seleccionar un cliente para hacer un Apartado (Layaway).");
-              // Open Layaway Creation Modal (mocked for now)
-              const downPayment = parseFloat(window.prompt(`El total es $${finalTotal.toFixed(2)}.\n¿Cuánto dejará de enganche (Mínimo $${(finalTotal*0.1).toFixed(2)})?`) || "");
+
+              const minDownPayment = finalTotal * 0.1;
+              const downPayment = parseFloat(window.prompt(`El total es $${finalTotal.toFixed(2)}.\n¿Cuánto dejará de enganche (Mínimo $${minDownPayment.toFixed(2)})?`) || "");
               if (isNaN(downPayment) || downPayment <= 0) return;
               if (downPayment > finalTotal) return alert("El enganche no puede ser mayor al total.");
-              
+              if (downPayment < minDownPayment) {
+                return alert(`❌ El enganche mínimo es $${minDownPayment.toFixed(2)} (10% del total).`);
+              }
+
+              // Validación de stock estricta, igual que en el cobro de contado/tarjeta.
+              if (!isOffline) {
+                const itemsExceedingStock = activeTicket.items.filter(item => {
+                  const invItem = globalCatalog.find(i => i.name === item.name);
+                  return !invItem || item.qty > invItem.stock;
+                });
+
+                if (itemsExceedingStock.length > 0) {
+                  const itemNames = itemsExceedingStock.map(i => `• ${i.name} (Apartar: ${i.qty}, Stock: ${globalCatalog.find(cat => cat.name === i.name)?.stock ?? 0})`).join("\n");
+
+                  const pin = await getPinAsync(
+                    "⚠️ STOCK INSUFICIENTE",
+                    `Los siguientes artículos superan las existencias físicas en inventario:\n${itemNames}\n\nIngresa el PIN de Administrador para autorizar el apartado:`
+                  );
+                  if (!pin) return;
+
+                  const { data: admin, error: adminErr } = await supabase
+                    .from("users")
+                    .select("*")
+                    .eq("pin", pin)
+                    .eq("role", "admin")
+                    .single();
+
+                  if (adminErr || !admin) {
+                    return alert("❌ PIN incorrecto o sin privilegios de administrador. Apartado cancelado.");
+                  }
+                }
+              }
+
               const makeLayaway = async () => {
                  const customer = customers.find(c => c.id === selectedCustomerId);
                  const { error } = await supabase.from("layaways").insert({
@@ -3772,6 +3809,10 @@ export default function POSModule() {
                      }
                   } catch (invErr) {
                      console.error("Error crítico al actualizar inventario en layaway:", invErr);
+                     toast.error(
+                       "⚠️ El apartado se creó, pero el inventario NO se pudo actualizar. Revisa y ajusta el stock manualmente.",
+                       { duration: 8000 },
+                     );
                   }
 
                  // Update local state globalCatalog
@@ -3983,6 +4024,20 @@ export default function POSModule() {
         finalTotal={finalTotal}
         customers={customers}
         activeTicketId={activeTicket.id}
+        items={activeTicket.items}
+        globalCatalog={globalCatalog}
+        currentUserName={currentUser?.name}
+        onInventoryReduced={() => {
+          setGlobalCatalog(prevCatalog =>
+            prevCatalog.map(invItem => {
+              const soldItem = activeTicket.items.find(item => item.name === invItem.name);
+              if (soldItem) {
+                return { ...invItem, stock: invItem.stock - soldItem.qty };
+              }
+              return invItem;
+            })
+          );
+        }}
         onSuccess={() => {
           setShowCreditModal(false);
           setTickets(

@@ -45,27 +45,13 @@ function sanitizeHistory(callHistory: any[], table: string): { sanitizedHistory:
           }
         }
       }
-    } else if (method === 'or' && typeof args[0] === 'string') {
-      const conditions = args[0].split(',');
-      const filtered = conditions.filter(c => {
-        for (const col of cols) {
-          if (c.startsWith(`${col}.`) || c.includes(`.${col}.`)) {
-            modified = true;
-            return false;
-          }
-        }
-        return true;
-      });
-      if (filtered.length !== conditions.length) {
-        args[0] = filtered.join(',');
-        modified = true;
-      }
-    } else if (['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'like', 'ilike', 'is', 'in', 'contains', 'containedBy', 'rangeGt', 'rangeGte', 'rangeLt', 'rangeLte', 'rangeAdjacent', 'overlaps', 'textSearch', 'match'].includes(method)) {
-      if (cols.has(args[0])) {
-        modified = true;
-        return null;
-      }
     }
+    // NOTA DE SEGURIDAD: nunca se eliminan condiciones de filtro (eq/neq/or/etc.)
+    // por columnas faltantes. Hacerlo podía convertir un UPDATE/DELETE con
+    // `.eq('col', id)` en uno sin filtro (afectando TODA la tabla) cuando 'col'
+    // estaba en la caché de columnas faltantes. Si un filtro referencia una
+    // columna inexistente, es preferible que la consulta falle con el error
+    // real de Postgres a que se ejecute sin el filtro esperado.
 
     return { method, args };
   }).filter(call => call !== null);
