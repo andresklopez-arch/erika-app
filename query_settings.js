@@ -35,8 +35,11 @@ async function run() {
   if (error) {
     console.error("Error:", error);
   } else {
-    console.log("Configuración del negocio:");
-    console.log(JSON.stringify(data, null, 2));
+    const cfg = data.config || {};
+    cfg.printer_invert_180 = false;
+    await supabase.from("business_settings").update({ config: cfg }).eq("id", data.id);
+    console.log("printer_invert_180 actualizado exitosamente a false en Supabase!");
+    console.log("Nuevo config:", JSON.stringify(cfg, null, 2));
   }
 }
 
