@@ -96,14 +96,39 @@ export default function InboundModal({ onClose, onSuccess }: InboundModalProps) 
 
     let hasError = false;
     for (const { item, totalQty, lastCost } of aggregatedById.values()) {
-      const newStock = item.stock + totalQty;
       const finalCost = applyIva ? lastCost * 1.16 : lastCost;
-      const { error } = await supabase
+
+      // Incremento atómico de stock en el servidor (reduce_inventory_stock
+      // con cantidad negativa = suma): antes se calculaba newStock a
+      // partir de item.stock, un valor congelado desde que se abrió el
+      // modal — si una caja vendía el producto mientras se capturaba la
+      // factura de recepción (puede tardar varios minutos), esa venta se
+      // borraba en silencio al guardar.
+      const { error: rpcErr } = await supabase.rpc("reduce_inventory_stock", {
+        items: [{ id: item.id, qty: -totalQty }],
+        ref_id: `IN-${Date.now()}`,
+        user_name: "Recepción de Mercancía",
+        move_type: "restock",
+      });
+      if (rpcErr) {
+        console.warn("Falla al llamar RPC reduce_inventory_stock en recepción, reintentando con fallback manual...", rpcErr);
+        const { error: fallbackErr } = await supabase
+          .from("inventory")
+          .update({ stock: item.stock + totalQty })
+          .eq("id", item.id);
+        if (fallbackErr) {
+          console.error(fallbackErr);
+          hasError = true;
+          continue;
+        }
+      }
+
+      const { error: costErr } = await supabase
         .from("inventory")
-        .update({ stock: newStock, cost: finalCost })
+        .update({ cost: finalCost })
         .eq("id", item.id);
-      if (error) {
-         console.error(error);
+      if (costErr) {
+         console.error(costErr);
          hasError = true;
       }
     }

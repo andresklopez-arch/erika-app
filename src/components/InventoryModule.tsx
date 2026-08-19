@@ -2499,6 +2499,11 @@ export default function InventoryModule() {
               // última, perdiendo la cantidad de la primera fila. Este mapa
               // recuerda el índice ya encolado por id para acumular sobre él.
               const pendingUpdateIndexById = new Map<string, number>();
+              // Acumula solo el DELTA importado por producto (no el stock
+              // absoluto resultante) para poder recalcularlo contra un
+              // valor de stock recién leído justo antes de escribir — ver
+              // uso más abajo, antes del upsert final.
+              const importedDeltaById = new Map<string, number>();
 
               for (const p of newProducts) {
                 // Usar el código/nombre ORIGINAL del Excel para todo el proceso de import.
@@ -2555,6 +2560,9 @@ export default function InventoryModule() {
                     const baseStock = pendingIdx !== undefined ? updates[pendingIdx].stock : (existing.stock || 0);
                     const inflationFlag = p.cost > existing.cost ? "up" : null;
                     const newStock = accumulateStock ? baseStock + p.stock : p.stock;
+                    if (accumulateStock) {
+                      importedDeltaById.set(existing.id, (importedDeltaById.get(existing.id) || 0) + p.stock);
+                    }
 
                     if (baseStock <= existing.minStock && newStock > existing.minStock) {
                       rescuedCount++;
@@ -2652,6 +2660,31 @@ export default function InventoryModule() {
                       }
                     }
                   }
+                }
+              }
+
+              // Si se está acumulando stock (sumar sobre lo existente, no
+              // reemplazar), se vuelve a leer el stock ACTUAL de cada
+              // producto justo antes de escribir y se recalcula sobre ese
+              // valor fresco — el mismo patrón ya usado en la fusión de
+              // duplicados. Antes esto usaba dbAllItems, una foto tomada al
+              // iniciar el import, así que una venta ocurrida mientras el
+              // usuario revisaba el preview (puede tardar varios minutos)
+              // se borraba en silencio al guardar.
+              if (accumulateStock && importedDeltaById.size > 0) {
+                const idsToRefresh = Array.from(importedDeltaById.keys());
+                const { data: freshItems } = await supabase
+                  .from("inventory")
+                  .select("id, stock")
+                  .in("id", idsToRefresh);
+                if (freshItems) {
+                  const freshStockById = new Map<string, number>(freshItems.map((f: any) => [f.id, f.stock || 0]));
+                  updates.forEach((u, idx) => {
+                    const delta = importedDeltaById.get(u.id);
+                    if (delta !== undefined && freshStockById.has(u.id)) {
+                      updates[idx] = { ...u, stock: (freshStockById.get(u.id) || 0) + delta };
+                    }
+                  });
                 }
               }
 

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { LoggerService } from "../services/loggerService";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { supabase } from "../lib/supabaseClient";
@@ -272,6 +272,13 @@ export default function POSModule() {
   const [pendingOfflineCount, setPendingOfflineCount] = useState(0);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [isCreatingLayaway, setIsCreatingLayaway] = useState(false);
+  // Token de idempotencia por intento de cobro: se genera UNA vez al abrir
+  // el modal de pago y se reutiliza en cada reintento (ej. si la respuesta
+  // se pierde por una desconexión momentánea y el cajero reintenta con el
+  // mismo ticket). Antes un reintento así podía duplicar la venta completa
+  // (doble ingreso en caja y doble descuento de inventario) porque no
+  // existía forma de saber que ya se había intentado antes.
+  const checkoutTokenRef = useRef<string | null>(null);
 
   // Estados del Modal del PIN (Sugerencia 2)
   const [showPinModal, setShowPinModal] = useState(false);
@@ -817,6 +824,54 @@ export default function POSModule() {
 
     fetchInventoryAndCustomers();
     restoreQuote();
+  }, []);
+
+  // Sincronización de inventario en tiempo real entre cajas/terminales.
+  // Antes globalCatalog se cargaba UNA sola vez al montar el componente y
+  // solo se actualizaba localmente tras cada venta de ESTE terminal — con
+  // dos cajas abiertas simultáneamente, una podía vender las últimas
+  // unidades de un producto y la otra seguía viendo el stock viejo,
+  // permitiendo sobreventa silenciosa hasta que alguien recargara la
+  // página. Se usa un debounce corto porque una venta puede disparar
+  // varios UPDATE seguidos (uno por artículo).
+  useEffect(() => {
+    let refreshTimeout: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRefresh = () => {
+      if (refreshTimeout) clearTimeout(refreshTimeout);
+      refreshTimeout = setTimeout(async () => {
+        let allData: any[] = [];
+        let from = 0;
+        const limit = 1000;
+        let hasMore = true;
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from("inventory")
+            .select("*")
+            .range(from, from + limit - 1);
+          if (error || !data) {
+            hasMore = false;
+            break;
+          }
+          allData = [...allData, ...data];
+          if (data.length < limit) {
+            hasMore = false;
+          } else {
+            from += limit;
+          }
+        }
+        if (allData.length > 0) setGlobalCatalog(allData);
+      }, 600);
+    };
+
+    const channel = supabase
+      .channel("pos-inventory-sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "inventory" }, scheduleRefresh)
+      .subscribe();
+
+    return () => {
+      if (refreshTimeout) clearTimeout(refreshTimeout);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Lector Láser Interceptor
@@ -1457,7 +1512,33 @@ export default function POSModule() {
           );
         }
 
-        const descriptionText = `Venta Ticket #${activeTicket.id}${selectedCustomerId ? ` (Cliente ID: ${selectedCustomerId})` : ""} [METODO:${selectedMethod}] [CASH:${cashAmt}] [CARD:${cardAmt}] [TRANS:${transferAmt}] [COSTO:${totalCost.toFixed(2)}]${reference ? ` [REF:${reference}]` : ""}`;
+        const idempotencyToken = checkoutTokenRef.current;
+        const descriptionText = `Venta Ticket #${activeTicket.id}${selectedCustomerId ? ` (Cliente ID: ${selectedCustomerId})` : ""} [METODO:${selectedMethod}] [CASH:${cashAmt}] [CARD:${cardAmt}] [TRANS:${transferAmt}] [COSTO:${totalCost.toFixed(2)}]${reference ? ` [REF:${reference}]` : ""}${idempotencyToken ? ` [IDEMP:${idempotencyToken}]` : ""}`;
+
+        // Si la respuesta de un intento anterior se perdió por una
+        // desconexión momentánea, el cajero reintenta con el mismo botón
+        // — como el token de idempotencia se generó una sola vez al abrir
+        // el modal (no se regenera en cada intento), esta búsqueda
+        // detecta si ESE intento ya se registró en el servidor y evita
+        // duplicar la venta completa (doble cobro, doble descuento de
+        // inventario).
+        if (idempotencyToken) {
+          const { data: existingTx } = await supabase
+            .from("cash_transactions")
+            .select("id")
+            .ilike("description", `%[IDEMP:${idempotencyToken}]%`)
+            .limit(1)
+            .maybeSingle();
+          if (existingTx) {
+            toast.success("✅ Esta venta ya se había registrado (reintento detectado); no se duplicó.", { duration: 5000 });
+            checkoutTokenRef.current = null;
+            setTickets(tickets.map((t) => t.id === activeTicketId ? { ...t, items: [], discountPct: 0, quoteId: undefined } : t));
+            setSelectedCustomerId("");
+            setShowCheckoutModal(false);
+            setIsProcessingPayment(false);
+            return;
+          }
+        }
 
         const { error } = await supabase
           .from("cash_transactions")
@@ -1664,6 +1745,7 @@ export default function POSModule() {
       }
 
       // Proceso de éxito: limpiar tickets y cerrar modal
+      checkoutTokenRef.current = null;
       setTickets(
         tickets.map((t) =>
           t.id === activeTicketId
@@ -3620,6 +3702,7 @@ export default function POSModule() {
                 setCashPayAmount(finalTotal.toFixed(2));
                 setCardPayAmount("");
                 setTransferPayAmount("");
+                checkoutTokenRef.current = crypto.randomUUID();
                 setShowCheckoutModal(true);
               }}
             >
@@ -3699,6 +3782,43 @@ export default function POSModule() {
                     description: `Devolución: ${reason}`
                  });
                  if (error) return alert("Error al registrar devolución: " + error.message);
+
+                 // Antes esta devolución solo movía dinero de caja: el
+                 // producto físico regresado nunca se sumaba de vuelta al
+                 // inventario, dejando el conteo de stock permanentemente
+                 // bajo respecto a la realidad. Se ofrece restaurar el
+                 // stock del producto devuelto de forma opcional.
+                 if (window.confirm("¿La devolución incluye mercancía física que debe regresar al inventario?")) {
+                    const searchTerm = window.prompt("Nombre o código del producto devuelto:");
+                    if (searchTerm) {
+                       const termLower = searchTerm.trim().toLowerCase();
+                       const matches = globalCatalog.filter(i =>
+                          i.name.toLowerCase().includes(termLower) || (i.code && i.code.toLowerCase() === termLower)
+                       );
+                       if (matches.length === 0) {
+                          alert(`❌ No se encontró ningún producto que coincida con "${searchTerm}". Ajusta el stock manualmente desde Inventario.`);
+                       } else if (matches.length > 1) {
+                          alert(`⚠️ Coinciden ${matches.length} productos con "${searchTerm}" (${matches.map(m => m.name).join(", ")}). Sé más específico o ajusta el stock manualmente desde Inventario.`);
+                       } else {
+                          const product = matches[0];
+                          const qtyStr = window.prompt(`¿Cuántas unidades de "${product.name}" regresan al inventario?`, "1");
+                          const qty = parseInt(qtyStr || "", 10);
+                          if (!isNaN(qty) && qty > 0) {
+                             const { error: rpcErr } = await supabase.rpc("reduce_inventory_stock", {
+                                items: [{ id: product.id, qty: -qty }],
+                                ref_id: `RET-${Date.now()}`,
+                                user_name: currentUser?.name || "Venta Mostrador",
+                                move_type: "adjustment"
+                             });
+                             if (rpcErr) {
+                                await supabase.from("inventory").update({ stock: product.stock + qty }).eq("id", product.id);
+                             }
+                             setGlobalCatalog(prev => prev.map(i => i.id === product.id ? { ...i, stock: i.stock + qty } : i));
+                          }
+                       }
+                    }
+                 }
+
                  alert(`✅ Devolución exitosa. Se retiraron $${amount.toFixed(2)} de la caja.`);
               } else {
                  alert("❌ Las devoluciones solo se pueden hacer en modo en línea.");
