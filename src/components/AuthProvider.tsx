@@ -400,6 +400,7 @@ export default function AuthProvider({
     }
 
     const saved = localStorage.getItem("ERIKA_USER");
+    let cachedUser: User | null = null;
     if (saved) {
       // Si ERIKA_USER se corrompe (storage lleno, extensión del navegador,
       // migración de versión), JSON.parse lanzaba una excepción no
@@ -408,15 +409,40 @@ export default function AuthProvider({
       // blanco sin forma de recuperarse desde la UI. Ahora se trata como
       // sesión inválida y se limpia, en vez de tumbar toda la app.
       try {
-        const user = JSON.parse(saved);
-        setCurrentUser(user);
-        setOfflineSessionKey(user.id, user.pin);
+        cachedUser = JSON.parse(saved);
+        setCurrentUser(cachedUser);
+        if (cachedUser) setOfflineSessionKey(cachedUser.id, cachedUser.pin);
       } catch (e) {
         console.error("Sesión guardada corrupta, cerrando sesión:", e);
         localStorage.removeItem("ERIKA_USER");
       }
     }
     setIsLoading(false);
+
+    // Revalida la sesión contra el servidor: ERIKA_USER en localStorage no
+    // tiene firma, así que cualquiera puede forjarlo desde la consola del
+    // navegador (por ejemplo con role:"admin" y permisos completos) y
+    // saltarse por completo la pantalla de PIN. La cookie httpOnly que fija
+    // /api/auth/login es la única fuente confiable de quién es el usuario;
+    // si no es válida, se cierra la sesión local aunque localStorage diga
+    // lo contrario. De paso, esto trae el rol/permisos siempre frescos de
+    // la base de datos en vez de quedar congelados desde el último login.
+    fetch("/api/auth/session")
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then(({ user }) => {
+        if (!user) throw new Error("Sesión no válida");
+        const merged: User = { ...user, pin: cachedUser && cachedUser.id === user.id ? cachedUser.pin : "" };
+        setCurrentUser(merged);
+        setOfflineSessionKey(merged.id, merged.pin);
+        localStorage.setItem("ERIKA_USER", JSON.stringify(merged));
+      })
+      .catch(() => {
+        if (cachedUser) {
+          setCurrentUser(null);
+          setOfflineSessionKey("", "");
+          localStorage.removeItem("ERIKA_USER");
+        }
+      });
 
     // Initial config fetch
     refreshSettings();
@@ -456,6 +482,7 @@ export default function AuthProvider({
     setCurrentUser(null);
     setOfflineSessionKey("", "");
     localStorage.removeItem("ERIKA_USER");
+    fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
   };
 
   if (isLoading)

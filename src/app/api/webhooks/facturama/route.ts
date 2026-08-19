@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
-import { supabase } from "../../../../lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 function isValidWebhookSecret(request: Request): boolean {
   const expected = process.env.FACTURAMA_WEBHOOK_SECRET;
@@ -29,17 +29,27 @@ export async function POST(request: Request) {
 
     // Webhook de Facturama que avisa si una factura fue cancelada por el SAT
     if (body && body.Status === "Canceled") {
-      const quoteId = body.Id; // Asumimos que Facturama nos envía el ID interno
+      // El "Id" que manda Facturama es el ID de la factura en Facturama, NO
+      // el id interno de `quotes` (son sistemas distintos) — se busca por
+      // la columna que guarda esa referencia (ver
+      // supabase_schema_facturama_invoice_id.sql).
+      const facturamaInvoiceId = body.Id;
 
-      const { error } = await supabase
+      const { data: updated, error } = await supabaseAdmin
         .from("quotes")
         .update({
           status: "cancelled",
           notes: `Cancelada en el SAT el ${new Date().toLocaleString()}`,
         })
-        .eq("id", quoteId);
+        .eq("facturama_invoice_id", facturamaInvoiceId)
+        .select("id");
 
       if (error) throw error;
+
+      if (!updated || updated.length === 0) {
+        console.warn("Webhook Facturama: no se encontró cotización con facturama_invoice_id =", facturamaInvoiceId);
+        return NextResponse.json({ success: false, message: "No se encontró la factura correspondiente." }, { status: 404 });
+      }
 
       return NextResponse.json({
         success: true,

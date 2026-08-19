@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getClientKey, getLockRemainingMs, recordFailedAttempt, clearAttempts } from "@/lib/rateLimit";
+import { setSessionCookie } from "@/lib/session";
 
 // Login principal por PIN. Antes esto se hacía consultando directamente
 // `users` desde el navegador con la llave pública (anon): como esa tabla
@@ -50,6 +51,7 @@ export async function POST(request: Request) {
     }
 
     clearAttempts(rateLimitKey);
+    await setSessionCookie(user.id);
 
     // Se devuelve el PIN propio del usuario junto con su registro (lo
     // necesita el cliente para su sesión offline) — esto es distinto de

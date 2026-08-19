@@ -25,7 +25,9 @@ export default function GlobalError({
     } catch (e) {
       // ignore
     }
-    window.location.href = "/";
+    fetch("/api/auth/logout", { method: "POST" }).finally(() => {
+      window.location.href = "/";
+    });
   };
 
   return (
