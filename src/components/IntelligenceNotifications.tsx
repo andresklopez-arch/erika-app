@@ -24,9 +24,13 @@ export default function IntelligenceNotifications() {
       const activeAlerts: AlertItem[] = [];
 
       // 1. Stock Crítico
+      // Antes no filtraba productos eliminados: un producto dado de baja
+      // seguía disparando la alerta global de "stock crítico" como si
+      // siguiera necesitando resurtido.
       const { data: stockData } = await supabase
         .from("inventory")
-        .select("id, name, stock, minStock");
+        .select("id, name, stock, minStock")
+        .or("deleted.is.null,deleted.eq.false");
       
       if (stockData) {
         const criticalCount = stockData.filter((i: any) => i.stock <= i.minStock).length;

@@ -99,20 +99,32 @@ export default function EquipoModule() {
       permissions: finalPermissions,
     };
 
-    if (editingUser) {
-      await supabase.from("users").update(payload).eq("id", editingUser.id);
-    } else {
-      await supabase.from("users").insert([payload]);
-    }
+    // Antes no se revisaba el error de estas escrituras: si fallaban, el
+    // modal se cerraba igual como si el cambio (ej. un PIN nuevo) se
+    // hubiera guardado, dejando al admin creyendo que el PIN anterior ya
+    // no es válido cuando en realidad sigue siéndolo.
+    const { error } = editingUser
+      ? await supabase.from("users").update(payload).eq("id", editingUser.id)
+      : await supabase.from("users").insert([payload]);
 
     setLoading(false);
+
+    if (error) {
+      alert("❌ No se pudo guardar el empleado: " + error.message);
+      return;
+    }
+
     closeModal();
     fetchUsers();
   };
 
   const handleDelete = async (id: string) => {
     if (confirm("¿Estás seguro de eliminar este empleado?")) {
-      await supabase.from("users").delete().eq("id", id);
+      const { error } = await supabase.from("users").delete().eq("id", id);
+      if (error) {
+        alert("❌ No se pudo eliminar al empleado: " + error.message);
+        return;
+      }
       fetchUsers();
     }
   };

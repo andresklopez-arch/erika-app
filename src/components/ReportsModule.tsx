@@ -213,6 +213,17 @@ export default function ReportsModule() {
 
     const currentValue = item[log.field];
 
+    // Si el valor actual ya no coincide con lo que este log registró como
+    // "nuevo valor", significa que hubo cambios posteriores (otro ajuste
+    // de precio/stock) que esta reversión pisaría en silencio sin que el
+    // usuario se entere.
+    if (String(currentValue ?? "") !== String(log.new_value ?? "")) {
+      const confirmOverride = window.confirm(
+        `⚠️ El valor actual de "${log.field}" es "${currentValue}", distinto al que este cambio dejó ("${log.new_value}"). Esto indica que hay cambios más recientes.\n\n¿Aun así deseas sobrescribirlo con el valor anterior "${log.old_value || ''}"?`
+      );
+      if (!confirmOverride) return;
+    }
+
     let parsedValue: any = log.old_value;
     if (log.field === "discount_pct" || log.field === "stock") {
       parsedValue = log.old_value ? parseInt(log.old_value, 10) : 0;

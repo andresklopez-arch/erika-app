@@ -98,6 +98,18 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingSupplierId) {
+      // "inventory.supplier" es texto libre, no una llave foránea a
+      // suppliers.id — leer el nombre ANTERIOR antes de guardar, para
+      // poder actualizar en cascada los productos que lo referencian si
+      // el nombre cambió (antes quedaban huérfanos con el nombre viejo,
+      // invisibles bajo el filtro de proveedor con el nuevo nombre).
+      const { data: prevSupplier } = await supabase
+        .from("suppliers")
+        .select("name")
+        .eq("id", editingSupplierId)
+        .single();
+      const previousName = prevSupplier?.name;
+
       const { error } = await supabase.from("suppliers").update({
         name,
         contact_name: contactName,
@@ -109,6 +121,17 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
         LoggerService.logError("SuppliersManagerModal", error);
         toast.error(`Error de Supabase: ${error.message || JSON.stringify(error)}`);
       } else {
+        if (previousName && previousName !== name) {
+          const { error: cascadeErr } = await supabase
+            .from("inventory")
+            .update({ supplier: name })
+            .eq("supplier", previousName);
+          if (cascadeErr) {
+            toast.error(
+              `Proveedor actualizado, pero no se pudieron reasignar los productos de "${previousName}" al nuevo nombre. Corrígelos manualmente.`,
+            );
+          }
+        }
         toast.success("Proveedor actualizado.");
         setIsAdding(false);
         setEditingSupplierId(null);

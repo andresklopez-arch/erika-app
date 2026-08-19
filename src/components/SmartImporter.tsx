@@ -418,17 +418,25 @@ export default function SmartImporter({
 
       const dbSuppliersLower = dbSuppliers.map((s) => s.toLowerCase());
 
+      const failedSuppliers: string[] = [];
       for (const sup of uniqueSuppliers) {
         if (!dbSuppliersLower.includes(sup.toLowerCase())) {
-          try {
-            const cleanSup = sup
-              .toLowerCase()
-              .replace(/\b\w/g, (c) => c.toUpperCase());
-            await supabase.from("suppliers").insert({ name: cleanSup });
-          } catch (supErr) {
+          // Supabase-js resuelve la promesa (no la rechaza) aunque venga
+          // error poblado — un try/catch alrededor nunca lo detectaba.
+          const cleanSup = sup
+            .toLowerCase()
+            .replace(/\b\w/g, (c) => c.toUpperCase());
+          const { error: supErr } = await supabase.from("suppliers").insert({ name: cleanSup });
+          if (supErr) {
             console.error("Error al registrar proveedor:", sup, supErr);
+            failedSuppliers.push(cleanSup);
           }
         }
+      }
+      if (failedSuppliers.length > 0) {
+        alert(
+          `⚠️ No se pudieron crear estos proveedores nuevos: ${failedSuppliers.join(", ")}. Los productos importados igual quedarán etiquetados con ese nombre, pero no aparecerán en el listado de Proveedores hasta que los crees manualmente.`,
+        );
       }
 
       // 2. Construir lista de productos finales alineados

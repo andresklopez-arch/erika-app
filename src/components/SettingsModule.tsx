@@ -16,9 +16,17 @@ function parseNumOr(value: string, fallback: number): number {
 export default function SettingsModule() {
   const { currentUser, businessSettings, updateBusinessSettings, bleCharacteristic, setBleCharacteristic } = useAuth();
 
+  // Antes esto exigía siempre role === "admin", ignorando por completo el
+  // permiso granular "configuracion" — un admin podía marcarle a un
+  // empleado el checkbox "⚙️ Configuración" desde Gestión de Personal,
+  // ProtectedRoute lo dejaba entrar y ver todos los formularios, pero
+  // CUALQUIER botón "Guardar" le devolvía "Acceso Denegado" sin ningún
+  // aviso previo. Ahora también se permite si el usuario tiene ese
+  // permiso explícito.
   const checkAdmin = () => {
-    if (currentUser?.role !== "admin") {
-      alert("❌ Acceso Denegado. Esta acción requiere privilegios de Administrador.");
+    const hasAccess = currentUser?.role === "admin" || currentUser?.permissions?.configuracion === true;
+    if (!hasAccess) {
+      alert("❌ Acceso Denegado. Esta acción requiere privilegios de Administrador o el permiso de Configuración.");
       return false;
     }
     return true;
@@ -1482,7 +1490,7 @@ export default function SettingsModule() {
                   if (typeof window !== "undefined") {
                     localStorage.setItem("ERIKA_PRINTER_INVERT_180", val ? "true" : "false");
                   }
-                  if (currentUser?.role === "admin") {
+                  if (currentUser?.role === "admin" || currentUser?.permissions?.configuracion === true) {
                     updateBusinessSettings({
                       config: {
                         printer_invert_180: val,

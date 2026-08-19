@@ -407,7 +407,10 @@ export default function Dashboard() {
       }
 
       // 5. Alertas Criticas e Inventario
-      const { data: inv } = await supabase.from("inventory").select("*");
+      // Antes no filtraba productos eliminados (soft-delete): un producto
+      // dado de baja seguía sumando al "Valor Inventario" y disparando
+      // alertas de stock bajo como si siguiera activo.
+      const { data: inv } = await supabase.from("inventory").select("*").or("deleted.is.null,deleted.eq.false");
       if (inv) {
         // Validacion en tiempo de ejecucion con Zod
         const parsedInv = inv.map((item: any) => {

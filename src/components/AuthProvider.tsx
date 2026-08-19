@@ -165,9 +165,16 @@ export default function AuthProvider({
           : true,
         printer_margin_top_lines: Number(localStorage.getItem("ERIKA_PRINTER_TOP_LINES")) || 0,
         printer_margin_bottom_lines: localStorage.getItem("ERIKA_PRINTER_BOTTOM_LINES") !== null ? Number(localStorage.getItem("ERIKA_PRINTER_BOTTOM_LINES")) : 1,
-        low_stock_threshold: Number(localStorage.getItem("ERIKA_LOW_STOCK_THRESHOLD")) || 5,
-        max_cajero_discount_pct: Number(localStorage.getItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT")) || 5,
-        iva_rate: Number(localStorage.getItem("ERIKA_IVA_RATE")) || 0.16,
+        // localStorage.getItem(...) || default trata un "0" guardado
+        // explícitamente (ej. "ningún cajero puede dar descuento sin PIN")
+        // como si nunca se hubiera capturado, revirtiéndolo al default en
+        // cada carga de página — el mismo bug ya corregido en
+        // SettingsModule.tsx (parseNumOr) no cubría esta hidratación
+        // inicial. Se usa el mismo patrón "!== null" que ya aplica
+        // correctamente printer_margin_bottom_lines arriba.
+        low_stock_threshold: localStorage.getItem("ERIKA_LOW_STOCK_THRESHOLD") !== null ? Number(localStorage.getItem("ERIKA_LOW_STOCK_THRESHOLD")) : 5,
+        max_cajero_discount_pct: localStorage.getItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT") !== null ? Number(localStorage.getItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT")) : 5,
+        iva_rate: localStorage.getItem("ERIKA_IVA_RATE") !== null ? Number(localStorage.getItem("ERIKA_IVA_RATE")) : 0.16,
       };
 
       return {
@@ -283,8 +290,11 @@ export default function AuthProvider({
   };
 
   const updateBusinessSettings = async (newSettings: { target_utility?: number; monthly_goals?: number; config?: Partial<BusinessConfig> }): Promise<boolean> => {
-    if (currentUser?.role !== "admin") {
-      alert("❌ Acceso Denegado. Se requieren privilegios de Administrador para cambiar configuraciones.");
+    // Antes solo role === "admin" podía guardar, ignorando el permiso
+    // granular "configuracion" que un admin puede otorgarle a un
+    // empleado — ese permiso quedaba completamente decorativo.
+    if (currentUser?.role !== "admin" && currentUser?.permissions?.configuracion !== true) {
+      alert("❌ Acceso Denegado. Se requieren privilegios de Administrador o el permiso de Configuración.");
       return false;
     }
 
@@ -364,8 +374,8 @@ export default function AuthProvider({
         localStorage.setItem("ERIKA_PRINTER_TOP_LINES", String(result.settings.config.printer_margin_top_lines ?? 0));
         localStorage.setItem("ERIKA_PRINTER_BOTTOM_LINES", String(result.settings.config.printer_margin_bottom_lines ?? 1));
         localStorage.setItem("ERIKA_THEME", result.settings.config.theme);
-        localStorage.setItem("ERIKA_LOW_STOCK_THRESHOLD", String(result.settings.config.low_stock_threshold || 5));
-        localStorage.setItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT", String(result.settings.config.max_cajero_discount_pct || 5));
+        localStorage.setItem("ERIKA_LOW_STOCK_THRESHOLD", String(result.settings.config.low_stock_threshold ?? 5));
+        localStorage.setItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT", String(result.settings.config.max_cajero_discount_pct ?? 5));
         localStorage.setItem("ERIKA_IVA_RATE", String(result.settings.config.iva_rate ?? 0.16));
         
         return true;
@@ -391,9 +401,20 @@ export default function AuthProvider({
 
     const saved = localStorage.getItem("ERIKA_USER");
     if (saved) {
-      const user = JSON.parse(saved);
-      setCurrentUser(user);
-      setOfflineSessionKey(user.id, user.pin);
+      // Si ERIKA_USER se corrompe (storage lleno, extensión del navegador,
+      // migración de versión), JSON.parse lanzaba una excepción no
+      // controlada dentro de este useEffect y, sin ningún error boundary
+      // global, React desmontaba el árbol completo dejando una pantalla en
+      // blanco sin forma de recuperarse desde la UI. Ahora se trata como
+      // sesión inválida y se limpia, en vez de tumbar toda la app.
+      try {
+        const user = JSON.parse(saved);
+        setCurrentUser(user);
+        setOfflineSessionKey(user.id, user.pin);
+      } catch (e) {
+        console.error("Sesión guardada corrupta, cerrando sesión:", e);
+        localStorage.removeItem("ERIKA_USER");
+      }
     }
     setIsLoading(false);
 
