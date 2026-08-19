@@ -22,31 +22,39 @@ export default function QuotesModule() {
     fetchQuotes();
   }, []);
 
+  // Verifica el PIN capturado contra el usuario actual o la tabla de
+  // personal. Devuelve true si es válido. Compartida por convertToSale y
+  // handleDirectCharge — antes handleDirectCharge no pedía NINGÚN PIN,
+  // evadiendo por completo el control que sí protege al botón "Vender".
+  const verifyStaffPin = async (pass: string) => {
+    if (pass === currentUser?.pin) return true;
+    const { data: staffUser, error: staffError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("pin", pass)
+      .single();
+    return !staffError && !!staffUser;
+  };
+
   const convertToSale = async (quote: any) => {
     const pass = window.prompt(
       "¿Seguro que deseas enviar esta cotización a la Caja para cobrar? (Ingresa tu PIN)",
     );
     if (!pass) return;
-
-    if (pass !== currentUser?.pin) {
-      const { data: staffUser, error: staffError } = await supabase
-        .from("users")
-        .select("id")
-        .eq("pin", pass)
-        .single();
-      if (staffError || !staffUser) {
-        return alert("❌ PIN incorrecto. Operación cancelada.");
-      }
+    if (!(await verifyStaffPin(pass))) {
+      return alert("❌ PIN incorrecto. Operación cancelada.");
     }
 
-    const { error } = await supabase
-      .from("quotes")
-      .update({ status: "converted" })
-      .eq("id", quote.id);
-    if (error) return alert("Error: " + error.message);
+    // Nota: la cotización YA NO se marca "converted" (vendida) aquí. Antes
+    // se marcaba de inmediato al solo enviarla a caja, así que si el
+    // cajero cerraba la pestaña, cancelaba el cobro o la sesión expiraba,
+    // la cotización quedaba permanentemente marcada "Vendido/Pagado" sin
+    // que existiera ninguna venta real. Ahora solo se marca así cuando el
+    // cobro realmente se completa en POSModule (handleCheckoutSubmit).
 
     // Enviar artículos a la caja vía localStorage
     localStorage.setItem("ERIKA_RESTORE_QUOTE", JSON.stringify(quote.items));
+    localStorage.setItem("ERIKA_RESTORE_QUOTE_ID", quote.id);
 
     alert(
       `✅ Cotización de ${quote.customer_name} enviada a caja. Serás redirigido para proceder con el cobro.`,
@@ -55,8 +63,20 @@ export default function QuotesModule() {
   };
 
   const handleDirectCharge = async (quote: any) => {
-    // 1. Guardar artículos en localStorage
+    // Antes esta acción no pedía ningún PIN, a diferencia de "✅ Vender"
+    // (convertToSale) — cualquiera con acceso a la pantalla de Cotizaciones
+    // podía saltarse el control de autorización.
+    const pass = window.prompt(
+      "Ingresa tu PIN para cobrar esta cotización de inmediato:",
+    );
+    if (!pass) return;
+    if (!(await verifyStaffPin(pass))) {
+      return alert("❌ PIN incorrecto. Operación cancelada.");
+    }
+
+    // 1. Guardar artículos y el id de la cotización en localStorage
     localStorage.setItem("ERIKA_RESTORE_QUOTE", JSON.stringify(quote.items));
+    localStorage.setItem("ERIKA_RESTORE_QUOTE_ID", quote.id);
 
     // 2. Guardar id del cliente si existe
     if (quote.customer_id) {
@@ -78,20 +98,11 @@ export default function QuotesModule() {
       }
     }
 
-    // 3. Actualizar el estado del presupuesto a "converted" en supabase
-    try {
-      const { error } = await supabase
-        .from("quotes")
-        .update({ status: "converted" })
-        .eq("id", quote.id);
-      if (error) {
-        console.error("Error al actualizar estado del presupuesto:", error);
-      }
-    } catch (e) {
-      console.error("Error al conectar con la base de datos:", e);
-    }
+    // Nota: igual que en convertToSale, la cotización YA NO se marca
+    // "converted" aquí — eso ahora ocurre solo cuando el cobro se
+    // completa de verdad en POSModule.
 
-    // 4. Redirigir de inmediato al punto de venta (home page /)
+    // 3. Redirigir de inmediato al punto de venta (home page /)
     window.location.href = "/";
   };
 
@@ -172,47 +183,16 @@ export default function QuotesModule() {
     window.open(`https://wa.me/?text=${encodedText}`, "_blank");
   };
 
-  const generateInvoice = async (quote: any) => {
-    // Advanced Facturama Simulation
-    let mockRfc = "";
-
-    // Attempt to auto-fill RFC from customer DB
-    const { data: customer } = await supabase
-      .from("customers")
-      .select("rfc")
-      .eq("name", quote.customer_name)
-      .single();
-    if (customer && customer.rfc) {
-      mockRfc = customer.rfc;
-    } else {
-      mockRfc =
-        window.prompt(
-          "Ingresa el RFC del cliente para generar la factura (CFDI 4.0):",
-        ) || "";
-    }
-
-    if (!mockRfc) return;
-
-    const isConfirmed = window.confirm(
-      `FACTURAMA API (Mock)\nSe timbrará una factura CFDI 4.0 para el RFC: ${mockRfc}\nTotal: $${quote.total.toFixed(2)}\n\n¿Proceder con el timbrado en el SAT?`,
-    );
-    if (!isConfirmed) return;
-
-    // Simulate Network Request to Facturama API
+  // La conexión real con el proveedor de timbrado (Facturama) aún no está
+  // configurada. Antes esta función simulaba un timbrado exitoso (RFC
+  // "verificado" contra un mock, UUID inventado con Math.random(), y
+  // marcaba la cotización como "Facturada"/"converted") sin generar ningún
+  // CFDI real ni enviar nada por correo. Mientras no exista la integración
+  // real, se avisa claramente en vez de fingir que funciona.
+  const generateInvoice = async (_quote: any) => {
     alert(
-      "📡 [Facturama API] Generando Comprobante Fiscal...\nContactando al PAC del SAT...",
+      "⚠️ La facturación electrónica todavía no está disponible: falta configurar la conexión con el proveedor de timbrado (Facturama). Esta función está pendiente de activación.",
     );
-
-    setTimeout(() => {
-      alert(
-        `✅ ¡Timbrado Exitoso!\nUUID: 8F${Math.random().toString(16).slice(2, 10).toUpperCase()}-XXXX-XXXX-XXXX\n\nEl PDF y XML han sido enviados por correo al cliente.`,
-      );
-      supabase
-        .from("quotes")
-        .update({ notes: "Facturada", status: "converted" })
-        .eq("id", quote.id)
-        .then(() => fetchQuotes());
-    }, 1500);
   };
 
   return (

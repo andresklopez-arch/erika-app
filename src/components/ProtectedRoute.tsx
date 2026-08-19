@@ -28,6 +28,12 @@ export default function ProtectedRoute({ children, permission }: ProtectedRouteP
 
   const isAdmin = currentUser.role === "admin";
   const hasPermission = permission.split(',').some(p => currentUser.permissions?.[p.trim()] === true);
+  // "/" (Punto de Venta) ahora también requiere permiso "pos" — antes
+  // cualquier usuario autenticado, sin importar sus permisos, podía
+  // acceder al POS completo por URL directa o con el botón "Home". El
+  // enlace de respaldo de esta pantalla solo debe ofrecerse si el usuario
+  // realmente puede entrar ahí, para no mandarlo a otro callejón sin salida.
+  const canAccessHome = isAdmin || currentUser.permissions?.pos === true;
 
   if (!isAdmin && !hasPermission) {
     return (
@@ -96,6 +102,18 @@ export default function ProtectedRoute({ children, permission }: ProtectedRouteP
             no cuenta con el permiso de <strong>{permission.toUpperCase()}</strong> necesario para ver esta sección.
           </p>
 
+          {!canAccessHome && (
+            <p
+              style={{
+                color: "rgba(255,255,255,0.5)",
+                fontSize: "0.85rem",
+                marginBottom: "20px",
+              }}
+            >
+              Tu cuenta no tiene ningún permiso asignado todavía. Pide a un
+              administrador que te asigne acceso desde Gestión de Personal.
+            </p>
+          )}
           <div
             style={{
               display: "flex",
@@ -103,23 +121,25 @@ export default function ProtectedRoute({ children, permission }: ProtectedRouteP
               justifyContent: "center",
             }}
           >
-            <a
-              href="/"
-              className="btn-primary"
-              style={{
-                textDecoration: "none",
-                display: "inline-block",
-                padding: "12px 24px",
-                fontSize: "0.95rem",
-                borderRadius: "6px",
-                background: "var(--color-primary)",
-                color: "black",
-                fontWeight: "bold",
-                transition: "all 0.3s ease",
-              }}
-            >
-              Ir a Punto de Venta
-            </a>
+            {canAccessHome && (
+              <a
+                href="/"
+                className="btn-primary"
+                style={{
+                  textDecoration: "none",
+                  display: "inline-block",
+                  padding: "12px 24px",
+                  fontSize: "0.95rem",
+                  borderRadius: "6px",
+                  background: "var(--color-primary)",
+                  color: "black",
+                  fontWeight: "bold",
+                  transition: "all 0.3s ease",
+                }}
+              >
+                Ir a Punto de Venta
+              </a>
+            )}
             <button
               onClick={logout}
               className="btn-primary"

@@ -75,26 +75,20 @@ export async function POST(request: Request) {
     };
     */
 
-    // Como este es un prototipo, simulamos un retraso de la API y devolvemos éxito.
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    // Si tuviéramos credenciales reales, haríamos el fetch aquí y devolveríamos el UUID/XML.
-    if (facturamaUser === "tu_usuario_facturama" || !facturamaUser) {
-      // Retornar éxito simulado
-      return NextResponse.json({
-        success: true,
-        message: "Factura timbrada exitosamente (Simulación).",
-        uuid: "12345678-1234-1234-1234-123456789012",
-        satStatus: "Vigente"
-      });
-    }
-
-    // Respuesta si hubieran credenciales reales (placeholder)
-    return NextResponse.json({
-       success: true,
-       message: "¡Conexión exitosa al API de Facturación!",
-       uuid: crypto.randomUUID()
-    });
+    // La integración real con Facturama todavía no está conectada (no hay
+    // credenciales configuradas ni llamada real al API). Antes esta ruta
+    // simulaba un timbrado exitoso (esperaba 1.5s y devolvía un UUID fijo
+    // o aleatorio) y le decía al cliente que su CFDI ya existía y que el
+    // XML/PDF se habían descargado — ninguna factura real se generaba
+    // nunca. Mientras no exista la integración real, se responde con un
+    // error claro en vez de fingir éxito.
+    return NextResponse.json(
+      {
+        error:
+          "La facturación electrónica aún no está disponible: falta configurar la conexión con el proveedor de timbrado (Facturama). Contacta al administrador del sistema.",
+      },
+      { status: 503 },
+    );
 
   } catch (error: any) {
     console.error("Error en facturación:", error);

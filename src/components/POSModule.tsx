@@ -33,6 +33,10 @@ interface Ticket {
   items: POSItem[];
   discountPct: number;
   customerId?: string;
+  // id de la cotización de la que se restauró este carrito (si aplica).
+  // Se usa para marcar la cotización como "converted" (vendida) solo
+  // cuando el cobro realmente se completa aquí, no antes.
+  quoteId?: string;
 }
 
 const levenshtein = (a: string, b: string) => {
@@ -267,6 +271,7 @@ export default function POSModule() {
   const [receiptToPrint, setReceiptToPrint] = useState<any>(null);
   const [pendingOfflineCount, setPendingOfflineCount] = useState(0);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [isCreatingLayaway, setIsCreatingLayaway] = useState(false);
 
   // Estados del Modal del PIN (Sugerencia 2)
   const [showPinModal, setShowPinModal] = useState(false);
@@ -786,17 +791,24 @@ export default function POSModule() {
           try {
              const items = JSON.parse(saved);
              if (items && items.length > 0) {
-                setTickets([{ id: 1, items, discountPct: 0 }]);
+                // Se conserva el id de la cotización de origen: la
+                // cotización se marca "vendida" (converted) solo cuando el
+                // cobro se complete de verdad en handleCheckoutSubmit, no
+                // antes (antes se marcaba "converted" al solo enviarla a
+                // caja, aunque el cajero cancelara o nunca cobrara).
+                const savedQuoteId = localStorage.getItem("ERIKA_RESTORE_QUOTE_ID");
+                setTickets([{ id: 1, items, discountPct: 0, quoteId: savedQuoteId || undefined }]);
                 setActiveTicketId(1);
-                
+
                 // Restablecer cliente si existe
                 const savedCustId = localStorage.getItem("ERIKA_RESTORE_CUSTOMER_ID");
                 if (savedCustId) {
                    setSelectedCustomerId(savedCustId);
                    localStorage.removeItem("ERIKA_RESTORE_CUSTOMER_ID");
                 }
-                
+
                 localStorage.removeItem("ERIKA_RESTORE_QUOTE");
+                localStorage.removeItem("ERIKA_RESTORE_QUOTE_ID");
                 alert("✅ Cotización cargada en la caja exitosamente.");
              }
           } catch(e) {}
@@ -1362,8 +1374,14 @@ export default function POSModule() {
     setIsProcessingPayment(true);
 
     // 3. Validación de Stock Estricta
+    // Los renglones sintéticos (ej. "Descuento por Puntos ERIKA", price
+    // negativo) nunca existen en el catálogo de inventario por diseño —
+    // antes esto los marcaba SIEMPRE como "sin stock", forzando pedir PIN
+    // de administrador en cualquier venta donde el cliente canjeara puntos,
+    // aunque el resto del carrito tuviera stock de sobra.
     if (!isOffline) {
       const itemsExceedingStock = activeTicket.items.filter(item => {
+         if (item.price < 0) return false;
          const invItem = globalCatalog.find(i => i.name === item.name);
          return !invItem || item.qty > invItem.stock;
       });
@@ -1541,7 +1559,16 @@ export default function POSModule() {
               if (customer) {
                  puntosGanados = Math.floor(totalAmt / loyaltyRates.earnRate) * loyaltyRates.earnPoints;
                  if (puntosGanados > 0) {
-                    await supabase.from("customers").update({ points: (customer.points || 0) + puntosGanados }).eq("id", selectedCustomerId);
+                    // Incremento atómico (evita perder puntos si dos ventas
+                    // casi simultáneas al mismo cliente parten del mismo
+                    // valor de "points" cacheado en memoria).
+                    const { error: rpcEarnErr } = await supabase.rpc("increment_customer_points", {
+                      p_customer_id: selectedCustomerId,
+                      p_delta: puntosGanados,
+                    });
+                    if (rpcEarnErr) {
+                       await supabase.from("customers").update({ points: (customer.points || 0) + puntosGanados }).eq("id", selectedCustomerId);
+                    }
                     alert(`⭐ El cliente ganó ${puntosGanados} Erika Puntos.`);
                  }
               }
@@ -1620,11 +1647,27 @@ export default function POSModule() {
         })
       );
 
+      // Si este carrito vino de una cotización, ahora sí se marca como
+      // vendida — recién aquí hubo un cobro real (antes QuotesModule la
+      // marcaba "converted" solo por enviarla a caja, sin esperar a que
+      // el cajero de verdad completara el cobro).
+      if (activeTicket.quoteId) {
+        supabase
+          .from("quotes")
+          .update({ status: "converted" })
+          .eq("id", activeTicket.quoteId)
+          .then(({ error: quoteUpdateError }: { error: any }) => {
+            if (quoteUpdateError) {
+              console.error("No se pudo marcar la cotización como vendida:", quoteUpdateError);
+            }
+          });
+      }
+
       // Proceso de éxito: limpiar tickets y cerrar modal
       setTickets(
         tickets.map((t) =>
           t.id === activeTicketId
-            ? { ...t, items: [], discountPct: 0 }
+            ? { ...t, items: [], discountPct: 0, quoteId: undefined }
             : t
         )
       );
@@ -3486,8 +3529,16 @@ export default function POSModule() {
                    const discountAmount = pointsToRedeem / loyaltyRates.redeemRate;
                    if (discountAmount > finalTotal) return alert("El descuento no puede ser mayor al total de la cuenta.");
 
-                   const { error } = await supabase.from("customers").update({ points: customer.points - pointsToRedeem }).eq("id", customer.id);
-                   if (error) return alert("Error al descontar puntos.");
+                   // Incremento atómico (evita que dos canjes casi
+                   // simultáneos al mismo cliente pierdan puntos entre sí).
+                   const { error: rpcPointsErr } = await supabase.rpc("increment_customer_points", {
+                     p_customer_id: customer.id,
+                     p_delta: -pointsToRedeem,
+                   });
+                   if (rpcPointsErr) {
+                     const { error } = await supabase.from("customers").update({ points: customer.points - pointsToRedeem }).eq("id", customer.id);
+                     if (error) return alert("Error al descontar puntos.");
+                   }
 
                    // Apply as a fixed discount item
                    setTickets(tickets.map(t => {
@@ -3732,6 +3783,7 @@ export default function POSModule() {
           </div>
           <button
             className="btn-primary"
+            disabled={isCreatingLayaway}
             style={{
               width: "100%",
               marginTop: "10px",
@@ -3739,10 +3791,20 @@ export default function POSModule() {
               background: "transparent",
               border: "1px solid #10b981",
               color: "#10b981",
+              opacity: isCreatingLayaway ? 0.6 : 1,
+              cursor: isCreatingLayaway ? "not-allowed" : "pointer",
             }}
             onClick={async () => {
+              // Guarda contra doble clic: sin esto, dos clics rápidos (o
+              // clic + Enter mientras se resuelve el prompt del enganche)
+              // podían crear DOS apartados duplicados y descontar el stock
+              // dos veces para la misma venta.
+              if (isCreatingLayaway) return;
               if (activeTicket.items.length === 0) return alert("El ticket está vacío.");
               if (!selectedCustomerId) return alert("❌ Debes seleccionar un cliente para hacer un Apartado (Layaway).");
+
+              setIsCreatingLayaway(true);
+              try {
 
               const minDownPayment = finalTotal * 0.1;
               const downPayment = parseFloat(window.prompt(`El total es $${finalTotal.toFixed(2)}.\n¿Cuánto dejará de enganche (Mínimo $${minDownPayment.toFixed(2)})?`) || "");
@@ -3755,6 +3817,7 @@ export default function POSModule() {
               // Validación de stock estricta, igual que en el cobro de contado/tarjeta.
               if (!isOffline) {
                 const itemsExceedingStock = activeTicket.items.filter(item => {
+                  if (item.price < 0) return false;
                   const invItem = globalCatalog.find(i => i.name === item.name);
                   return !invItem || item.qty > invItem.stock;
                 });
@@ -3852,7 +3915,10 @@ export default function POSModule() {
                  setSelectedCustomerId("");
                  setTickets(tickets.map(t => t.id === activeTicketId ? { ...t, items: [], discountPct: 0 } : t));
               };
-              makeLayaway();
+              await makeLayaway();
+              } finally {
+                setIsCreatingLayaway(false);
+              }
             }}
           >
             📦 Sistema de Apartado (Layaway)
@@ -4263,7 +4329,16 @@ export default function POSModule() {
                     return alert("❌ La suma de los montos no coincide con el total de la venta.");
                   }
                 }
-                
+
+                // Antes solo se mostraba un aviso visual "Faltan: $X" para
+                // efectivo, pero el botón seguía habilitado y el cobro se
+                // registraba igual con un monto recibido menor al total.
+                if (paymentMethod === "efectivo" && cash < finalTotal - 0.01) {
+                  return alert(
+                    `❌ El efectivo recibido ($${cash.toFixed(2)}) no cubre el total de la venta ($${finalTotal.toFixed(2)}). Faltan $${(finalTotal - cash).toFixed(2)}.`,
+                  );
+                }
+
                 handleCheckoutSubmit(paymentMethod === "mixto" ? "mixto" : paymentMethod as any, cash, card, transfer, paymentReference);
               }}
               style={{

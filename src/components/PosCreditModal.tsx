@@ -53,6 +53,38 @@ export default function PosCreditModal({
     if (isSubmitting) return;
     if (!selectedCustomerId) return alert("Selecciona un cliente.");
     const customer = customers.find((c) => c.id === selectedCustomerId);
+
+    // Validación de stock estricta, igual que en el cobro de contado/tarjeta
+    // (antes la venta a crédito no la tenía en absoluto: se podía vender sin
+    // ninguna autorización productos sin existencias, o llevar el stock a
+    // negativo, algo que en efectivo/tarjeta sí quedaba bloqueado con PIN).
+    const itemsExceedingStock = items.filter((item) => {
+      if (item.price < 0) return false;
+      const invItem = globalCatalog.find((i) => i.name === item.name);
+      return !invItem || item.qty > invItem.stock;
+    });
+    if (itemsExceedingStock.length > 0) {
+      const itemNames = itemsExceedingStock
+        .map(
+          (i) =>
+            `• ${i.name} (Venta: ${i.qty}, Stock: ${globalCatalog.find((cat) => cat.name === i.name)?.stock ?? 0})`,
+        )
+        .join("\n");
+      const stockPin = window.prompt(
+        `⚠️ STOCK INSUFICIENTE\nLos siguientes artículos superan las existencias físicas en inventario:\n${itemNames}\n\nIngresa el PIN de Administrador para autorizar:`,
+      );
+      if (!stockPin) return;
+      const { data: stockAdmin, error: stockAdminErr } = await supabase
+        .from("users")
+        .select("id")
+        .eq("pin", stockPin)
+        .eq("role", "admin")
+        .single();
+      if (stockAdminErr || !stockAdmin) {
+        return alert("❌ PIN incorrecto o sin privilegios de administrador. Venta a crédito cancelada.");
+      }
+    }
+
     if (customer.balance + finalTotal > customer.credit_limit) {
       const pin = window.prompt(
         `🚩 ALERTA ROJA: Límite de crédito excedido. Disponible: $${(customer.credit_limit - customer.balance).toFixed(2)}\n\nIngrese PIN Maestro para autorizar la venta (Sobregiro):`
@@ -85,18 +117,27 @@ export default function PosCreditModal({
 
       if (txError) return alert("Error al cobrar a crédito: " + txError.message);
 
-      const { error: balanceError } = await supabase
-        .from("customers")
-        .update({
-          balance: customer.balance + finalTotal,
-        })
-        .eq("id", customer.id);
+      // Incremento atómico en el servidor (evita que dos ventas a crédito
+      // casi simultáneas al mismo cliente se pisen el saldo entre sí). Si
+      // el RPC aún no está desplegado, se cae al cálculo local anterior.
+      const { error: rpcBalanceErr } = await supabase.rpc("increment_customer_balance", {
+        p_customer_id: customer.id,
+        p_delta: finalTotal,
+      });
+      if (rpcBalanceErr) {
+        const { error: balanceError } = await supabase
+          .from("customers")
+          .update({
+            balance: customer.balance + finalTotal,
+          })
+          .eq("id", customer.id);
 
-      if (balanceError) {
-        return alert(
-          "⚠️ Se registró el cargo pero falló la actualización del saldo del cliente. Revisa manualmente: " +
-            balanceError.message,
-        );
+        if (balanceError) {
+          return alert(
+            "⚠️ Se registró el cargo pero falló la actualización del saldo del cliente. Revisa manualmente: " +
+              balanceError.message,
+          );
+        }
       }
 
       // Descontar existencias, igual que en ventas de contado/tarjeta.

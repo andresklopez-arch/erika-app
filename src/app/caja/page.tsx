@@ -146,12 +146,24 @@ export default function CajaModule() {
 
   const closeRegister = async () => {
     const countedTotal = calculateTotalCounted();
-    
-    // Biometric / PIN check
-    const biometricAuth = window.confirm("👤 [AUTORIZACIÓN BIOMÉTRICA]\n\nPor favor, coloque su huella dactilar en el lector para autorizar el Cierre de Caja Ciego.");
-    if (!biometricAuth) {
-        const pin = window.prompt("🔑 Huella no detectada. Ingrese PIN Maestro de respaldo:");
-        if (pin !== "admin123") return alert("Acceso Denegado. Solo el administrador puede realizar el cierre.");
+
+    // Autorización de Administrador para Cierre de Caja Ciego. Antes esto
+    // era un window.confirm() (cualquiera podía dar clic en "Aceptar") con
+    // un PIN de respaldo hardcodeado ("admin123") visible en el bundle del
+    // navegador. Ahora se valida contra la tabla real de usuarios, igual
+    // que el resto de autorizaciones de administrador en la app.
+    const pin = window.prompt(
+      "🔑 [AUTORIZACIÓN REQUERIDA]\n\nIngresa el PIN de Administrador para autorizar el Cierre de Caja Ciego:",
+    );
+    if (!pin) return;
+    const { data: adminCheck } = await supabase
+      .from("users")
+      .select("id")
+      .eq("role", "admin")
+      .eq("pin", pin)
+      .single();
+    if (!adminCheck) {
+      return alert("❌ Acceso Denegado. PIN inválido o sin privilegios de administrador.");
     }
 
     interface TransactionItem {

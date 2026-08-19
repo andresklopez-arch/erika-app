@@ -194,15 +194,30 @@ export default function CustomersModule() {
     if (isNaN(payment) || payment <= 0) return;
     if (payment > layaway.balance) return alert("El abono no puede superar el saldo pendiente.");
 
-    const newBalance = layaway.balance - payment;
+    // Decremento atómico en el servidor (evita que dos abonos casi
+    // simultáneos al mismo apartado se pisen el saldo entre sí).
+    let newBalance: number;
+    const { data: rpcBalance, error: rpcErr } = await supabase.rpc("increment_layaway_balance", {
+      p_layaway_id: layaway.id,
+      p_delta: -payment,
+    });
+    if (rpcErr) {
+      newBalance = layaway.balance - payment;
+      const { error } = await supabase
+        .from("layaways")
+        .update({ balance: newBalance })
+        .eq("id", layaway.id);
+      if (error) return alert("Error al registrar el abono.");
+    } else {
+      newBalance = Number(rpcBalance);
+    }
+
     const isCompleted = newBalance <= 0.01;
-
-    const { error } = await supabase
+    const { error: statusError } = await supabase
       .from("layaways")
-      .update({ balance: newBalance, status: isCompleted ? "completed" : "pending" })
+      .update({ status: isCompleted ? "completed" : "pending" })
       .eq("id", layaway.id);
-
-    if (error) return alert("Error al registrar el abono.");
+    if (statusError) return alert("El abono se registró, pero no se pudo actualizar el estado del apartado.");
 
     // Print Thermal Ticket for Abono
     const ticketWindow = window.open("", "_blank", "width=300,height=500");
@@ -254,16 +269,31 @@ export default function CustomersModule() {
   const handleLayawayCancel = async (layaway: any) => {
     if (!window.confirm("¿Seguro que deseas cancelar este apartado? La mercancía regresará al inventario físico.")) return;
     
+    const failedItems: string[] = [];
     for (const item of layaway.items) {
-      const { data: currentStock } = await supabase.from("inventory").select("stock").eq("name", item.name).single();
-      if (currentStock) {
-        await supabase.from("inventory").update({ stock: currentStock.stock + item.qty }).eq("name", item.name);
+      // Buscar primero por código (SKU) si el renglón lo trae — más
+      // estable que el nombre, que puede haber cambiado desde que se creó
+      // el apartado (antes esto se buscaba solo por nombre y fallaba en
+      // silencio, dejando la restauración de ese artículo sin ocurrir).
+      let matchQuery = item.code
+        ? supabase.from("inventory").select("id, stock").eq("code", item.code)
+        : supabase.from("inventory").select("id, stock").eq("name", item.name);
+      const { data: currentStock, error: findError } = await matchQuery.single();
+      if (findError || !currentStock) {
+        failedItems.push(item.name);
+        continue;
       }
+      const { error: updateError } = await supabase.from("inventory").update({ stock: currentStock.stock + item.qty }).eq("id", currentStock.id);
+      if (updateError) failedItems.push(item.name);
     }
 
     const { error } = await supabase.from("layaways").update({ status: "cancelled" }).eq("id", layaway.id);
     if (error) return alert("Error al cancelar.");
-    alert("❌ Apartado cancelado. Productos devueltos.");
+    if (failedItems.length > 0) {
+      alert(`⚠️ Apartado cancelado, pero NO se pudo restaurar el stock de: ${failedItems.join(", ")}. Ajusta el inventario manualmente.`);
+    } else {
+      alert("❌ Apartado cancelado. Productos devueltos.");
+    }
     fetchCustomerLayaways(selectedCustomerId, layawaysLimit);
   };
 
@@ -362,13 +392,13 @@ export default function CustomersModule() {
       }
     }
 
-    const { error } = await supabase
-      .from("quotes")
-      .update({ status: "converted" })
-      .eq("id", quote.id);
-    if (error) return alert("Error: " + error.message);
-
+    // La cotización YA NO se marca "converted" (vendida) aquí — antes se
+    // marcaba de inmediato al solo enviarla a caja, así que si el cajero
+    // cancelaba el cobro o cerraba la pestaña, quedaba permanentemente
+    // marcada "Pagado" sin que existiera ninguna venta real. Ahora solo se
+    // marca así cuando el cobro realmente se completa en POSModule.
     localStorage.setItem("ERIKA_RESTORE_QUOTE", JSON.stringify(quote.items));
+    localStorage.setItem("ERIKA_RESTORE_QUOTE_ID", quote.id);
 
     alert(
       `✅ Cotización de ${quote.customer_name} enviada a caja. Serás redirigido para proceder con el cobro.`,
@@ -449,19 +479,36 @@ export default function CustomersModule() {
 
     if (txError) return alert("Error: " + txError.message);
 
-    // Update balance (subtracting because payment reduces the debt)
-    await supabase
-      .from("customers")
-      .update({
-        balance: customer.balance - amount,
-      })
-      .eq("id", customer.id);
+    // Decremento atómico en el servidor (evita perder abonos si dos pagos
+    // casi simultáneos al mismo cliente se pisan entre sí) y SÍ se
+    // verifica el error — antes esta escritura no revisaba el resultado,
+    // así que si fallaba el usuario veía "abono registrado exitosamente"
+    // aunque el saldo del cliente nunca se hubiera actualizado.
+    const { error: balanceError, data: rpcBalance } = await supabase.rpc("increment_customer_balance", {
+      p_customer_id: customer.id,
+      p_delta: -amount,
+    });
+    let effectiveNewBalance = customer.balance - amount;
+    if (balanceError) {
+      const { error: fallbackError } = await supabase
+        .from("customers")
+        .update({ balance: effectiveNewBalance })
+        .eq("id", customer.id);
+      if (fallbackError) {
+        return alert(
+          "⚠️ Se registró el abono en el historial, pero falló la actualización del saldo del cliente. Revisa manualmente: " +
+            fallbackError.message,
+        );
+      }
+    } else {
+      effectiveNewBalance = Number(rpcBalance);
+    }
 
     alert(`✅ Abono de $${amount.toFixed(2)} registrado exitosamente.`);
     
     if (customer.phone) {
       if (confirm(`¿Deseas enviar un recibo por WhatsApp a ${customer.phone}?`)) {
-        const newBalance = customer.balance - amount;
+        const newBalance = effectiveNewBalance;
         const msg = `Hola ${customer.name}, confirmamos de recibido tu abono de $${amount.toFixed(2)}. Tu nuevo saldo es de $${newBalance.toFixed(2)}. ¡Gracias por tu pago!`;
         const waLink = `https://wa.me/${customer.phone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`;
         window.open(waLink, "_blank");

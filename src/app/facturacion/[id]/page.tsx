@@ -184,28 +184,28 @@ export default function FacturacionExpress() {
            </div>
         </div>
 
-        <form onSubmit={handleFacturar} style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-          <div>
-            <label style={{ display: "block", marginBottom: "5px", fontSize: "14px", color: "#475569", fontWeight: "bold" }}>RFC *</label>
-            <input required type="text" placeholder="ABCD123456EF7" value={rfc} onChange={e => setRfc(e.target.value.toUpperCase())} style={{ width: "100%", padding: "10px", border: "1px solid #cbd5e1", borderRadius: "5px", boxSizing: "border-box" }} />
-          </div>
-          <div>
-            <label style={{ display: "block", marginBottom: "5px", fontSize: "14px", color: "#475569", fontWeight: "bold" }}>Nombre o Razón Social</label>
-            <input required type="text" placeholder="Ej. Juan Pérez" value={name} onChange={e => setName(e.target.value)} style={{ width: "100%", padding: "10px", border: "1px solid #cbd5e1", borderRadius: "5px", boxSizing: "border-box" }} />
-          </div>
-          <div>
-            <label style={{ display: "block", marginBottom: "5px", fontSize: "14px", color: "#475569", fontWeight: "bold" }}>Uso de CFDI</label>
-            <select value={uso} onChange={e => setUso(e.target.value)} style={{ width: "100%", padding: "10px", border: "1px solid #cbd5e1", borderRadius: "5px", background: "white", boxSizing: "border-box" }}>
-               <option value="G03">G03 - Gastos en general</option>
-               <option value="G01">G01 - Adquisición de mercancías</option>
-               <option value="P01">P01 - Por definir</option>
-            </select>
-          </div>
-          
-          <button type="submit" disabled={status === "loading"} style={{ marginTop: "10px", padding: "12px", background: "#10b981", color: "white", border: "none", borderRadius: "5px", fontSize: "16px", fontWeight: "bold", cursor: "pointer" }}>
-            {status === "loading" ? "Timbrando Factura..." : "Generar Factura Electrónica"}
-          </button>
-        </form>
+        {/* La conexión real con el proveedor de timbrado (Facturama) aún no
+            está configurada. Antes este formulario dejaba capturar RFC/datos
+            y simulaba un timbrado exitoso sin generar ningún CFDI real —
+            mientras no exista la integración real, se avisa claramente en
+            vez de fingir que la facturación funciona. */}
+        <div
+          style={{
+            background: "#fffbeb",
+            border: "1px solid #fbbf24",
+            borderRadius: "8px",
+            padding: "18px",
+            textAlign: "center",
+          }}
+        >
+          <p style={{ margin: "0 0 6px 0", fontSize: "15px", fontWeight: "bold", color: "#92400e" }}>
+            ⚠️ Facturación electrónica no disponible por el momento
+          </p>
+          <p style={{ margin: 0, fontSize: "13px", color: "#78350f" }}>
+            Estamos terminando de configurar la conexión con nuestro proveedor de timbrado fiscal.
+            Guarda tu ticket (#{ticketId}) y vuelve a intentarlo más tarde, o contacta directamente a la tienda para tu factura.
+          </p>
+        </div>
       </div>
     </div>
   );

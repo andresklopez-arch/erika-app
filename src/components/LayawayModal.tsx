@@ -22,15 +22,31 @@ export default function LayawayModal({ show, onClose }: { show: boolean; onClose
     if (isNaN(payment) || payment <= 0) return;
     if (payment > layaway.balance) return alert("El abono no puede superar el saldo pendiente.");
 
-    const newBalance = layaway.balance - payment;
+    // Decremento atómico en el servidor (evita que dos abonos casi
+    // simultáneos al mismo apartado se pisen el saldo entre sí — antes se
+    // calculaba en el cliente a partir del balance ya cargado en pantalla).
+    let newBalance: number;
+    const { data: rpcBalance, error: rpcErr } = await supabase.rpc("increment_layaway_balance", {
+      p_layaway_id: layaway.id,
+      p_delta: -payment,
+    });
+    if (rpcErr) {
+      newBalance = layaway.balance - payment;
+      const { error } = await supabase
+        .from("layaways")
+        .update({ balance: newBalance })
+        .eq("id", layaway.id);
+      if (error) return alert("Error al registrar el abono.");
+    } else {
+      newBalance = Number(rpcBalance);
+    }
+
     const isCompleted = newBalance <= 0.01; // floating point safe
-
-    const { error } = await supabase
+    const { error: statusError } = await supabase
       .from("layaways")
-      .update({ balance: newBalance, status: isCompleted ? "completed" : "pending" })
+      .update({ status: isCompleted ? "completed" : "pending" })
       .eq("id", layaway.id);
-
-    if (error) return alert("Error al registrar el abono.");
+    if (statusError) return alert("El abono se registró, pero no se pudo actualizar el estado del apartado.");
     
     // Print Thermal Ticket for Abono
     const ticketWindow = window.open("", "_blank", "width=300,height=500");
@@ -84,13 +100,19 @@ export default function LayawayModal({ show, onClose }: { show: boolean; onClose
 
     const failedItems: string[] = [];
     for (const item of layaway.items) {
-      // Find current stock by name
-      const { data: currentStock, error: findError } = await supabase.from("inventory").select("stock").eq("name", item.name).single();
+      // Buscar primero por código (SKU) si el renglón lo trae — es un
+      // identificador mucho más estable que el nombre: si el producto se
+      // renombra después de crear el apartado, la búsqueda por nombre deja
+      // de encontrarlo y el stock no se restaura al cancelar.
+      let matchQuery = item.code
+        ? supabase.from("inventory").select("id, stock").eq("code", item.code)
+        : supabase.from("inventory").select("id, stock").eq("name", item.name);
+      const { data: currentStock, error: findError } = await matchQuery.single();
       if (findError || !currentStock) {
         failedItems.push(item.name);
         continue;
       }
-      const { error: updateError } = await supabase.from("inventory").update({ stock: currentStock.stock + item.qty }).eq("name", item.name);
+      const { error: updateError } = await supabase.from("inventory").update({ stock: currentStock.stock + item.qty }).eq("id", currentStock.id);
       if (updateError) {
         failedItems.push(item.name);
       }
