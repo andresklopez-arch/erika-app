@@ -926,14 +926,7 @@ export default function POSModule() {
 
         const matched = globalCatalog.find((c) => c.code === scannedCode);
         if (matched) {
-          addToCart(
-            matched.name,
-            matched.price,
-            "pz",
-            matched.cost,
-            1,
-            matched.image_url,
-          );
+          addProductToCart(matched);
           let msg = `Escaneado: ${matched.name}.`;
           if (matched.stock <= matched.minStock)
             msg += ` Alerta: Quedan pocas unidades en bodega.`;
@@ -981,7 +974,7 @@ export default function POSModule() {
           });
         }
       } else {
-        addToCart(c.name, c.price, "pz", c.cost, 1, c.image_url);
+        addProductToCart(c);
       }
       setSearchInput("");
       setShowAutocomplete(false);
@@ -1079,6 +1072,31 @@ export default function POSModule() {
         return t;
       }),
     );
+  };
+
+  const SALE_UNIT_SHORT: Record<string, string> = { pieza: "pz", kg: "kg", g: "g", m: "m", l: "L" };
+
+  // Punto único donde se agrega un producto del catálogo al carrito. Antes
+  // cada lugar de la UI (búsqueda, escáner, sugerencias) llamaba a addToCart
+  // con "pz" y cantidad=1 fijos sin importar el producto, así que no había
+  // forma de vender por peso/longitud/volumen ni de capturar una cantidad
+  // fraccionaria (ej. 0.25 kg, 1.5 m) — la única forma de "agregar más" era
+  // el stepper +/-1 del carrito, que tampoco acepta decimales.
+  const addProductToCart = (product: any) => {
+    const saleUnit = product.sale_unit || "pieza";
+    if (saleUnit === "pieza") {
+      addToCart(product.name, product.price, "pz", product.cost, 1, product.image_url);
+      return;
+    }
+    const unitLabel = SALE_UNIT_SHORT[saleUnit] || saleUnit;
+    const input = window.prompt(`Cantidad en ${unitLabel} para "${product.name}":`, "1");
+    if (input === null) return;
+    const qty = parseFloat(input.replace(",", "."));
+    if (!qty || qty <= 0) {
+      alert("⚠️ Cantidad inválida.");
+      return;
+    }
+    addToCart(product.name, product.price, unitLabel, product.cost, qty, product.image_url);
   };
 
   const updateItemQty = (itemId: string, newQty: number) => {
@@ -1934,8 +1952,11 @@ export default function POSModule() {
       items.forEach((item: any) => {
         const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
         const itemTotal = `${Math.round(p * item.qty)}`;
-        const nameText = `${item.qty}x ${item.name}`;
-        
+        // Para productos por peso/longitud/volumen, "0.25x" es confuso —
+        // se muestra la unidad real (ej. "0.25 kg") en vez del prefijo "x".
+        const qtyLabel = item.unit && item.unit !== "pz" ? `${item.qty} ${item.unit}` : `${item.qty}x`;
+        const nameText = `${qtyLabel} ${item.name}`;
+
         const wrappedLines: string[] = [];
         let currentLine = "";
         const words = nameText.split(" ");
@@ -2022,8 +2043,11 @@ export default function POSModule() {
       items.forEach((item: any) => {
         const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
         const itemTotal = `${Math.round(p * item.qty)}`;
-        const nameText = `${item.qty}x ${item.name}`;
-        
+        // Para productos por peso/longitud/volumen, "0.25x" es confuso —
+        // se muestra la unidad real (ej. "0.25 kg") en vez del prefijo "x".
+        const qtyLabel = item.unit && item.unit !== "pz" ? `${item.qty} ${item.unit}` : `${item.qty}x`;
+        const nameText = `${qtyLabel} ${item.name}`;
+
         const wrappedLines: string[] = [];
         let currentLine = "";
         const words = nameText.split(" ");
@@ -2308,7 +2332,7 @@ export default function POSModule() {
         const p = (getItemFinalPrice(i, wholesaleRules) * increaseFactor);
         return `
         <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
-          <span>${i.qty}x ${i.name} ${(i.discountPct || 0) > 0 ? `(-${i.discountPct}%)` : ''}</span>
+          <span>${i.unit && i.unit !== "pz" ? `${i.qty} ${i.unit}` : `${i.qty}x`} ${i.name} ${(i.discountPct || 0) > 0 ? `(-${i.discountPct}%)` : ''}</span>
           <span>${Math.round(p * i.qty)}</span>
         </div>`;
       }).join("");
@@ -2425,7 +2449,7 @@ export default function POSModule() {
         const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
         return `
         <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-          <div style="flex: 2;">${item.qty}x ${item.name}</div>
+          <div style="flex: 2;">${item.unit && item.unit !== "pz" ? `${item.qty} ${item.unit}` : `${item.qty}x`} ${item.name}</div>
           <div style="flex: 1; text-align: right;">${Math.round(p * item.qty)}</div>
         </div>`;
       }).join("");
@@ -2714,14 +2738,7 @@ export default function POSModule() {
             (c) => c.location === loc || c.code === scanCode,
           );
           if (matched) {
-            addToCart(
-              matched.name,
-              matched.price,
-              "pz",
-              matched.cost,
-              1,
-              matched.image_url,
-            );
+            addProductToCart(matched);
             let msg = `Visión detectada. ${matched.name} agregado.`;
             if (matched.stock <= matched.minStock)
               msg += ` Alerta: Quedan pocas unidades en bodega.`;
@@ -2908,7 +2925,7 @@ export default function POSModule() {
                                     }
                                   }
                                 } else {
-                                  addToCart(c.name, c.price, "pz", c.cost, 1, c.image_url);
+                                  addProductToCart(c);
                                 }
                                 setSearchInput("");
                                 setShowAutocomplete(false);
@@ -2984,9 +3001,7 @@ export default function POSModule() {
                 key={c.id}
                 className="btn-primary"
                 style={{ background: "rgba(255,255,255,0.05)" }}
-                onClick={() =>
-                  addToCart(c.name, c.price, "pz", c.cost, 1, c.image_url)
-                }
+                onClick={() => addProductToCart(c)}
               >
                 [{i + 1}] {c.name.substring(0, 15)}...
               </button>
@@ -3027,16 +3042,7 @@ export default function POSModule() {
                 <button
                   className="btn-primary"
                   style={{ padding: "4px 8px", fontSize: "0.8rem" }}
-                  onClick={() =>
-                    addToCart(
-                      sug.name,
-                      sug.price,
-                      "pz",
-                      sug.cost,
-                      1,
-                      sug.image_url,
-                    )
-                  }
+                  onClick={() => addProductToCart(sug)}
                 >
                   + Añadir
                 </button>
@@ -3259,7 +3265,22 @@ export default function POSModule() {
                     >
                       -
                     </button>
-                    <span>
+                    <span
+                      onClick={() => {
+                        // El stepper +/- solo mueve de 1 en 1 — para productos
+                        // que no se venden por pieza (kg, m, L) se necesita
+                        // poder capturar una cantidad exacta con decimales
+                        // (ej. 0.25 kg), no solo sumar/restar unidades enteras.
+                        if (item.unit === "pz") return;
+                        const input = window.prompt(`Cantidad exacta (${item.unit}) para "${item.name}":`, String(item.qty));
+                        if (input === null) return;
+                        const qty = parseFloat(input.replace(",", "."));
+                        if (!qty || qty <= 0) return alert("⚠️ Cantidad inválida.");
+                        updateItemQty(item.id, qty);
+                      }}
+                      style={{ cursor: item.unit === "pz" ? "default" : "pointer", textDecoration: item.unit === "pz" ? "none" : "underline dotted" }}
+                      title={item.unit === "pz" ? undefined : "Clic para capturar cantidad exacta"}
+                    >
                       {item.qty} {item.unit}
                     </span>
                     {hasInsufficientStock && (
@@ -3815,7 +3836,7 @@ export default function POSModule() {
                        } else {
                           const product = matches[0];
                           const qtyStr = window.prompt(`¿Cuántas unidades de "${product.name}" regresan al inventario?`, "1");
-                          const qty = parseInt(qtyStr || "", 10);
+                          const qty = parseFloat((qtyStr || "").replace(",", "."));
                           if (!isNaN(qty) && qty > 0) {
                              const { error: rpcErr } = await supabase.rpc("reduce_inventory_stock", {
                                 items: [{ id: product.id, qty: -qty }],

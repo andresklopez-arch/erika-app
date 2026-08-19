@@ -106,7 +106,16 @@ export interface InventoryItem {
   discount_pct?: number;
   discount_start_at?: string | null;
   discount_end_at?: string | null;
+  sale_unit?: "pieza" | "kg" | "g" | "m" | "l";
 }
+
+export const SALE_UNIT_LABELS: Record<string, string> = {
+  pieza: "Pieza",
+  kg: "Kilogramo (kg)",
+  g: "Gramo (g)",
+  m: "Metro (m)",
+  l: "Litro (L)",
+};
 
 export default function InventoryModule() {
   const { currentUser } = useAuth();
@@ -266,6 +275,7 @@ export default function InventoryModule() {
   const [newProductCost, setNewProductCost] = useState("");
   const [newProductPrice, setNewProductPrice] = useState("");
   const [newProductStock, setNewProductStock] = useState("1");
+  const [newProductUnit, setNewProductUnit] = useState("pieza");
 
   useEffect(() => {
     if (createParam) {
@@ -278,7 +288,9 @@ export default function InventoryModule() {
     if (!newProductName) return alert("Nombre es requerido");
     const c = parseFloat(newProductCost) || 0;
     const p = parseFloat(newProductPrice) || 0;
-    const s = parseInt(newProductStock) || 0;
+    // parseFloat (no parseInt): productos vendidos por peso/longitud/volumen
+    // necesitan existencias fraccionarias (ej. 0.25 kg, 1.5 m).
+    const s = parseFloat(newProductStock) || 0;
     // Se distingue "el usuario dejó el precio vacío" (autoprecio) de "el usuario
     // escribió 0 a propósito" (artículo de regalo/muestra); antes `p > 0` trataba
     // ambos casos igual y sobrescribía cualquier 0 explícito con costo x 1.5.
@@ -309,7 +321,8 @@ export default function InventoryModule() {
       minStock: 5,
       location: "Pendiente",
       supplier: "Pendiente",
-      autoPriced: !priceWasProvided
+      autoPriced: !priceWasProvided,
+      sale_unit: newProductUnit
     });
 
     if (error) {
@@ -318,6 +331,7 @@ export default function InventoryModule() {
 
     alert("✅ Producto creado con éxito");
     setShowCreateModal(false);
+    setNewProductUnit("pieza");
     fetchInventory(0, debouncedSearchQuery, true, true);
     loadAllItems();
     setPage(0);
@@ -865,7 +879,11 @@ export default function InventoryModule() {
     
     // Type casting and validation (SUGERENCIA 1: Validación preventiva de valores negativos)
     if (field === "stock") {
-      finalValue = parseInt(value);
+      // parseFloat (no parseInt): productos vendidos por peso/longitud/
+      // volumen necesitan existencias fraccionarias (ej. 0.25 kg) - antes
+      // esto truncaba cualquier decimal a 0 en cuanto se editaba el stock
+      // manualmente desde esta celda.
+      finalValue = parseFloat(value);
       if (isNaN(finalValue)) finalValue = 0;
       if (finalValue < 0) {
         alert("⚠️ El stock no puede ser un número negativo.");
@@ -1171,6 +1189,34 @@ export default function InventoryModule() {
         );
       }
 
+      if (field === "sale_unit") {
+        return (
+          <select
+            value={editValue || "pieza"}
+            onChange={(e) => {
+              setEditValue(e.target.value);
+              handleUpdateField(item.id, "sale_unit", e.target.value);
+            }}
+            onBlur={() => setEditingCell(null)}
+            autoFocus
+            style={{
+              width: "100%",
+              padding: "6px 10px",
+              borderRadius: "6px",
+              border: "1px solid var(--color-primary)",
+              background: "rgba(0, 0, 0, 0.85)",
+              color: "white",
+              fontSize: "0.85rem",
+              outline: "none"
+            }}
+          >
+            {Object.entries(SALE_UNIT_LABELS).map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
+          </select>
+        );
+      }
+
       return (
         <input
           type={type}
@@ -1342,6 +1388,8 @@ export default function InventoryModule() {
           `$${Number(item.cost).toFixed(2)}`
         ) : field === "price" ? (
           `$${Number(item.price).toFixed(2)}`
+        ) : field === "sale_unit" ? (
+          SALE_UNIT_LABELS[item.sale_unit || "pieza"] || item.sale_unit
         ) : (
           value
         )}
@@ -2301,6 +2349,7 @@ export default function InventoryModule() {
                 {renderHeader("Proveedor", "supplier")}
                 {renderHeader("Ubicación y Códigos", "location")}
                 {renderHeader("Stock", "stock")}
+                {renderHeader("Unidad", "sale_unit")}
                 {renderHeader("Costo Prov.", "cost")}
                 {renderHeader("Precio Venta", "price")}
                 {renderHeader("Descuento (%)", "discount_pct")}
@@ -2355,6 +2404,9 @@ export default function InventoryModule() {
                       }}
                     >
                       {renderEditableCell(item, "stock", "number", true, item.stock <= item.minStock ? "#ef4444" : undefined, rowIndex)}
+                    </td>
+                    <td style={{ padding: "15px" }}>
+                      {renderEditableCell(item, "sale_unit", "text", false, undefined, rowIndex)}
                     </td>
                     <td style={{ padding: "15px" }}>
                       {renderEditableCell(item, "cost", "number", false, undefined, rowIndex)}
@@ -2789,8 +2841,20 @@ export default function InventoryModule() {
                 </div>
               </div>
 
-              <label style={{ fontSize: "0.85rem" }}>Stock Inicial</label>
-              <input type="number" value={newProductStock} onChange={e => setNewProductStock(e.target.value)} style={{ padding: "10px", borderRadius: "5px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }} />
+              <div style={{ display: "flex", gap: "10px" }}>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                  <label style={{ fontSize: "0.85rem" }}>Stock Inicial</label>
+                  <input type="number" step="any" value={newProductStock} onChange={e => setNewProductStock(e.target.value)} style={{ padding: "10px", borderRadius: "5px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }} />
+                </div>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                  <label style={{ fontSize: "0.85rem" }}>Se vende por...</label>
+                  <select value={newProductUnit} onChange={e => setNewProductUnit(e.target.value)} style={{ padding: "10px", borderRadius: "5px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white" }}>
+                    {Object.entries(SALE_UNIT_LABELS).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
               <button onClick={handleCreateProduct} className="btn-primary" style={{ marginTop: "15px" }}>Guardar Producto</button>
             </div>
