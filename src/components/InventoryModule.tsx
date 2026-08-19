@@ -159,6 +159,7 @@ export default function InventoryModule() {
 
   const [dbSuppliers, setDbSuppliers] = useState<string[]>([]);
   const [selectedSupplierFilter, setSelectedSupplierFilter] = useState<string>("");
+  const [selectedUnitFilter, setSelectedUnitFilter] = useState<string>("");
   const [showOnlyDiscounts, setShowOnlyDiscounts] = useState<boolean>(false);
   const [sortColumn, setSortColumn] = useState<string>("name");
   const [sortAscending, setSortAscending] = useState<boolean>(true);
@@ -407,6 +408,9 @@ export default function InventoryModule() {
 
         if (selectedSupplierFilter) {
           q = q.eq("supplier", selectedSupplierFilter);
+        }
+        if (selectedUnitFilter) {
+          q = q.eq("sale_unit", selectedUnitFilter);
         }
         if (showOnlyDiscounts) {
           q = q.gt("discount_pct", 0);
@@ -1059,6 +1063,10 @@ export default function InventoryModule() {
       result = result.filter((i) => i.supplier === selectedSupplierFilter);
     }
 
+    if (selectedUnitFilter) {
+      result = result.filter((i) => (i.sale_unit || "pieza") === selectedUnitFilter);
+    }
+
     const cleanQuery = debouncedSearchQuery.trim();
     if (cleanQuery) {
       const tokens = normalizeString(cleanQuery).split(/\s+/).filter(Boolean);
@@ -1488,7 +1496,7 @@ export default function InventoryModule() {
       setPage(0);
       fetchInventory(0, debouncedSearchQuery, true, true);
     }
-  }, [mounted, debouncedSearchQuery, selectedSupplierFilter, showOnlyDiscounts, sortColumn, sortAscending]);
+  }, [mounted, debouncedSearchQuery, selectedSupplierFilter, selectedUnitFilter, showOnlyDiscounts, sortColumn, sortAscending]);
 
   const loadNextPage = () => {
     if (isLoadingMore || !hasMore) return;
@@ -2125,6 +2133,51 @@ export default function InventoryModule() {
               <button
                 onClick={() => setSelectedSupplierFilter("")}
                 title="Limpiar filtro de proveedor"
+                style={{
+                  background: "rgba(239, 68, 68, 0.15)",
+                  border: "1px solid rgba(239, 68, 68, 0.3)",
+                  color: "#ef4444",
+                  padding: "11px 13px",
+                  borderRadius: "10px",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                  transition: "background 0.2s"
+                }}
+              >
+                ✖
+              </button>
+            )}
+          </div>
+
+          {/* FILTRO DE UNIDAD DE VENTA */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <select
+              value={selectedUnitFilter}
+              onChange={(e) => setSelectedUnitFilter(e.target.value)}
+              style={{
+                padding: "12px 15px",
+                borderRadius: "10px",
+                border: "1px solid var(--glass-border)",
+                background: "rgba(0, 0, 0, 0.3)",
+                color: selectedUnitFilter ? "#6ee7b7" : "white",
+                fontSize: "0.9rem",
+                outline: "none",
+                cursor: "pointer",
+                fontWeight: selectedUnitFilter ? "600" : "normal",
+                transition: "border-color 0.2s"
+              }}
+            >
+              <option value="" style={{ background: "#18181b" }}>⚖️ Todas las Unidades</option>
+              {Object.entries(SALE_UNIT_LABELS).map(([key, label]) => (
+                <option key={key} value={key} style={{ background: "#18181b" }}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            {selectedUnitFilter && (
+              <button
+                onClick={() => setSelectedUnitFilter("")}
+                title="Limpiar filtro de unidad"
                 style={{
                   background: "rgba(239, 68, 68, 0.15)",
                   border: "1px solid rgba(239, 68, 68, 0.3)",
