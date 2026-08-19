@@ -25,25 +25,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1. Buscar en user_credentials (ruta correcta, post-migración)
     const { data: cred } = await supabaseAdmin
       .from("user_credentials")
       .select("user_id")
       .eq("pin", pin)
       .maybeSingle();
 
-    let userId = cred?.user_id;
-
-    // 2. Respaldo: si la migración de PINes aún no se ha ejecutado en esta
-    //    base de datos, la columna `users.pin` puede seguir existiendo.
-    if (!userId) {
-      const { data: legacyUser } = await supabaseAdmin
-        .from("users")
-        .select("id")
-        .eq("pin", pin)
-        .maybeSingle();
-      userId = legacyUser?.id;
-    }
+    const userId = cred?.user_id;
 
     if (!userId) {
       recordFailedAttempt(rateLimitKey);

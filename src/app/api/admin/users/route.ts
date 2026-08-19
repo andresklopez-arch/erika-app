@@ -23,15 +23,14 @@ function getHelpfulErrorMessage(dbError: any, action: "crear" | "actualizar"): s
 }
 
 // Escribe el PIN en user_credentials (tabla protegida, sin acceso desde
-// ningún cliente). Si la tabla todavía no existe (migración no corrida),
-// se cae a escribirlo en users.pin como respaldo temporal.
+// ningún cliente). `users.pin` ya no existe (migración confirmada), así
+// que un error aquí debe reportarse — antes se ignoraba silenciosamente y
+// el admin creía que el PIN se había guardado cuando en realidad no.
 async function writePin(userId: string, pin: string) {
   const { error } = await supabaseAdmin
     .from("user_credentials")
     .upsert({ user_id: userId, pin, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
-  if (error) {
-    await supabaseAdmin.from("users").update({ pin }).eq("id", userId);
-  }
+  if (error) throw new Error(`No se pudo guardar el PIN: ${error.message}`);
 }
 
 export async function POST(request: Request) {

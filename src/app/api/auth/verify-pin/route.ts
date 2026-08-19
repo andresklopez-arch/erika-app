@@ -26,24 +26,12 @@ export async function POST(request: Request) {
       );
     }
 
-    let userId: string | undefined;
-
     const { data: cred } = await supabaseAdmin
       .from("user_credentials")
       .select("user_id")
       .eq("pin", pin)
       .maybeSingle();
-    userId = cred?.user_id;
-
-    // Respaldo mientras no se haya corrido la migración de PINes.
-    if (!userId) {
-      const { data: legacyUser } = await supabaseAdmin
-        .from("users")
-        .select("id")
-        .eq("pin", pin)
-        .maybeSingle();
-      userId = legacyUser?.id;
-    }
+    const userId = cred?.user_id;
 
     if (!userId) {
       recordFailedAttempt(rateLimitKey);
@@ -62,7 +50,12 @@ export async function POST(request: Request) {
     }
 
     if (requireRole && user.role !== requireRole) {
-      recordFailedAttempt(rateLimitKey);
+      // No se cuenta como intento fallido: el PIN es correcto, solo no
+      // tiene el rol requerido. Antes esto sí sumaba al contador — en una
+      // tienda con una sola IP pública, un cajero tecleando su propio PIN
+      // (válido, no-admin) varias veces en un prompt de admin bloqueaba las
+      // autorizaciones de TODA la tienda por 10 minutos.
+      clearAttempts(rateLimitKey);
       return NextResponse.json(
         { valid: false, error: `El PIN no pertenece a un usuario con rol "${requireRole}".` },
         { status: 403 },

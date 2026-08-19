@@ -381,19 +381,18 @@ export default function CustomersModule() {
     );
     if (!pass) return;
 
-    if (pass !== currentUser?.pin) {
-      // Verificación del lado del servidor (Service Role Key) — antes se
-      // comparaba directamente contra `users` desde el navegador con la
-      // llave pública.
-      const res = await fetch("/api/auth/verify-pin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: pass }),
-      });
-      const json = await res.json();
-      if (!res.ok || json.valid !== true) {
-        return alert("❌ PIN incorrecto. Operación cancelada.");
-      }
+    // Siempre se verifica del lado del servidor (Service Role Key). Un
+    // atajo previo aceptaba el PIN si coincidía con `currentUser.pin` (que
+    // vive sin firma en localStorage) sin llamar al servidor — cualquiera
+    // podía forjar ese valor en localStorage y saltarse el PIN por completo.
+    const res = await fetch("/api/auth/verify-pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin: pass }),
+    });
+    const json = await res.json();
+    if (!res.ok || json.valid !== true) {
+      return alert("❌ PIN incorrecto. Operación cancelada.");
     }
 
     // La cotización YA NO se marca "converted" (vendida) aquí — antes se

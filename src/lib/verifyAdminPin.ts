@@ -1,9 +1,7 @@
 import { supabaseAdmin } from "./supabaseAdmin";
 
 // Verifica que un PIN pertenezca a un usuario con role === "admin",
-// usando la Service Role Key (ignora RLS). Revisa primero
-// user_credentials (post-migración de PINes) y cae a users.pin como
-// respaldo si esa migración aún no se ha ejecutado en esta base de datos.
+// usando la Service Role Key (ignora RLS) contra user_credentials.
 // Compartida por todas las rutas /api/admin/** que antes hacían esta
 // misma comparación desde el cliente con la llave pública.
 export async function verifyAdminPin(pin: string): Promise<boolean> {
@@ -28,15 +26,7 @@ async function findUserByPin(pin: string): Promise<{ id: string; role: string } 
     .eq("pin", pin)
     .maybeSingle();
 
-  let userId = cred?.user_id;
-  if (!userId) {
-    const { data: legacyUser } = await supabaseAdmin
-      .from("users")
-      .select("id")
-      .eq("pin", pin)
-      .maybeSingle();
-    userId = legacyUser?.id;
-  }
+  const userId = cred?.user_id;
   if (!userId) return null;
 
   const { data: user } = await supabaseAdmin

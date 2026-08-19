@@ -27,10 +27,10 @@ export default function QuotesModule() {
   // handleDirectCharge — antes handleDirectCharge no pedía NINGÚN PIN,
   // evadiendo por completo el control que sí protege al botón "Vender".
   const verifyStaffPin = async (pass: string) => {
-    if (pass === currentUser?.pin) return true;
-    // Verificación del lado del servidor (Service Role Key) — antes se
-    // comparaba directamente contra `users` desde el navegador con la
-    // llave pública.
+    // Siempre se verifica del lado del servidor (Service Role Key). Un
+    // atajo previo aceptaba el PIN si coincidía con `currentUser.pin` (que
+    // vive sin firma en localStorage) sin llamar al servidor — cualquiera
+    // podía forjar ese valor en localStorage y saltarse el PIN por completo.
     try {
       const res = await fetch("/api/auth/verify-pin", {
         method: "POST",

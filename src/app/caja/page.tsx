@@ -96,6 +96,21 @@ export default function CajaModule() {
   const openRegister = async () => {
     if (initialBalance < 0)
       return alert("El fondo inicial no puede ser negativo.");
+
+    // Revalidar justo antes de insertar: si dos dispositivos abren la caja
+    // casi al mismo tiempo, sin este chequeo ambos inserts pasan y quedan
+    // dos sesiones "open" simultáneas descuadrando la caja.
+    const { data: existing } = await supabase
+      .from("cash_sessions")
+      .select("id")
+      .eq("status", "open")
+      .limit(1)
+      .maybeSingle();
+    if (existing) {
+      alert("Ya hay una caja abierta. Actualizando...");
+      return fetchSession();
+    }
+
     const { error } = await supabase.from("cash_sessions").insert({
       initial_balance: initialBalance,
       opened_by: currentUser?.name || "Desconocido",
