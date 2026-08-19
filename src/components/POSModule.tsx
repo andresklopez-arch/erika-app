@@ -486,7 +486,8 @@ export default function POSModule() {
            finalTotal: ticket.total,
            discountPct: ticket.discount_pct || 0,
            applyIva: ticket.apply_iva || false,
-           paymentMethod: ticket.notes ? (ticket.notes.toLowerCase().includes("efectivo") ? "efectivo" : ticket.notes.toLowerCase().includes("tarjeta") ? "tarjeta" : ticket.notes.toLowerCase().includes("transferencia") ? "transferencia" : "mixto") : "efectivo"
+           paymentMethod: ticket.notes ? (ticket.notes.toLowerCase().includes("efectivo") ? "efectivo" : ticket.notes.toLowerCase().includes("tarjeta") ? "tarjeta" : ticket.notes.toLowerCase().includes("transferencia") ? "transferencia" : "mixto") : "efectivo",
+           customerName: ticket.customer_name && ticket.customer_name !== "Venta Mostrador" ? ticket.customer_name : ""
         }
      });
      toast.success(`🖨️ Reenviando Ticket #${ticket.id} a la cola de impresión.`);
@@ -1710,7 +1711,13 @@ export default function POSModule() {
                 finalTotal: totalAmt,
                 paymentMethod: selectedMethod,
                 discountPct: activeTicket.discountPct || 0,
-                applyIva: applyIva
+                applyIva: applyIva,
+                // Antes esto nunca se mandaba, así que ninguna impresora
+                // Bluetooth/ESC-POS ni el popup HTML imprimía los datos del
+                // cliente aunque la venta sí tuviera uno asociado (solo la
+                // impresora "system" funcionaba, porque ese camino
+                // recalculaba el nombre por separado en vez de leer esto).
+                customerName: selectedCustomerId ? (customers.find(c => c.id === selectedCustomerId)?.name || "") : ""
               }
             });
           } catch (printErr) {
@@ -1896,8 +1903,8 @@ export default function POSModule() {
     
     setBold(false);
     if (showRfc) writeText(`RFC: ${businessProfile.rfc || config.business_rfc}\n`);
-    if (showAddress) writeText(`${businessProfile.address || config.business_address}\n`);
     if (showPhone) writeText(`Tel: ${businessProfile.phone || config.business_phone}\n`);
+    if (showAddress) writeText(`${businessProfile.address || config.business_address}\n`);
     if (showEmail) writeText(`Email: ${businessProfile.email || config.business_email}\n`);
     
     writeText(divider);
@@ -1914,12 +1921,16 @@ export default function POSModule() {
       
       setAlign(0);
       writeText(`Fecha: ${new Date().toLocaleString()}\n`);
+      // Orden alineado con la lista de "Campos a Imprimir" en Configuración
+      // (payment_method, seller, customer) — antes el orden aquí no
+      // coincidía con el orden mostrado en Configuración.
+      if (showPaymentMethod && paymentMethod) writeText(`Metodo de Pago: ${paymentMethod.toUpperCase()}\n`);
       if (showSeller) writeText(`Atendido por: ${currentUser?.name || "Venta Mostrador"}\n`);
       if (showCustomer && job.data.customerName) writeText(`Cliente: ${job.data.customerName}\n`);
-      if (showPaymentMethod && paymentMethod) writeText(`Metodo de Pago: ${paymentMethod.toUpperCase()}\n`);
-      
+      if (showNotes && job.data.notes) writeText(`Nota: ${job.data.notes}\n`);
+
       writeText(divider);
-      
+
       items.forEach((item: any) => {
         const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
         const itemTotal = `${Math.round(p * item.qty)}`;
@@ -1975,22 +1986,18 @@ export default function POSModule() {
       setBold(true);
       writeText(`TOTAL: $${Math.round(finalTotal)}\n`);
       setBold(false);
-      
-      const clientName = job.data.customerName || (job.data.customer && job.data.customer.name);
-      if (clientName && clientName !== "Venta Mostrador" && clientName !== "Desconocido") {
-        setBold(true);
-        writeText(`Cliente: ${clientName}\n`);
-        setBold(false);
-      }
       setAlign(0);
-      
+
       writeText(divider);
-      
+
+      // El cliente y la nota ya se imprimieron arriba (bloque de datos de
+      // la venta) si están marcados en Campos a Imprimir — antes el
+      // cliente se repetía aquí sin condición, duplicando el nombre.
       if (showWarranty) {
         setAlign(1);
         writeText("Garantia de 30 dias contra\ndefectos de fabrica.\n");
       }
-      
+
       if (showBilling) {
         setAlign(1);
         writeText(`Auto-Facturacion Express:\nerika-app.vercel.app/facturacion\n`);
@@ -2340,21 +2347,16 @@ export default function POSModule() {
               ${showLogo ? `<div class="center"><img src="${businessProfile.logo || config.business_logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
               ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name || config.business_name || "FERRETERÍA ERIKA"}</div>` : ""}
               ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc || config.business_rfc}</div>` : ""}
-              ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address || config.business_address}</div>` : ""}
               ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessProfile.phone || config.business_phone}</div>` : ""}
+              ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address || config.business_address}</div>` : ""}
               ${showEmail ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Email: ${businessProfile.email || config.business_email}</div>` : ""}
-              
+
               <div class="divider"></div>
               <div class="center bold" style="margin-bottom: 5px;">Ticket: #${realTicketId}</div>
               <div style="font-size: 0.9em; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
-              ${showSeller ? `<div style="font-size: 0.9em; margin-bottom: 5px;">Atendido por: ${currentUser?.name || "Venta Mostrador"}</div>` : ""}
-              
-              ${showCustomer && job.data.customerName ? `
-              <div style="font-size: 0.85rem; margin-bottom: 5px;">
-                <strong>Cliente:</strong> ${job.data.customerName}
-              </div>
-              ` : ""}
 
+              <!-- Orden alineado con la lista de "Campos a Imprimir" en
+              Configuración (payment_method, seller, customer, notes) -->
               ${showPaymentMethod && paymentMethod ? `<div style="font-size: 0.95em; margin-bottom: 5px;">Método de Pago: ${paymentMethod.toUpperCase()}</div>` : ""}
               ${showPaymentMethod && job.data.reference ? `<div style="font-size: 0.9em; margin-bottom: 5px;">Ref/Folio: ${job.data.reference}</div>` : ""}
               ${showPaymentMethod && paymentMethod === "mixto" ? `
@@ -2362,6 +2364,14 @@ export default function POSModule() {
                 ${job.data.cashAmount > 0 ? `<span>- Efec: $${Math.round(job.data.cashAmount)}</span><br>` : ""}
                 ${job.data.cardAmount > 0 ? `<span>- Tarj: $${Math.round(job.data.cardAmount)}</span><br>` : ""}
                 ${job.data.transferAmount > 0 ? `<span>- Trans: $${Math.round(job.data.transferAmount)}</span>` : ""}
+              </div>
+              ` : ""}
+
+              ${showSeller ? `<div style="font-size: 0.9em; margin-bottom: 5px;">Atendido por: ${currentUser?.name || "Venta Mostrador"}</div>` : ""}
+
+              ${showCustomer && job.data.customerName ? `
+              <div style="font-size: 0.85rem; margin-bottom: 5px;">
+                <strong>Cliente:</strong> ${job.data.customerName}
               </div>
               ` : ""}
 
@@ -2383,12 +2393,7 @@ export default function POSModule() {
               ` : ""}
               <div class="divider"></div>
               <div style="display:flex; justify-content:space-between; font-size: 1.1em;"><strong>TOTAL:</strong><strong>$${Math.round(finalTotal)}</strong></div>
-              ${(job.data.customerName || (job.data.customer && job.data.customer.name)) && (job.data.customerName !== "Venta Mostrador") ? `
-              <div style="display:flex; justify-content:space-between; margin-top: 4px; font-size: 1em;">
-                <strong>Cliente:</strong><span>${job.data.customerName || job.data.customer?.name}</span>
-              </div>
-              ` : ""}
-              
+
               ${showWarranty ? `
               <div class="center" style="font-size: 0.85em; margin-top: 10px; opacity: 0.8;">
                 🛡️ Garantía de 30 días contra defectos de fábrica.
@@ -4070,8 +4075,8 @@ export default function POSModule() {
           {showPreviewLogo && <img src={businessProfile.logo} alt="Logo" style={{ maxHeight: "60px", marginBottom: "10px" }} />}
           {showPreviewName && <h2 style={{ margin: "5px 0", fontSize: "18px", fontWeight: "bold" }}>{businessProfile.name || "FERRETERÍA ERIKA"}</h2>}
           {showPreviewRfc && <p style={{ margin: "2px 0", fontSize: "12px" }}>RFC: {businessProfile.rfc}</p>}
-          {showPreviewAddress && <p style={{ margin: "2px 0", fontSize: "12px", whiteSpace: "pre-line" }}>{businessProfile.address}</p>}
           {showPreviewPhone && <p style={{ margin: "2px 0", fontSize: "12px" }}>Tel: {businessProfile.phone}</p>}
+          {showPreviewAddress && <p style={{ margin: "2px 0", fontSize: "12px", whiteSpace: "pre-line" }}>{businessProfile.address}</p>}
           {showPreviewEmail && <p style={{ margin: "2px 0", fontSize: "12px" }}>Email: {businessProfile.email}</p>}
         </div>
         
@@ -4105,15 +4110,15 @@ export default function POSModule() {
           </div>
         )}
 
-        {showPreviewNotes && printNotes && (
-          <div style={{ marginBottom: "10px", padding: "8px", background: "#f3f4f6", borderRadius: "4px", fontSize: "11px", border: "1px solid #e5e7eb", color: "#000", textAlign: "left" }}>
-            <strong>Nota:</strong> {printNotes}
-          </div>
-        )}
-
         {showPreviewCustomer && printCustomerName && (
           <div style={{ marginBottom: "15px", padding: "8px", background: "#f3f4f6", borderRadius: "4px", fontSize: "12px", border: "1px solid #e5e7eb", textAlign: "left" }}>
             <strong>Cliente:</strong> {printCustomerName}
+          </div>
+        )}
+
+        {showPreviewNotes && printNotes && (
+          <div style={{ marginBottom: "10px", padding: "8px", background: "#f3f4f6", borderRadius: "4px", fontSize: "11px", border: "1px solid #e5e7eb", color: "#000", textAlign: "left" }}>
+            <strong>Nota:</strong> {printNotes}
           </div>
         )}
 
