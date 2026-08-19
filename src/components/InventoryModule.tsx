@@ -111,6 +111,25 @@ export interface InventoryItem {
 export default function InventoryModule() {
   const { currentUser } = useAuth();
   const isAdmin = currentUser?.role === "admin";
+
+  // Verifica un PIN de administrador del lado del servidor (Service Role
+  // Key, nunca expuesta al cliente) — antes se comparaba directamente
+  // contra `users` desde el navegador con la llave pública.
+  const verifyAdminPinRemote = async (pin: string): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/auth/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin, requireRole: "admin" }),
+      });
+      const json = await res.json();
+      return res.ok && json.valid === true;
+    } catch (e) {
+      console.error("Error al verificar PIN de administrador:", e);
+      return false;
+    }
+  };
+
   const searchParams = useSearchParams();
   const router = useRouter();
   const tab = searchParams ? searchParams.get("tab") : null;
@@ -1183,13 +1202,7 @@ export default function InventoryModule() {
           if (currentUser?.role !== "admin") {
             const pass = window.prompt("🔒 CONTROL DE SEGURIDAD: Ingrese PIN de Administrador para editar:");
             if (!pass) return;
-            const { data: admin } = await supabase
-              .from("users")
-              .select("*")
-              .eq("pin", pass)
-              .eq("role", "admin")
-              .single();
-            if (!admin) {
+            if (!(await verifyAdminPinRemote(pass))) {
               alert("❌ PIN incorrecto o sin privilegios de administrador.");
               return;
             }

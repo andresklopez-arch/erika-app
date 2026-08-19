@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { verifyStaffPin } from "@/lib/verifyAdminPin";
 import { getClientKey, getLockRemainingMs, recordFailedAttempt, clearAttempts } from "@/lib/rateLimit";
 
 const MAX_FILE_BYTES = 15 * 1024 * 1024; // 15MB, margen razonable para fotos/PDFs de listas de precios
@@ -23,13 +23,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: staffUser, error: staffError } = await supabase
-      .from("users")
-      .select("role")
-      .eq("pin", pin)
-      .single();
-
-    if (staffError || !staffUser) {
+    if (!(await verifyStaffPin(pin))) {
       recordFailedAttempt(rateLimitKey);
       return NextResponse.json({ error: "PIN inválido." }, { status: 403 });
     }

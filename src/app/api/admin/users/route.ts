@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { verifyAdminPin } from "@/lib/verifyAdminPin";
 import { z } from "zod";
 import { getClientKey, getLockRemainingMs, recordFailedAttempt, clearAttempts } from "@/lib/rateLimit";
 
@@ -21,6 +22,18 @@ function getHelpfulErrorMessage(dbError: any, action: "crear" | "actualizar"): s
   return `Error de base de datos: ${dbError.message}`;
 }
 
+// Escribe el PIN en user_credentials (tabla protegida, sin acceso desde
+// ningún cliente). Si la tabla todavía no existe (migración no corrida),
+// se cae a escribirlo en users.pin como respaldo temporal.
+async function writePin(userId: string, pin: string) {
+  const { error } = await supabaseAdmin
+    .from("user_credentials")
+    .upsert({ user_id: userId, pin, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+  if (error) {
+    await supabaseAdmin.from("users").update({ pin }).eq("id", userId);
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -39,20 +52,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verificar en el servidor si el PIN pertenece a un administrador
-    const { data: adminUser, error: adminError } = await supabase
-      .from("users")
-      .select("role")
-      .eq("pin", adminPin)
-      .single();
-
-    if (adminError || !adminUser || adminUser.role !== "admin") {
+    if (!(await verifyAdminPin(adminPin))) {
       recordFailedAttempt(rateLimitKey);
       return NextResponse.json({ error: "Acceso Denegado. Solo administradores pueden gestionar usuarios." }, { status: 403 });
     }
     clearAttempts(rateLimitKey);
 
-    // Validar el payload con Zod
     const validationResult = UserInputSchema.safeParse(user);
     if (!validationResult.success) {
       return NextResponse.json({ error: "Datos de usuario inválidos.", details: validationResult.error.format() }, { status: 400 });
@@ -60,21 +65,19 @@ export async function POST(request: Request) {
 
     const { name, pin, role, permissions } = validationResult.data;
 
-    // Crear en la base de datos
-    const { data: newUser, error: dbError } = await supabase
+    // Crear en la base de datos (users ya NO tiene columna pin — se
+    // guarda por separado en user_credentials).
+    const { data: newUser, error: dbError } = await supabaseAdmin
       .from("users")
-      .insert({
-        name,
-        pin,
-        role,
-        permissions,
-      })
+      .insert({ name, role, permissions })
       .select()
       .single();
 
     if (dbError) {
       return NextResponse.json({ error: getHelpfulErrorMessage(dbError, "crear"), details: dbError.message }, { status: 400 });
     }
+
+    await writePin(newUser.id, pin);
 
     return NextResponse.json({ success: true, user: newUser });
   } catch (error: any) {
@@ -101,20 +104,12 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Verificar en el servidor si el PIN pertenece a un administrador
-    const { data: adminUser, error: adminError } = await supabase
-      .from("users")
-      .select("role")
-      .eq("pin", adminPin)
-      .single();
-
-    if (adminError || !adminUser || adminUser.role !== "admin") {
+    if (!(await verifyAdminPin(adminPin))) {
       recordFailedAttempt(rateLimitKey);
       return NextResponse.json({ error: "Acceso Denegado. Solo administradores pueden gestionar usuarios." }, { status: 403 });
     }
     clearAttempts(rateLimitKey);
 
-    // Validar el payload con Zod
     const validationResult = UserInputSchema.safeParse(user);
     if (!validationResult.success) {
       return NextResponse.json({ error: "Datos de usuario inválidos.", details: validationResult.error.format() }, { status: 400 });
@@ -122,15 +117,9 @@ export async function PUT(request: Request) {
 
     const { name, pin, role, permissions } = validationResult.data;
 
-    // Actualizar en la base de datos
-    const { data: updatedUser, error: dbError } = await supabase
+    const { data: updatedUser, error: dbError } = await supabaseAdmin
       .from("users")
-      .update({
-        name,
-        pin,
-        role,
-        permissions,
-      })
+      .update({ name, role, permissions })
       .eq("id", userId)
       .select()
       .single();
@@ -138,6 +127,8 @@ export async function PUT(request: Request) {
     if (dbError) {
       return NextResponse.json({ error: getHelpfulErrorMessage(dbError, "actualizar"), details: dbError.message }, { status: 400 });
     }
+
+    await writePin(userId, pin);
 
     return NextResponse.json({ success: true, user: updatedUser });
   } catch (error: any) {
@@ -165,21 +156,13 @@ export async function DELETE(request: Request) {
       );
     }
 
-    // Verificar en el servidor si el PIN pertenece a un administrador
-    const { data: adminUser, error: adminError } = await supabase
-      .from("users")
-      .select("role")
-      .eq("pin", adminPin)
-      .single();
-
-    if (adminError || !adminUser || adminUser.role !== "admin") {
+    if (!(await verifyAdminPin(adminPin))) {
       recordFailedAttempt(rateLimitKey);
       return NextResponse.json({ error: "Acceso Denegado. Solo administradores pueden gestionar usuarios." }, { status: 403 });
     }
     clearAttempts(rateLimitKey);
 
-    // Eliminar de la base de datos
-    const { error: dbError } = await supabase
+    const { error: dbError } = await supabaseAdmin
       .from("users")
       .delete()
       .eq("id", userId);

@@ -535,6 +535,25 @@ export default function POSModule() {
     });
   };
 
+  // Verifica un PIN de administrador del lado del servidor. Antes cada
+  // pantalla de autorización comparaba el PIN directamente contra `users`
+  // desde el navegador con la llave pública — ahora todas pasan por
+  // /api/auth/verify-pin (Service Role Key, nunca expuesta al cliente).
+  const verifyAdminPinRemote = async (pin: string): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/auth/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin, requireRole: "admin" }),
+      });
+      const json = await res.json();
+      return res.ok && json.valid === true;
+    } catch (e) {
+      console.error("Error al verificar PIN de administrador:", e);
+      return false;
+    }
+  };
+
   // Printer Connection States
   const [isPrinterConnected, setIsPrinterConnected] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -1097,8 +1116,7 @@ export default function POSModule() {
   const removeItem = async (itemId: string) => {
     if (currentUser?.role !== "admin") {
        const pass = window.prompt("🔒 ACCESO RESTRINGIDO: Contraseña de Administrador requerida:");
-       const { data: admin } = await supabase.from("users").select("*").eq("pin", pass).eq("role", "admin").single();
-       if (!admin) return alert("❌ PIN incorrecto o sin privilegios.");
+       if (!pass || !(await verifyAdminPinRemote(pass))) return alert("❌ PIN incorrecto o sin privilegios.");
     }
 
     const itemToRemove = activeTicket.items.find((i) => i.id === itemId);
@@ -1164,8 +1182,7 @@ export default function POSModule() {
             `${reason}\n\nIngresa el PIN de Administrador para autorizar:`
           );
           if (!pin) return;
-          const { data: admin } = await supabase.from("users").select("*").eq("pin", pin).eq("role", "admin").single();
-          if (!admin) return alert("❌ PIN incorrecto o sin privilegios de administrador. Descuento denegado.");
+          if (!(await verifyAdminPinRemote(pin))) return alert("❌ PIN incorrecto o sin privilegios de administrador. Descuento denegado.");
        }
      }
      
@@ -1252,8 +1269,7 @@ export default function POSModule() {
            `El descuento solicitado (${finalPct.toFixed(1)}%) supera el 5% permitido.\n\nIngresa el PIN de Administrador para autorizar:`
          );
          if (!pin) return;
-         const { data: admin } = await supabase.from("users").select("*").eq("pin", pin).eq("role", "admin").single();
-         if (!admin) return alert("❌ PIN incorrecto o sin privilegios de administrador. Descuento denegado.");
+         if (!(await verifyAdminPinRemote(pin))) return alert("❌ PIN incorrecto o sin privilegios de administrador. Descuento denegado.");
       }
     }
 
@@ -1453,14 +1469,7 @@ export default function POSModule() {
             return;
          }
          
-         const { data: admin, error: adminErr } = await supabase
-           .from("users")
-           .select("*")
-           .eq("pin", pin)
-           .eq("role", "admin")
-           .single();
-           
-         if (adminErr || !admin) {
+         if (!(await verifyAdminPinRemote(pin))) {
             alert("❌ PIN incorrecto o sin privilegios de administrador. Cobro cancelado.");
             setIsProcessingPayment(false);
             return;
@@ -3743,8 +3752,7 @@ export default function POSModule() {
             onClick={async () => {
               if (currentUser?.role !== "admin") {
                  const pass = window.prompt("🔒 DEVOLUCIÓN - Requiere contraseña de Administrador:");
-                 const { data: admin } = await supabase.from("users").select("*").eq("pin", pass).eq("role", "admin").single();
-                 if (!admin) return alert("❌ Contraseña incorrecta o sin privilegios.");
+                 if (!pass || !(await verifyAdminPinRemote(pass))) return alert("❌ Contraseña incorrecta o sin privilegios.");
               }
 
               const amountStr = window.prompt("¿Monto a reembolsar/devolver de la Caja? (Ej: 150.00)");
@@ -3951,14 +3959,7 @@ export default function POSModule() {
                   );
                   if (!pin) return;
 
-                  const { data: admin, error: adminErr } = await supabase
-                    .from("users")
-                    .select("*")
-                    .eq("pin", pin)
-                    .eq("role", "admin")
-                    .single();
-
-                  if (adminErr || !admin) {
+                  if (!(await verifyAdminPinRemote(pin))) {
                     return alert("❌ PIN incorrecto o sin privilegios de administrador. Apartado cancelado.");
                   }
                 }

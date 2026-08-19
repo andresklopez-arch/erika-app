@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { verifyAdminPin } from "@/lib/verifyAdminPin";
 import { BusinessSettingsSchema } from "@/lib/settingsSchema";
 import { getClientKey, getLockRemainingMs, recordFailedAttempt, clearAttempts } from "@/lib/rateLimit";
 
@@ -22,13 +23,9 @@ export async function POST(request: Request) {
     }
 
     // Verificar en el servidor si el PIN pertenece a un administrador
-    const { data: user, error: userError } = await supabase
-      .from("users")
-      .select("role")
-      .eq("pin", adminPin)
-      .single();
-
-    if (userError || !user || user.role !== "admin") {
+    // (Service Role Key — antes esto usaba la llave pública, lo que
+    // dependía de que `users.pin` fuera legible por cualquier cliente).
+    if (!(await verifyAdminPin(adminPin))) {
       recordFailedAttempt(rateLimitKey);
       return NextResponse.json({ error: "Acceso Denegado. Solo administradores pueden cambiar configuraciones." }, { status: 403 });
     }
@@ -43,7 +40,7 @@ export async function POST(request: Request) {
     const validatedSettings = validationResult.data;
 
     // Guardar en la base de datos
-    const { error: dbError } = await supabase
+    const { error: dbError } = await supabaseAdmin
       .from("business_settings")
       .upsert({
         id: "erika_global",

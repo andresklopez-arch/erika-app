@@ -425,19 +425,30 @@ export default function AuthProvider({
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    const { data: user } = await supabase
-      .from("users")
-      .select("*")
-      .eq("pin", pinInput)
-      .single();
-
-    if (user) {
+    // El PIN ya no se compara en el cliente contra `users` con la llave
+    // pública (eso permitía a cualquier visitante leer el PIN de TODOS
+    // los usuarios vía la API REST de Supabase, sin pasar por este
+    // formulario). Ahora se verifica del lado del servidor, con límite de
+    // intentos fallidos.
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: pinInput }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.user) {
+        setError(json.error || "PIN Incorrecto");
+        return;
+      }
+      const user = json.user;
       setCurrentUser(user);
       setOfflineSessionKey(user.id, user.pin);
       localStorage.setItem("ERIKA_USER", JSON.stringify(user));
       setPinInput("");
-    } else {
-      setError("PIN Incorrecto");
+    } catch (err) {
+      console.error("Error en login:", err);
+      setError("No se pudo conectar con el servidor. Intenta de nuevo.");
     }
   };
 

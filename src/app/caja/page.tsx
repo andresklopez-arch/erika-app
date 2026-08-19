@@ -42,6 +42,24 @@ export default function CajaModule() {
   const [showTicket, setShowTicket] = useState(false);
   const [ticketData, setTicketData] = useState<any>(null);
 
+  // Verifica un PIN de administrador del lado del servidor (Service Role
+  // Key, nunca expuesta al cliente) — antes se comparaba directamente
+  // contra `users` desde el navegador con la llave pública.
+  const verifyAdminPinRemote = async (pin: string): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/auth/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin, requireRole: "admin" }),
+      });
+      const json = await res.json();
+      return res.ok && json.valid === true;
+    } catch (e) {
+      console.error("Error al verificar PIN de administrador:", e);
+      return false;
+    }
+  };
+
   const fetchSession = async () => {
     setIsLoading(true);
     const { data: activeSession } = await supabase
@@ -104,13 +122,7 @@ export default function CajaModule() {
         "⚠️ LÍMITE SUPERADO. Este retiro de alto valor requiere PIN de Administrador:",
       );
       if (!pin) return;
-      const { data: adminCheck } = await supabase
-        .from("users")
-        .select("id")
-        .eq("role", "admin")
-        .eq("pin", pin)
-        .single();
-      if (!adminCheck)
+      if (!(await verifyAdminPinRemote(pin)))
         return alert("❌ PIN Inválido o sin privilegios de administrador.");
       alert("✅ Retiro mayor autorizado por Administrador.");
     }
@@ -156,13 +168,7 @@ export default function CajaModule() {
       "🔑 [AUTORIZACIÓN REQUERIDA]\n\nIngresa el PIN de Administrador para autorizar el Cierre de Caja Ciego:",
     );
     if (!pin) return;
-    const { data: adminCheck } = await supabase
-      .from("users")
-      .select("id")
-      .eq("role", "admin")
-      .eq("pin", pin)
-      .single();
-    if (!adminCheck) {
+    if (!(await verifyAdminPinRemote(pin))) {
       return alert("❌ Acceso Denegado. PIN inválido o sin privilegios de administrador.");
     }
 

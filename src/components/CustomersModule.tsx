@@ -382,12 +382,16 @@ export default function CustomersModule() {
     if (!pass) return;
 
     if (pass !== currentUser?.pin) {
-      const { data: staffUser, error: staffError } = await supabase
-        .from("users")
-        .select("id")
-        .eq("pin", pass)
-        .single();
-      if (staffError || !staffUser) {
+      // Verificación del lado del servidor (Service Role Key) — antes se
+      // comparaba directamente contra `users` desde el navegador con la
+      // llave pública.
+      const res = await fetch("/api/auth/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: pass }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.valid !== true) {
         return alert("❌ PIN incorrecto. Operación cancelada.");
       }
     }

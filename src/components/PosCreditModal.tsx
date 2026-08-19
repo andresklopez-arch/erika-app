@@ -49,6 +49,24 @@ export default function PosCreditModal({
 
   if (!show) return null;
 
+  // Verifica un PIN de administrador del lado del servidor (Service Role
+  // Key, nunca expuesta al cliente) — antes se comparaba directamente
+  // contra `users` desde el navegador con la llave pública.
+  const verifyAdminPinRemote = async (pin: string): Promise<boolean> => {
+    try {
+      const res = await fetch("/api/auth/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin, requireRole: "admin" }),
+      });
+      const json = await res.json();
+      return res.ok && json.valid === true;
+    } catch (e) {
+      console.error("Error al verificar PIN de administrador:", e);
+      return false;
+    }
+  };
+
   const handleConfirm = async () => {
     if (isSubmitting) return;
     if (!selectedCustomerId) return alert("Selecciona un cliente.");
@@ -74,13 +92,7 @@ export default function PosCreditModal({
         `⚠️ STOCK INSUFICIENTE\nLos siguientes artículos superan las existencias físicas en inventario:\n${itemNames}\n\nIngresa el PIN de Administrador para autorizar:`,
       );
       if (!stockPin) return;
-      const { data: stockAdmin, error: stockAdminErr } = await supabase
-        .from("users")
-        .select("id")
-        .eq("pin", stockPin)
-        .eq("role", "admin")
-        .single();
-      if (stockAdminErr || !stockAdmin) {
+      if (!(await verifyAdminPinRemote(stockPin))) {
         return alert("❌ PIN incorrecto o sin privilegios de administrador. Venta a crédito cancelada.");
       }
     }
@@ -91,14 +103,7 @@ export default function PosCreditModal({
       );
       if (!pin) return alert("❌ Operación cancelada.");
 
-      const { data: admin, error: adminError } = await supabase
-        .from("users")
-        .select("*")
-        .eq("pin", pin)
-        .eq("role", "admin")
-        .single();
-
-      if (adminError || !admin) {
+      if (!(await verifyAdminPinRemote(pin))) {
          return alert("❌ Acceso Denegado. Venta a crédito cancelada.");
       }
       alert("⚠️ Sobregiro autorizado por Administrador.");

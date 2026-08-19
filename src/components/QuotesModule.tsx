@@ -28,12 +28,21 @@ export default function QuotesModule() {
   // evadiendo por completo el control que sí protege al botón "Vender".
   const verifyStaffPin = async (pass: string) => {
     if (pass === currentUser?.pin) return true;
-    const { data: staffUser, error: staffError } = await supabase
-      .from("users")
-      .select("id")
-      .eq("pin", pass)
-      .single();
-    return !staffError && !!staffUser;
+    // Verificación del lado del servidor (Service Role Key) — antes se
+    // comparaba directamente contra `users` desde el navegador con la
+    // llave pública.
+    try {
+      const res = await fetch("/api/auth/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: pass }),
+      });
+      const json = await res.json();
+      return res.ok && json.valid === true;
+    } catch (e) {
+      console.error("Error al verificar PIN:", e);
+      return false;
+    }
   };
 
   const convertToSale = async (quote: any) => {

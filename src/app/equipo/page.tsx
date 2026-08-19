@@ -99,18 +99,36 @@ export default function EquipoModule() {
       permissions: finalPermissions,
     };
 
-    // Antes no se revisaba el error de estas escrituras: si fallaban, el
-    // modal se cerraba igual como si el cambio (ej. un PIN nuevo) se
-    // hubiera guardado, dejando al admin creyendo que el PIN anterior ya
-    // no es válido cuando en realidad sigue siéndolo.
-    const { error } = editingUser
-      ? await supabase.from("users").update(payload).eq("id", editingUser.id)
-      : await supabase.from("users").insert([payload]);
+    // El PIN del propio admin autoriza la operación en el servidor (que
+    // guarda el nuevo/editado PIN en user_credentials, tabla sin acceso
+    // desde ningún cliente). Antes esta pantalla escribía directamente en
+    // `users` desde el navegador, sin ninguna verificación de PIN.
+    const adminPin =
+      currentUser?.role === "admin"
+        ? currentUser.pin
+        : window.prompt("🔒 Ingresa el PIN de Administrador para guardar cambios de personal:");
+    if (!adminPin) {
+      setLoading(false);
+      return;
+    }
+
+    const res = editingUser
+      ? await fetch("/api/admin/users", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ adminPin, userId: editingUser.id, user: payload }),
+        })
+      : await fetch("/api/admin/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ adminPin, user: payload }),
+        });
+    const json = await res.json();
 
     setLoading(false);
 
-    if (error) {
-      alert("❌ No se pudo guardar el empleado: " + error.message);
+    if (!res.ok) {
+      alert("❌ No se pudo guardar el empleado: " + (json.error || "Error desconocido"));
       return;
     }
 
@@ -120,9 +138,19 @@ export default function EquipoModule() {
 
   const handleDelete = async (id: string) => {
     if (confirm("¿Estás seguro de eliminar este empleado?")) {
-      const { error } = await supabase.from("users").delete().eq("id", id);
-      if (error) {
-        alert("❌ No se pudo eliminar al empleado: " + error.message);
+      const adminPin =
+        currentUser?.role === "admin"
+          ? currentUser.pin
+          : window.prompt("🔒 Ingresa el PIN de Administrador para eliminar este empleado:");
+      if (!adminPin) return;
+
+      const res = await fetch(
+        `/api/admin/users?adminPin=${encodeURIComponent(adminPin)}&userId=${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      );
+      const json = await res.json();
+      if (!res.ok) {
+        alert("❌ No se pudo eliminar al empleado: " + (json.error || "Error desconocido"));
         return;
       }
       fetchUsers();
