@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth, useBusinessProfile } from "./AuthProvider";
+import { SALE_UNIT_LABELS } from "./InventoryModule";
 
 interface CashSession {
   id: string;
@@ -43,6 +44,9 @@ export default function ReportsModule() {
   const [exporting, setExporting] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [lostSales, setLostSales] = useState<{term: string, count: number, type: string, estimatedPrice?: number}[]>([]);
+  // Total vendido este mes por unidad (kg, m, L, pieza...) — útil para
+  // negociar precios con proveedores de productos a granel.
+  const [unitSalesSummary, setUnitSalesSummary] = useState<Record<string, number>>({});
   const [radarFilterFecha, setRadarFilterFecha] = useState("mes");
 
   interface AuditLog {
@@ -102,6 +106,22 @@ export default function ReportsModule() {
            estimatedCostCount,
            totalSaleCount: txs ? txs.length : 0
         });
+
+        // Total vendido este mes por unidad de venta (Kardex: movimientos
+        // "sale", cantidad negativa; se agrupa por la unidad del producto).
+        const { data: saleMovements, error: saleMovementsErr } = await supabase
+          .from("inventory_movements")
+          .select("quantity, inventory:inventory_id(sale_unit)")
+          .eq("movement_type", "sale")
+          .gte("created_at", firstDayOfMonth);
+        if (!saleMovementsErr && saleMovements) {
+          const unitTotals: Record<string, number> = {};
+          saleMovements.forEach((m: any) => {
+            const unit = m.inventory?.sale_unit || "pieza";
+            unitTotals[unit] = (unitTotals[unit] || 0) + Math.abs(Number(m.quantity) || 0);
+          });
+          setUnitSalesSummary(unitTotals);
+        }
 
         const { data: sessions } = await supabase.from("cash_sessions").select("*").order("closed_at", { ascending: false }).limit(50);
          if (sessions && sessions.length > 0) {
@@ -492,6 +512,36 @@ export default function ReportsModule() {
                : `Faltan $${(monthlyGoal - netProfit.sales).toLocaleString("es-MX", { minimumFractionDigits: 2 })} para lograr la meta. ¡Vamos con todo!`}
            </p>
          </div>
+      )}
+
+      {Object.keys(unitSalesSummary).length > 0 && (
+        <div className="glass-panel" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          <h3 style={{ color: "var(--color-secondary)", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+            ⚖️ Total Vendido Este Mes por Unidad
+          </h3>
+          <p style={{ margin: 0, fontSize: "0.8rem", opacity: 0.7 }}>
+            Útil para negociar precios con proveedores de productos a granel.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginTop: "5px" }}>
+            {Object.entries(unitSalesSummary).map(([unit, total]) => (
+              <div
+                key={unit}
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid var(--glass-border)",
+                  borderRadius: "10px",
+                  padding: "10px 18px",
+                  minWidth: "120px",
+                }}
+              >
+                <div style={{ fontSize: "1.3rem", fontWeight: "bold", color: "var(--color-primary)" }}>
+                  {total.toLocaleString("es-MX", { maximumFractionDigits: 3 })}
+                </div>
+                <div style={{ fontSize: "0.8rem", opacity: 0.8 }}>{SALE_UNIT_LABELS[unit] || unit}</div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Resumen de Inteligencia */}
