@@ -17,6 +17,25 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
+-- La tabla de movimientos (Kardex) nunca se llegó a crear en esta base de
+-- datos, así que se crea aquí si hace falta antes de alterarla.
+CREATE TABLE IF NOT EXISTS inventory_movements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  inventory_id UUID NOT NULL REFERENCES inventory(id) ON DELETE CASCADE,
+  quantity NUMERIC(12,3) NOT NULL,
+  movement_type TEXT NOT NULL CHECK (movement_type IN ('sale', 'restock', 'adjustment', 'layaway', 'cancellation')),
+  reference_id TEXT,
+  created_by TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE inventory_movements ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  CREATE POLICY "Permitir todo a anonimos en movimientos" ON inventory_movements FOR ALL USING (true) WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
 ALTER TABLE inventory_movements
   ALTER COLUMN quantity TYPE NUMERIC(12,3) USING quantity::numeric;
 
