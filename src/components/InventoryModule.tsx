@@ -177,6 +177,9 @@ export default function InventoryModule() {
   const [auditHistoryItem, setAuditHistoryItem] = useState<InventoryItem | null>(null);
   const [auditHistoryLogs, setAuditHistoryLogs] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
+  const [historyTab, setHistoryTab] = useState<"cambios" | "kardex">("cambios");
+  const [kardexLogs, setKardexLogs] = useState<any[]>([]);
+  const [loadingKardex, setLoadingKardex] = useState<boolean>(false);
   const [editValue, setEditValue] = useState<string>("");
   const [hoveredCell, setHoveredCell] = useState<{ itemId: string; field: string } | null>(null);
   const [hoveredHeader, setHoveredHeader] = useState<string | null>(null);
@@ -275,7 +278,11 @@ export default function InventoryModule() {
   const [newProductCost, setNewProductCost] = useState("");
   const [newProductPrice, setNewProductPrice] = useState("");
   const [newProductStock, setNewProductStock] = useState("1");
-  const [newProductUnit, setNewProductUnit] = useState("pieza");
+  // Recuerda la última unidad usada — útil cuando se dan de alta varios
+  // productos por peso/longitud seguidos (ej. varios tipos de cable).
+  const [newProductUnit, setNewProductUnit] = useState(() =>
+    (typeof window !== "undefined" && localStorage.getItem("ERIKA_LAST_SALE_UNIT")) || "pieza"
+  );
 
   useEffect(() => {
     if (createParam) {
@@ -331,7 +338,7 @@ export default function InventoryModule() {
 
     alert("✅ Producto creado con éxito");
     setShowCreateModal(false);
-    setNewProductUnit("pieza");
+    localStorage.setItem("ERIKA_LAST_SALE_UNIT", newProductUnit);
     fetchInventory(0, debouncedSearchQuery, true, true);
     loadAllItems();
     setPage(0);
@@ -623,6 +630,7 @@ export default function InventoryModule() {
 
   const loadProductAuditHistory = async (item: InventoryItem) => {
     setAuditHistoryItem(item);
+    setHistoryTab("cambios");
     setLoadingHistory(true);
     const { data, error } = await supabase
       .from("inventory_audit_logs")
@@ -636,6 +644,27 @@ export default function InventoryModule() {
     } else {
       setAuditHistoryLogs([]);
       if (error) console.error("Error al cargar historial de auditoría del producto:", error);
+    }
+  };
+
+  // Kardex: movimientos reales de existencias (ventas, restocks, ajustes,
+  // apartados) — distinto del historial de cambios de arriba (que solo
+  // registra ediciones de campos como precio/costo, no el stock).
+  const loadProductKardex = async (item: InventoryItem) => {
+    setLoadingKardex(true);
+    const { data, error } = await supabase
+      .from("inventory_movements")
+      .select("*")
+      .eq("inventory_id", item.id)
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    setLoadingKardex(false);
+    if (!error && data) {
+      setKardexLogs(data);
+    } else {
+      setKardexLogs([]);
+      if (error) console.error("Error al cargar Kardex del producto:", error);
     }
   };
 
@@ -921,6 +950,28 @@ export default function InventoryModule() {
     if (originalItem && originalItem[field as keyof InventoryItem] === finalValue) {
       setEditingCell(null);
       return;
+    }
+
+    // Cambiar la unidad de un producto que ya tiene ventas/movimientos
+    // registrados con la unidad anterior deja el histórico mezclado (ej.
+    // Kardex con renglones en "pieza" y renglones en "kg" para el mismo
+    // producto, sin forma de saber cuál es cuál a simple vista).
+    if (field === "sale_unit" && originalItem?.sale_unit) {
+      const { count } = await supabase
+        .from("inventory_movements")
+        .select("id", { count: "exact", head: true })
+        .eq("inventory_id", itemId);
+      if (count && count > 0) {
+        const oldLabel = SALE_UNIT_LABELS[originalItem.sale_unit] || originalItem.sale_unit;
+        const newLabel = SALE_UNIT_LABELS[finalValue] || finalValue;
+        const proceed = window.confirm(
+          `⚠️ Este producto ya tiene ${count} movimiento(s) de inventario registrados como "${oldLabel}". Cambiarlo a "${newLabel}" puede hacer que el historial se lea de forma inconsistente (mezcla de unidades). ¿Continuar de todas formas?`
+        );
+        if (!proceed) {
+          setEditingCell(null);
+          return;
+        }
+      }
     }
 
     const updateObj: any = { [field]: finalValue };
@@ -1612,12 +1663,13 @@ export default function InventoryModule() {
       PRODUCTO: i.name,
       PROVEEDOR: i.supplier || "",
       STOCK: i.stock,
+      "UNIDAD DE VENTA": SALE_UNIT_LABELS[i.sale_unit || "pieza"] || i.sale_unit,
       COSTO: i.cost,
       PRECIO: i.price,
       BODEGA: i.location || "",
     }));
     const ws = XLSX.utils.json_to_sheet(data);
-    ws["!cols"] = [{wch: 15}, {wch: 35}, {wch: 20}, {wch: 10}, {wch: 12}, {wch: 12}, {wch: 15}];
+    ws["!cols"] = [{wch: 15}, {wch: 35}, {wch: 20}, {wch: 10}, {wch: 16}, {wch: 12}, {wch: 12}, {wch: 15}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Inventario_Filtrado");
     XLSX.writeFile(
@@ -3321,49 +3373,129 @@ export default function InventoryModule() {
             }}
           >
             <h2 style={{ color: "var(--color-primary)", marginBottom: "5px", fontSize: "1.4rem" }}>
-              🔍 Historial de Cambios
+              🔍 Historial
             </h2>
             <p style={{ fontSize: "0.9rem", opacity: 0.8, marginBottom: "15px", fontWeight: "bold" }}>
               {auditHistoryItem.name} {auditHistoryItem.code ? `[${auditHistoryItem.code}]` : ''}
             </p>
 
+            <div style={{ display: "flex", gap: "8px", marginBottom: "15px" }}>
+              <button
+                onClick={() => setHistoryTab("cambios")}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "6px",
+                  border: "1px solid var(--glass-border)",
+                  background: historyTab === "cambios" ? "var(--color-primary)" : "transparent",
+                  color: historyTab === "cambios" ? "black" : "white",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                  fontSize: "0.85rem",
+                }}
+              >
+                Cambios de Datos
+              </button>
+              <button
+                onClick={() => {
+                  setHistoryTab("kardex");
+                  if (auditHistoryItem) loadProductKardex(auditHistoryItem);
+                }}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: "6px",
+                  border: "1px solid var(--glass-border)",
+                  background: historyTab === "kardex" ? "var(--color-primary)" : "transparent",
+                  color: historyTab === "kardex" ? "black" : "white",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                  fontSize: "0.85rem",
+                }}
+              >
+                📦 Movimientos de Stock
+              </button>
+            </div>
+
             <div style={{ flex: 1, overflowY: "auto", marginBottom: "20px", paddingRight: "5px" }}>
-              {loadingHistory ? (
-                <div style={{ textAlign: "center", padding: "30px", color: "var(--color-secondary)" }}>
-                  ⏳ Cargando historial...
-                </div>
-              ) : auditHistoryLogs.length > 0 ? (
-                <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.85rem" }}>
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid var(--glass-border)" }}>
-                      <th style={{ padding: "8px 5px" }}>Fecha</th>
-                      <th style={{ padding: "8px 5px" }}>Campo</th>
-                      <th style={{ padding: "8px 5px" }}>Antes</th>
-                      <th style={{ padding: "8px 5px" }}>Nuevo</th>
-                      <th style={{ padding: "8px 5px" }}>Usuario</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditHistoryLogs.map((log: any) => (
-                      <tr key={log.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                        <td style={{ padding: "8px 5px", whiteSpace: "nowrap" }}>{new Date(log.created_at).toLocaleDateString()} {new Date(log.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
-                        <td style={{ padding: "8px 5px", color: "var(--color-primary)", fontWeight: "500" }}>
-                          {log.field === "discount_pct" ? "Descuento" : 
-                           log.field === "discount_start_at" ? "Inicio Promo" : 
-                           log.field === "discount_end_at" ? "Fin Promo" : 
-                           log.field}
-                        </td>
-                        <td style={{ padding: "8px 5px", textDecoration: "line-through", opacity: 0.5 }}>{log.old_value || "-"}</td>
-                        <td style={{ padding: "8px 5px", color: "#10b981", fontWeight: "500" }}>{log.new_value || "-"}</td>
-                        <td style={{ padding: "8px 5px" }}>{log.changed_by || "Sistema"}</td>
+              {historyTab === "cambios" ? (
+                loadingHistory ? (
+                  <div style={{ textAlign: "center", padding: "30px", color: "var(--color-secondary)" }}>
+                    ⏳ Cargando historial...
+                  </div>
+                ) : auditHistoryLogs.length > 0 ? (
+                  <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.85rem" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid var(--glass-border)" }}>
+                        <th style={{ padding: "8px 5px" }}>Fecha</th>
+                        <th style={{ padding: "8px 5px" }}>Campo</th>
+                        <th style={{ padding: "8px 5px" }}>Antes</th>
+                        <th style={{ padding: "8px 5px" }}>Nuevo</th>
+                        <th style={{ padding: "8px 5px" }}>Usuario</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {auditHistoryLogs.map((log: any) => (
+                        <tr key={log.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                          <td style={{ padding: "8px 5px", whiteSpace: "nowrap" }}>{new Date(log.created_at).toLocaleDateString()} {new Date(log.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
+                          <td style={{ padding: "8px 5px", color: "var(--color-primary)", fontWeight: "500" }}>
+                            {log.field === "discount_pct" ? "Descuento" :
+                             log.field === "discount_start_at" ? "Inicio Promo" :
+                             log.field === "discount_end_at" ? "Fin Promo" :
+                             log.field}
+                          </td>
+                          <td style={{ padding: "8px 5px", textDecoration: "line-through", opacity: 0.5 }}>{log.old_value || "-"}</td>
+                          <td style={{ padding: "8px 5px", color: "#10b981", fontWeight: "500" }}>{log.new_value || "-"}</td>
+                          <td style={{ padding: "8px 5px" }}>{log.changed_by || "Sistema"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div style={{ textAlign: "center", padding: "30px", color: "rgba(255,255,255,0.4)" }}>
+                    No se encontraron registros de modificaciones para este producto.
+                  </div>
+                )
               ) : (
-                <div style={{ textAlign: "center", padding: "30px", color: "rgba(255,255,255,0.4)" }}>
-                  No se encontraron registros de modificaciones para este producto.
-                </div>
+                loadingKardex ? (
+                  <div style={{ textAlign: "center", padding: "30px", color: "var(--color-secondary)" }}>
+                    ⏳ Cargando movimientos...
+                  </div>
+                ) : kardexLogs.length > 0 ? (
+                  <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.85rem" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid var(--glass-border)" }}>
+                        <th style={{ padding: "8px 5px" }}>Fecha</th>
+                        <th style={{ padding: "8px 5px" }}>Tipo</th>
+                        <th style={{ padding: "8px 5px" }}>Cantidad</th>
+                        <th style={{ padding: "8px 5px" }}>Referencia</th>
+                        <th style={{ padding: "8px 5px" }}>Usuario</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {kardexLogs.map((log: any) => (
+                        <tr key={log.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                          <td style={{ padding: "8px 5px", whiteSpace: "nowrap" }}>{new Date(log.created_at).toLocaleDateString()} {new Date(log.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
+                          <td style={{ padding: "8px 5px" }}>
+                            {log.movement_type === "sale" ? "🛒 Venta" :
+                             log.movement_type === "restock" ? "📥 Reabasto" :
+                             log.movement_type === "adjustment" ? "🛠️ Ajuste" :
+                             log.movement_type === "layaway" ? "📝 Apartado" :
+                             log.movement_type === "cancellation" ? "❌ Cancelación" :
+                             log.movement_type}
+                          </td>
+                          <td style={{ padding: "8px 5px", fontWeight: "600", color: Number(log.quantity) < 0 ? "#ef4444" : "#10b981" }}>
+                            {Number(log.quantity) > 0 ? "+" : ""}{Number(log.quantity)} {SALE_UNIT_LABELS[auditHistoryItem?.sale_unit || "pieza"]}
+                          </td>
+                          <td style={{ padding: "8px 5px", opacity: 0.8 }}>{log.reference_id || "-"}</td>
+                          <td style={{ padding: "8px 5px" }}>{log.created_by || "Sistema"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div style={{ textAlign: "center", padding: "30px", color: "rgba(255,255,255,0.4)" }}>
+                    No se encontraron movimientos de stock para este producto.
+                  </div>
+                )
               )}
             </div>
 

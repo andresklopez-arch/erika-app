@@ -1984,8 +1984,14 @@ export default function POSModule() {
           writeText(itemTotal + "\n");
           setAlign(0);
         }
+
+        // Precio por unidad visible para que el cliente vea cómo se calculó
+        // el importe en productos vendidos por peso/longitud/volumen.
+        if (item.unit && item.unit !== "pz") {
+          writeText(`  ($${p.toFixed(2)}/${item.unit})\n`);
+        }
       });
-      
+
       writeText(divider);
       
       const subtotalVal = items.reduce((sum: number, i: any) => {
@@ -2075,8 +2081,14 @@ export default function POSModule() {
           writeText(itemTotal + "\n");
           setAlign(0);
         }
+
+        // Precio por unidad visible para que el cliente vea cómo se calculó
+        // el importe en productos vendidos por peso/longitud/volumen.
+        if (item.unit && item.unit !== "pz") {
+          writeText(`  ($${p.toFixed(2)}/${item.unit})\n`);
+        }
       });
-      
+
       writeText(divider);
       
       const subtotalVal = items.reduce((sum: number, i: any) => {
@@ -2332,7 +2344,7 @@ export default function POSModule() {
         const p = (getItemFinalPrice(i, wholesaleRules) * increaseFactor);
         return `
         <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
-          <span>${i.unit && i.unit !== "pz" ? `${i.qty} ${i.unit}` : `${i.qty}x`} ${i.name} ${(i.discountPct || 0) > 0 ? `(-${i.discountPct}%)` : ''}</span>
+          <span>${i.unit && i.unit !== "pz" ? `${i.qty} ${i.unit}` : `${i.qty}x`} ${i.name} ${(i.discountPct || 0) > 0 ? `(-${i.discountPct}%)` : ''}${i.unit && i.unit !== "pz" ? `<div style="font-size: 0.8em; opacity: 0.7;">($${p.toFixed(2)}/${i.unit})</div>` : ''}</span>
           <span>${Math.round(p * i.qty)}</span>
         </div>`;
       }).join("");
@@ -2449,7 +2461,7 @@ export default function POSModule() {
         const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
         return `
         <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-          <div style="flex: 2;">${item.unit && item.unit !== "pz" ? `${item.qty} ${item.unit}` : `${item.qty}x`} ${item.name}</div>
+          <div style="flex: 2;">${item.unit && item.unit !== "pz" ? `${item.qty} ${item.unit}` : `${item.qty}x`} ${item.name}${item.unit && item.unit !== "pz" ? `<div style="font-size: 0.8em; opacity: 0.7;">($${p.toFixed(2)}/${item.unit})</div>` : ''}</div>
           <div style="flex: 1; text-align: right;">${Math.round(p * item.qty)}</div>
         </div>`;
       }).join("");
