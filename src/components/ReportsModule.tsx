@@ -1,18 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
-import * as XLSX from "xlsx";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth, useBusinessProfile } from "./AuthProvider";
-import { SALE_UNIT_LABELS } from "./InventoryModule";
+import UnitSalesSummary from "./UnitSalesSummary";
 
 interface CashSession {
   id: string;
@@ -54,16 +44,6 @@ export default function ReportsModule() {
   const [exporting, setExporting] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [lostSales, setLostSales] = useState<{term: string, count: number, type: string, estimatedPrice?: number}[]>([]);
-  // Total vendido por unidad (kg, m, L, pieza...) en el periodo elegido —
-  // útil para negociar precios con proveedores de productos a granel.
-  // Costo/utilidad se calculan con el costo y precio ACTUALES del producto
-  // (no hay registro histórico por movimiento), así que son un estimado —
-  // mismo criterio ya usado en netProfit.estimatedCostCount más arriba.
-  const [unitSalesSummary, setUnitSalesSummary] = useState<Record<string, { qty: number; cost: number; revenue: number }>>({});
-  const [unitSalesFilterFecha, setUnitSalesFilterFecha] = useState("mes");
-  const [unitSalesCapped, setUnitSalesCapped] = useState(false);
-  const [unitSalesMonthComparison, setUnitSalesMonthComparison] = useState<{ unit: string; "Mes Anterior": number; "Mes Actual": number }[]>([]);
-  const [isMounted, setIsMounted] = useState(false);
   const [radarFilterFecha, setRadarFilterFecha] = useState("mes");
 
   interface AuditLog {
@@ -278,109 +258,7 @@ export default function ReportsModule() {
 
   useEffect(() => {
     fetchData();
-    setIsMounted(true);
   }, []);
-
-  useEffect(() => {
-    const MAX_MOVEMENTS = 5000; // límite razonable para no traer un periodo enorme entero a memoria
-
-    const summarizeMovements = (rows: any[]) => {
-      const totals: Record<string, { qty: number; cost: number; revenue: number }> = {};
-      rows.forEach((m: any) => {
-        const unit = m.inventory?.sale_unit || "pieza";
-        const qty = Math.abs(Number(m.quantity) || 0);
-        const cost = Number(m.inventory?.cost) || 0;
-        const price = Number(m.inventory?.price) || 0;
-        if (!totals[unit]) totals[unit] = { qty: 0, cost: 0, revenue: 0 };
-        totals[unit].qty += qty;
-        totals[unit].cost += qty * cost;
-        totals[unit].revenue += qty * price;
-      });
-      return totals;
-    };
-
-    const fetchUnitSales = async () => {
-      // Total vendido por unidad de venta en el periodo elegido (Kardex:
-      // movimientos "sale", cantidad negativa; se agrupa por la unidad del
-      // producto). Costo/utilidad usan el costo y precio ACTUALES del
-      // producto (no hay snapshot histórico por movimiento), así que son
-      // un estimado si el precio cambió desde entonces.
-      let query = supabase
-        .from("inventory_movements")
-        .select("quantity, inventory:inventory_id(sale_unit, cost, price)")
-        .eq("movement_type", "sale")
-        .limit(MAX_MOVEMENTS);
-
-      const now = new Date();
-      if (unitSalesFilterFecha !== "todos") {
-        if (unitSalesFilterFecha === "hoy") {
-          query = query.gte("created_at", new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString());
-        } else if (unitSalesFilterFecha === "semana") {
-          query = query.gte("created_at", new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString());
-        } else if (unitSalesFilterFecha === "mes") {
-          query = query.gte("created_at", new Date(now.getFullYear(), now.getMonth(), 1).toISOString());
-        }
-      }
-
-      const { data, error } = await query;
-      if (!error && data) {
-        setUnitSalesSummary(summarizeMovements(data));
-        setUnitSalesCapped(data.length >= MAX_MOVEMENTS);
-      } else {
-        setUnitSalesSummary({});
-        setUnitSalesCapped(false);
-      }
-
-      // Comparativo Mes Actual vs Mes Anterior para la gráfica (fijo, no
-      // depende del filtro de arriba — ese es para las tarjetas de resumen).
-      const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-
-      const [{ data: thisMonthData }, { data: lastMonthData }] = await Promise.all([
-        supabase
-          .from("inventory_movements")
-          .select("quantity, inventory:inventory_id(sale_unit)")
-          .eq("movement_type", "sale")
-          .gte("created_at", startOfThisMonth.toISOString())
-          .limit(MAX_MOVEMENTS),
-        supabase
-          .from("inventory_movements")
-          .select("quantity, inventory:inventory_id(sale_unit)")
-          .eq("movement_type", "sale")
-          .gte("created_at", startOfLastMonth.toISOString())
-          .lt("created_at", startOfThisMonth.toISOString())
-          .limit(MAX_MOVEMENTS),
-      ]);
-
-      const thisMonthTotals = summarizeMovements(thisMonthData || []);
-      const lastMonthTotals = summarizeMovements(lastMonthData || []);
-      const allUnits = new Set([...Object.keys(thisMonthTotals), ...Object.keys(lastMonthTotals)]);
-      setUnitSalesMonthComparison(
-        Array.from(allUnits).map((unit) => ({
-          unit: SALE_UNIT_LABELS[unit] || unit,
-          "Mes Anterior": Number((lastMonthTotals[unit]?.qty || 0).toFixed(3)),
-          "Mes Actual": Number((thisMonthTotals[unit]?.qty || 0).toFixed(3)),
-        }))
-      );
-    };
-
-    fetchUnitSales();
-  }, [unitSalesFilterFecha]);
-
-  const exportUnitSalesToExcel = () => {
-    const rows = Object.entries(unitSalesSummary).map(([unit, t]) => ({
-      Unidad: SALE_UNIT_LABELS[unit] || unit,
-      "Cantidad Vendida": t.qty,
-      "Costo Estimado": Number(t.cost.toFixed(2)),
-      "Venta Estimada": Number(t.revenue.toFixed(2)),
-      "Utilidad Estimada": Number((t.revenue - t.cost).toFixed(2)),
-    }));
-    if (rows.length === 0) return alert("No hay ventas por unidad en este periodo.");
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Ventas_Por_Unidad");
-    XLSX.writeFile(wb, `Ventas_Por_Unidad_ERIKA_${new Date().toISOString().split("T")[0]}.xlsx`);
-  };
 
   useEffect(() => {
     const fetchRadar = async () => {
@@ -617,92 +495,7 @@ export default function ReportsModule() {
          </div>
       )}
 
-      <div className="glass-panel" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-          <div>
-            <h3 style={{ color: "var(--color-secondary)", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
-              ⚖️ Ventas por Unidad
-            </h3>
-            <p style={{ margin: "5px 0 0 0", fontSize: "0.8rem", opacity: 0.7 }}>
-              Útil para negociar precios con proveedores de productos a granel. Costo/utilidad son un estimado con el costo y precio actuales del producto.
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <select
-              value={unitSalesFilterFecha}
-              onChange={(e) => setUnitSalesFilterFecha(e.target.value)}
-              style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "white", fontSize: "0.85rem" }}
-            >
-              <option value="hoy">Hoy</option>
-              <option value="semana">Últimos 7 días</option>
-              <option value="mes">Este Mes</option>
-              <option value="todos">Todo el Historial</option>
-            </select>
-            <button
-              onClick={exportUnitSalesToExcel}
-              className="btn-primary"
-              style={{ padding: "8px 14px", fontSize: "0.85rem", background: "rgba(16,185,129,0.15)", border: "1px solid #10b981", color: "#10b981" }}
-            >
-              📥 Exportar
-            </button>
-          </div>
-        </div>
-
-        {unitSalesCapped && (
-          <p style={{ margin: 0, fontSize: "0.75rem", color: "#f59e0b" }}>
-            ⚠️ Este periodo tiene muchísimos movimientos — el cálculo se limitó a los primeros 5,000 y puede estar incompleto. Elige un rango de fechas más corto para un total exacto.
-          </p>
-        )}
-
-        {Object.keys(unitSalesSummary).length > 0 ? (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginTop: "5px" }}>
-            {Object.entries(unitSalesSummary).map(([unit, t]) => (
-              <div
-                key={unit}
-                style={{
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid var(--glass-border)",
-                  borderRadius: "10px",
-                  padding: "10px 18px",
-                  minWidth: "160px",
-                }}
-              >
-                <div style={{ fontSize: "1.3rem", fontWeight: "bold", color: "var(--color-primary)" }}>
-                  {t.qty.toLocaleString("es-MX", { maximumFractionDigits: 3 })}
-                </div>
-                <div style={{ fontSize: "0.8rem", opacity: 0.8, marginBottom: "6px" }}>{SALE_UNIT_LABELS[unit] || unit}</div>
-                <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>Costo: ${t.cost.toLocaleString("es-MX", { minimumFractionDigits: 2 })}</div>
-                <div style={{ fontSize: "0.75rem", color: "#10b981" }}>Utilidad: ${(t.revenue - t.cost).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p style={{ margin: 0, fontSize: "0.85rem", opacity: 0.6 }}>Sin ventas registradas en este periodo.</p>
-        )}
-
-        {unitSalesMonthComparison.length > 0 && (
-          <div style={{ marginTop: "10px" }}>
-            <p style={{ margin: "0 0 8px 0", fontSize: "0.85rem", opacity: 0.8 }}>📊 Mes Actual vs. Mes Anterior (cantidad vendida)</p>
-            <div style={{ width: "100%", height: "220px" }}>
-              {isMounted && (
-                <ResponsiveContainer>
-                  <BarChart data={unitSalesMonthComparison}>
-                    <XAxis dataKey="unit" stroke="#fff" tick={{ fill: "#ccc", fontSize: 12 }} />
-                    <YAxis stroke="#fff" tick={{ fill: "#ccc" }} />
-                    <Tooltip
-                      cursor={{ fill: "rgba(255,255,255,0.1)" }}
-                      contentStyle={{ background: "#111", border: "1px solid var(--color-primary)" }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: "0.8rem" }} />
-                    <Bar dataKey="Mes Anterior" fill="rgba(255,255,255,0.3)" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="Mes Actual" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+      <UnitSalesSummary />
 
       {/* Resumen de Inteligencia */}
       <div className="grid-cols-2">

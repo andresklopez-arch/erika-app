@@ -18,6 +18,7 @@ import {
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../components/AuthProvider";
 import { LoggerService } from "../../services/loggerService";
+import UnitSalesSummary from "../../components/UnitSalesSummary";
 
 // 1. Error Boundary para robustecer la importación dinámica frente a fallos de red
 interface ErrorBoundaryProps {
@@ -921,6 +922,8 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+
+            <UnitSalesSummary compact />
           </div>
         )}
 
