@@ -584,9 +584,13 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
 
   const saveQuoteFollowupConfig = async () => {
     if (!checkAdmin()) return;
+    const days = parseNumOr(quoteFollowupDays, 2);
+    if (days < 1) {
+      return alert("❌ El umbral de seguimiento debe ser de al menos 1 día.");
+    }
     const success = await updateBusinessSettings({
       config: {
-        quote_followup_days: parseNumOr(quoteFollowupDays, 2),
+        quote_followup_days: days,
       }
     });
     if (success) {

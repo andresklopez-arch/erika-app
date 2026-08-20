@@ -69,6 +69,7 @@ export default function ReportsModule() {
   // Solo se muestra el panel si la consulta funcionó (la columna
   // whatsapp_sent_at puede no existir todavía si no se corrió la migración).
   const [quoteStatsAvailable, setQuoteStatsAvailable] = useState(false);
+  const [quoteStatsMigrationPending, setQuoteStatsMigrationPending] = useState(false);
 
   const fetchData = async () => {
     const today = new Date();
@@ -266,7 +267,13 @@ export default function ReportsModule() {
         .select("status, whatsapp_sent_at")
         .neq("status", "ticket")
         .not("whatsapp_sent_at", "is", null);
-      if (error || !data) return;
+      if (error) {
+        // El unico error esperado aqui es que la columna whatsapp_sent_at
+        // todavia no existe (falta correr la migracion pendiente).
+        setQuoteStatsMigrationPending(true);
+        return;
+      }
+      if (!data) return;
 
       const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
       const followUpThresholdMs = (businessSettings?.config?.quote_followup_days || 2) * 24 * 60 * 60 * 1000;
@@ -538,19 +545,44 @@ export default function ReportsModule() {
             📄 Presupuestos por WhatsApp
           </h3>
           <div style={{ display: "flex", gap: "25px" }}>
-            <div style={{ textAlign: "center" }}>
+            <button
+              onClick={() => { window.location.href = "/clientes?tab=presupuestos"; }}
+              title="Ver todos los presupuestos"
+              style={{ background: "transparent", border: "none", cursor: "pointer", textAlign: "center", color: "inherit" }}
+            >
               <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#22c55e" }}>
                 {quoteStats.sentThisWeek}
               </div>
               <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>enviados esta semana</div>
-            </div>
-            <div style={{ textAlign: "center" }}>
+            </button>
+            <button
+              onClick={() => {
+                try { localStorage.setItem("ERIKA_QUOTES_ONLY_FOLLOWUP", "true"); } catch (e) {}
+                window.location.href = "/clientes?tab=presupuestos";
+              }}
+              title="Ver solo los presupuestos que necesitan seguimiento"
+              style={{ background: "transparent", border: "none", cursor: "pointer", textAlign: "center", color: "inherit" }}
+            >
               <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#f97316" }}>
                 {quoteStats.needingFollowUp}
               </div>
               <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>sin respuesta</div>
-            </div>
+            </button>
           </div>
+        </div>
+      )}
+
+      {quoteStatsMigrationPending && (
+        <div
+          className="glass-panel"
+          style={{
+            fontSize: "0.85rem",
+            opacity: 0.8,
+            border: "1px dashed rgba(255,255,255,0.2)",
+          }}
+        >
+          📄 El panel de "Presupuestos por WhatsApp" necesita una migración pendiente en Supabase
+          (columna <code>whatsapp_sent_at</code> en <code>quotes</code>) para poder mostrarse.
         </div>
       )}
 

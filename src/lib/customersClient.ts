@@ -19,13 +19,20 @@ interface Result {
 const CUSTOMER_LIST_WARN_THRESHOLD = 2000;
 const CUSTOMER_LIST_HARD_LIMIT = 5000;
 
+// Sidebar escucha este evento para prender el mismo punto rojo que ya usa
+// para avisos de seguridad, pero en naranja (aviso operativo, no de RLS).
+export const OPERATIONAL_WARNING_EVENT = "erika:operational-warning";
+
 // Un console.warn no lo ve nadie en producción. Se registra tambien en
 // error_logs (una vez por sesion de pestaña, para no llenar la tabla en
-// cada carga del POS) para que quede visible de verdad.
+// cada carga del POS) para que quede visible de verdad, y dispara un evento
+// para que el Sidebar lo refleje de inmediato aunque ya se haya montado.
 function warnAboutCustomerListSize(count: number) {
   console.warn(`fetchActiveCustomers: ${count} clientes activos — considerar paginar antes de llegar al limite de ${CUSTOMER_LIST_HARD_LIMIT}.`);
   try {
-    if (typeof window === "undefined" || sessionStorage.getItem("ERIKA_CUSTOMER_COUNT_WARNED")) return;
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent(OPERATIONAL_WARNING_EVENT, { detail: { type: "customer_list_size", count } }));
+    if (sessionStorage.getItem("ERIKA_CUSTOMER_COUNT_WARNED")) return;
     sessionStorage.setItem("ERIKA_CUSTOMER_COUNT_WARNED", "1");
   } catch (e) {
     return;

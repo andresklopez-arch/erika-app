@@ -13,7 +13,10 @@ export default function QuotesModule() {
   const [quotes, setQuotes] = useState<any[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
   const [customers, setCustomers] = useState<any[]>([]);
-  const [showOnlyFollowUp, setShowOnlyFollowUp] = useState(false);
+  const [showOnlyFollowUp, setShowOnlyFollowUp] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("ERIKA_QUOTES_ONLY_FOLLOWUP") === "true";
+  });
 
   const fetchQuotes = async () => {
     const { data } = await supabase
@@ -33,6 +36,12 @@ export default function QuotesModule() {
     fetchQuotes();
     fetchCustomers();
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("ERIKA_QUOTES_ONLY_FOLLOWUP", String(showOnlyFollowUp));
+    } catch (e) {}
+  }, [showOnlyFollowUp]);
 
   // Resuelve el telefono de una cotizacion sin volver a consultar la base:
   // primero el snapshot guardado en la cotizacion (customer_phone), luego

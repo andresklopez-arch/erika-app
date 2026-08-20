@@ -4,6 +4,7 @@ import { useAuth } from "./AuthProvider";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../lib/supabaseClient";
+import { OPERATIONAL_WARNING_EVENT } from "../lib/customersClient";
 
 export default function Sidebar() {
   const { currentUser } = useAuth();
@@ -13,6 +14,7 @@ export default function Sidebar() {
   const [pendingLayawaysCount, setPendingLayawaysCount] = useState(0);
   const [pendingQuotesCount, setPendingQuotesCount] = useState(0);
   const [hasOpenSecurityIssues, setHasOpenSecurityIssues] = useState(false);
+  const [hasOperationalWarning, setHasOperationalWarning] = useState(false);
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
   const [escHiddenGroup, setEscHiddenGroup] = useState<string | null>(null);
   const [isPinned, setIsPinned] = useState(() => {
@@ -27,6 +29,20 @@ export default function Sidebar() {
       localStorage.setItem("erika_sidebar_pinned", String(isPinned));
     }
   }, [isPinned]);
+
+  // Aviso operativo (no de seguridad RLS) — reutiliza el mismo punto rojo
+  // de Configuración, en naranja, para otros avisos de "esto va a fallar
+  // pronto si no se atiende" como el tamaño de la lista de clientes.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("ERIKA_CUSTOMER_COUNT_WARNED")) {
+        setHasOperationalWarning(true);
+      }
+    } catch (e) {}
+    const handleWarning = () => setHasOperationalWarning(true);
+    window.addEventListener(OPERATIONAL_WARNING_EVENT, handleWarning);
+    return () => window.removeEventListener(OPERATIONAL_WARNING_EVENT, handleWarning);
+  }, []);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -393,7 +409,13 @@ export default function Sidebar() {
               href="/configuracion"
               className={isActive("/configuracion") ? "active" : ""}
               onClick={(e) => handleLinkClick(e, "/configuracion")}
-              title={hasOpenSecurityIssues ? "Configuración (Alt + 6) — hay tablas o funciones con escritura abierta" : "Configuración (Alt + 6)"}
+              title={
+                hasOpenSecurityIssues
+                  ? "Configuración (Alt + 6) — hay tablas o funciones con escritura abierta"
+                  : hasOperationalWarning
+                    ? "Configuración (Alt + 6) — hay un aviso operativo pendiente de revisar"
+                    : "Configuración (Alt + 6)"
+              }
             >
               <span className="icon" style={{ position: "relative" }}>
                 ⚙️
@@ -407,6 +429,20 @@ export default function Sidebar() {
                       height: "8px",
                       borderRadius: "50%",
                       background: "#ef4444",
+                      border: "1px solid rgba(0,0,0,0.4)",
+                    }}
+                  />
+                )}
+                {!hasOpenSecurityIssues && hasOperationalWarning && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: "-2px",
+                      right: "-4px",
+                      width: "8px",
+                      height: "8px",
+                      borderRadius: "50%",
+                      background: "#f97316",
                       border: "1px solid rgba(0,0,0,0.4)",
                     }}
                   />
