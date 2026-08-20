@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import toast from "react-hot-toast";
 import { LoggerService } from "../services/loggerService";
+import { saveService, deleteService } from "../lib/servicesClient";
 
 interface ServiceAppointment {
   id: string;
@@ -143,16 +144,11 @@ export default function ServicesModule() {
 
     try {
       if (editingService) {
-        const { error } = await supabase
-          .from("services")
-          .update(payload)
-          .eq("id", editingService.id);
-        if (error) throw error;
+        const { error } = await saveService({ id: editingService.id, fields: payload });
+        if (error) throw new Error(error.message);
       } else {
-        const { error } = await supabase
-          .from("services")
-          .insert([{ ...payload, status: "pending" }]);
-        if (error) throw error;
+        const { error } = await saveService({ fields: { ...payload, status: "pending" } });
+        if (error) throw new Error(error.message);
       }
       setShowModal(false);
       fetchServices();
@@ -167,11 +163,8 @@ export default function ServicesModule() {
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
-      const { error } = await supabase
-        .from("services")
-        .update({ status: newStatus })
-        .eq("id", id);
-      if (error) throw error;
+      const { error } = await saveService({ id, fields: { status: newStatus } });
+      if (error) throw new Error(error.message);
       
       fetchServices();
 
@@ -195,11 +188,8 @@ export default function ServicesModule() {
   const handleDelete = async (id: string) => {
     if (confirm("¿Estás seguro de eliminar esta cita de servicio?\nSe moverá a la Papelera.")) {
       try {
-        const { error } = await supabase
-          .from("services")
-          .update({ deleted: true, deleted_at: new Date().toISOString() })
-          .eq("id", id);
-        if (error) throw error;
+        const { error } = await deleteService(id, "soft");
+        if (error) throw new Error(error.message);
         toast.success("Servicio movido a la Papelera.");
         fetchServices();
       } catch (err) {

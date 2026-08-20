@@ -102,6 +102,8 @@ async function main() {
     // real sin tocar ningún producto ni escribir en inventory_movements.
     ["reduce_inventory_stock (RPC)", null, () => anon.rpc("reduce_inventory_stock", { items: [], ref_id: "RLS-CHECK", user_name: "RLS-CHECK", move_type: "adjustment" })],
     ["inventory (INSERT)", "inventory", () => anon.from("inventory").insert({ name: "RLS-CHECK", price: 1, cost: 1, stock: 0 }).select("id").single()],
+    ["services (INSERT)", "services", () => anon.from("services").insert({ customer_name: "RLS-CHECK", technician_name: "RLS-CHECK", service_type: "RLS-CHECK", scheduled_at: new Date().toISOString(), cost: 1, status: "pending" }).select("id").single()],
+    ["suppliers (INSERT)", "suppliers", () => anon.from("suppliers").insert({ name: "RLS-CHECK" }).select("id").single()],
   ];
 
   // Detectadas en la auditoría general de esta sesión (admin_list_rls_policies
@@ -114,8 +116,6 @@ async function main() {
   // autolimpiarse a su valor original — su estado se puede ver sin tocar datos
   // reales desde el panel "Auditoría de Seguridad (RLS)" en Configuración.
   const knownOpenPending = [
-    ["services (INSERT)", "services", () => anon.from("services").insert({ customer_name: "RLS-CHECK", technician_name: "RLS-CHECK", service_type: "RLS-CHECK", scheduled_at: new Date().toISOString(), cost: 1, status: "pending" }).select("id").single()],
-    ["suppliers (INSERT)", "suppliers", () => anon.from("suppliers").insert({ name: "RLS-CHECK" }).select("id").single()],
     ["supplier_orders (INSERT)", "supplier_orders", realSupplier
       ? () => anon.from("supplier_orders").insert({ supplier_id: realSupplier.id, action_type: "RLS-CHECK", notes: "RLS-CHECK" }).select("id").single()
       : () => Promise.resolve({ data: null, error: { message: "No hay ningún proveedor real para probar la llave foránea." } })],

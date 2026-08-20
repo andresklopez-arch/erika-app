@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import toast from "react-hot-toast";
 import { LoggerService } from "../services/loggerService";
 import { bulkUpdateInventory } from "../lib/inventoryClient";
+import { saveSupplier, deleteSupplier } from "../lib/suppliersClient";
 
 interface Supplier {
   id: string;
@@ -78,10 +79,7 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
       return;
     }
 
-    const { error } = await supabase
-      .from("suppliers")
-      .update({ deleted: true, deleted_at: new Date().toISOString() })
-      .eq("id", supplier.id);
+    const { error } = await deleteSupplier(supplier.id, "soft");
 
     if (error) {
       toast.error("Error al eliminar proveedor: " + error.message);
@@ -111,13 +109,10 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
         .single();
       const previousName = prevSupplier?.name;
 
-      const { error } = await supabase.from("suppliers").update({
-        name,
-        contact_name: contactName,
-        phone,
-        email,
-        notes,
-      }).eq("id", editingSupplierId);
+      const { error } = await saveSupplier({
+        id: editingSupplierId,
+        fields: { name, contact_name: contactName, phone, email, notes },
+      });
       if (error) {
         LoggerService.logError("SuppliersManagerModal", error);
         toast.error(`Error de Supabase: ${error.message || JSON.stringify(error)}`);
@@ -140,12 +135,8 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
         fetchSuppliers();
       }
     } else {
-      const { error } = await supabase.from("suppliers").insert({
-        name,
-        contact_name: contactName,
-        phone,
-        email,
-        notes,
+      const { error } = await saveSupplier({
+        fields: { name, contact_name: contactName, phone, email, notes },
       });
       if (error) {
         LoggerService.logError("SuppliersManagerModal", error);

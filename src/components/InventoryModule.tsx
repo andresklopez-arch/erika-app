@@ -125,6 +125,18 @@ export default function InventoryModule() {
   // Verifica un PIN de administrador del lado del servidor (Service Role
   // Key, nunca expuesta al cliente) — antes se comparaba directamente
   // contra `users` desde el navegador con la llave pública.
+  // PIN de administrador verificado justo antes de habilitar la edición de
+  // una celda — se reutiliza al guardar (dentro de los siguientes 2
+  // minutos) para que el servidor también lo exija, no solo el navegador.
+  const pendingCellPinRef = useRef<{ pin: string; verifiedAt: number } | null>(null);
+  const takePendingCellPin = (): string | undefined => {
+    const pending = pendingCellPinRef.current;
+    pendingCellPinRef.current = null;
+    if (!pending) return undefined;
+    if (Date.now() - pending.verifiedAt > 2 * 60 * 1000) return undefined;
+    return pending.pin;
+  };
+
   const verifyAdminPinRemote = async (pin: string): Promise<boolean> => {
     try {
       const res = await fetch("/api/auth/verify-pin", {
@@ -519,6 +531,8 @@ export default function InventoryModule() {
         discount_start_at: startVal,
         discount_end_at: endVal,
       },
+      requireAdminPin: currentUser?.role !== "admin",
+      adminPin: takePendingCellPin(),
       auditLog: [
         { field: "discount_pct", oldValue: editingDiscountItem.discount_pct || "0", newValue: pct },
         { field: "discount_start_at", oldValue: editingDiscountItem.discount_start_at || "", newValue: startVal || "" },
@@ -940,9 +954,17 @@ export default function InventoryModule() {
       updateObj.autoPriced = false;
     }
 
+    // "supplier" y "location" tienen su propio onClick con
+    // e.stopPropagation() en el render de la celda (para poder filtrar o
+    // imprimir sin abrir el modo edición) — nunca pasan por el prompt de
+    // PIN de arriba, con o sin este cambio, así que se excluyen aquí para
+    // no romper esos dos flujos a quien no es admin.
+    const fieldHasOwnClickHandler = field === "supplier" || field === "location";
     const { error } = await saveInventoryItem({
       id: itemId,
       fields: updateObj,
+      requireAdminPin: currentUser?.role !== "admin" && !fieldHasOwnClickHandler,
+      adminPin: takePendingCellPin(),
       auditLog: originalItem
         ? [{ field, oldValue: originalItem[field as keyof InventoryItem] ?? "", newValue: finalValue }]
         : undefined,
@@ -1253,6 +1275,12 @@ export default function InventoryModule() {
               alert("❌ PIN incorrecto o sin privilegios de administrador.");
               return;
             }
+            // Antes el PIN solo desbloqueaba la edición en el navegador —
+            // nada lo exigía al momento real de guardar, así que alguien
+            // podía saltarse por completo este prompt llamando la API
+            // directo. Se guarda el PIN ya verificado unos minutos para
+            // mandarlo también al guardar (ver handleCellBlur).
+            pendingCellPinRef.current = { pin: pass, verifiedAt: Date.now() };
           }
           if (field === "discount_pct") {
             setEditingDiscountItem(item);

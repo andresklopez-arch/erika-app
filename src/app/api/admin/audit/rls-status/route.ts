@@ -54,7 +54,23 @@ export async function POST(request: Request) {
 
     tables.sort((a, b) => (b.openToWrite ? 1 : 0) - (a.openToWrite ? 1 : 0));
 
-    return NextResponse.json({ success: true, tables });
+    // Un RPC puede seguir abierto a anon/authenticated aunque su tabla ya
+    // esté cerrada (pasó hoy con reduce_inventory_stock) — se muestra por
+    // separado de las tablas. Si la función admin_list_function_grants
+    // todavía no existe en esta base (migración no aplicada), se omite esta
+    // sección sin tumbar el resto de la auditoría.
+    let functions: { name: string; signature: string; grantees: string[] }[] = [];
+    const { data: grants, error: grantsError } = await supabaseAdmin.rpc("admin_list_function_grants");
+    if (!grantsError && grants) {
+      const byFunction = new Map<string, { signature: string; grantees: string[] }>();
+      for (const g of grants) {
+        if (!byFunction.has(g.routine_name)) byFunction.set(g.routine_name, { signature: g.signature, grantees: [] });
+        byFunction.get(g.routine_name)!.grantees.push(g.grantee);
+      }
+      functions = Array.from(byFunction.entries()).map(([name, v]) => ({ name, signature: v.signature, grantees: v.grantees }));
+    }
+
+    return NextResponse.json({ success: true, tables, functions });
   } catch (error: any) {
     console.error("Error en /api/admin/audit/rls-status:", error);
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });

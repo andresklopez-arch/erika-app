@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { saveSupplier } from "../lib/suppliersClient";
 
 interface SmartImporterProps {
   avgMargin: number;
@@ -398,6 +399,15 @@ export default function SmartImporter({
       );
       return;
     }
+    // /api/inventory/bulk-import rechaza lotes de más de 5000 filas (límite
+    // de seguridad contra un payload manipulado) — se avisa aquí antes,
+    // para no hacer esperar al usuario solo para que falle en el servidor.
+    if (codes.length > 5000) {
+      alert(
+        `❌ Este lote tiene ${codes.length} productos. El máximo por carga es 5,000. Divide el archivo en partes más pequeñas e impórtalas por separado.`
+      );
+      return;
+    }
     if (warningsList.length > 0) {
       const proceed = window.confirm(
         `Se encontraron advertencias antes de importar:\n\n${warningsList.join("\n")}\n\n¿Deseas continuar con la importación de todos modos?`
@@ -426,7 +436,7 @@ export default function SmartImporter({
           const cleanSup = sup
             .toLowerCase()
             .replace(/\b\w/g, (c) => c.toUpperCase());
-          const { error: supErr } = await supabase.from("suppliers").insert({ name: cleanSup });
+          const { error: supErr } = await saveSupplier({ fields: { name: cleanSup } });
           if (supErr) {
             console.error("Error al registrar proveedor:", sup, supErr);
             failedSuppliers.push(cleanSup);

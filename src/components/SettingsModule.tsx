@@ -6,6 +6,8 @@ import { LoggerService } from "../services/loggerService";
 import { getOrReconnectBlePrinter, sendBleBytes } from "../utils/bluetoothPrinter";
 import { deleteCustomer } from "../lib/customersClient";
 import { deleteInventoryItem } from "../lib/inventoryClient";
+import { deleteSupplier } from "../lib/suppliersClient";
+import { deleteService } from "../lib/servicesClient";
 
 // A diferencia de `Number(x) || fallback`, esto no pisa un 0 explícito con el
 // valor por defecto (Number("0") || 5 evaluaba a 5, impidiendo desactivar
@@ -154,9 +156,27 @@ export default function SettingsModule() {
     policies: { policy_name: string; cmd: string; roles: string[] }[];
   }
   const [rlsTables, setRlsTables] = useState<RlsTableStatus[] | null>(null);
+  interface RlsFunctionStatus {
+    name: string;
+    signature: string;
+    grantees: string[];
+  }
+  const [rlsFunctions, setRlsFunctions] = useState<RlsFunctionStatus[] | null>(null);
   const [isCheckingRls, setIsCheckingRls] = useState(false);
   const [showTestInstructions, setShowTestInstructions] = useState(false);
   const [copiedSqlTable, setCopiedSqlTable] = useState<string | null>(null);
+  const [copiedSqlFn, setCopiedSqlFn] = useState<string | null>(null);
+
+  const copyCloseFunctionSql = async (fn: RlsFunctionStatus) => {
+    const sql = `REVOKE EXECUTE ON FUNCTION ${fn.signature} FROM PUBLIC, anon, authenticated;\nGRANT EXECUTE ON FUNCTION ${fn.signature} TO service_role;`;
+    try {
+      await navigator.clipboard.writeText(sql);
+      setCopiedSqlFn(fn.name);
+      setTimeout(() => setCopiedSqlFn((f) => (f === fn.name ? null : f)), 2000);
+    } catch {
+      alert("No se pudo copiar automáticamente. Aquí está el SQL:\n\n" + sql);
+    }
+  };
 
   interface CheckpointRow {
     id: string;
@@ -238,6 +258,7 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
         return;
       }
       setRlsTables(json.tables);
+      setRlsFunctions(json.functions || []);
     } catch (e: any) {
       alert("❌ Error: " + e.message);
     } finally {
@@ -342,9 +363,9 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
           } else if (item.type === "cliente") {
             await deleteCustomer(item.id, "hard");
           } else if (item.type === "proveedor") {
-            await supabase.from("suppliers").delete().eq("id", item.id);
+            await deleteSupplier(item.id, "hard");
           } else if (item.type === "servicio") {
-            await supabase.from("services").delete().eq("id", item.id);
+            await deleteService(item.id, "hard");
           }
         } else {
           activeTrash.push(item);
@@ -370,10 +391,10 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
         const { error: err } = await deleteCustomer(item.id, "restore");
         error = err;
       } else if (item.type === "proveedor") {
-        const { error: err } = await supabase.from("suppliers").update({ deleted: false, deleted_at: null }).eq("id", item.id);
+        const { error: err } = await deleteSupplier(item.id, "restore");
         error = err;
       } else if (item.type === "servicio") {
-        const { error: err } = await supabase.from("services").update({ deleted: false, deleted_at: null }).eq("id", item.id);
+        const { error: err } = await deleteService(item.id, "restore");
         error = err;
       }
 
@@ -408,10 +429,10 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
         const { error: err } = await deleteCustomer(item.id, "hard");
         error = err;
       } else if (item.type === "proveedor") {
-        const { error: err } = await supabase.from("suppliers").delete().eq("id", item.id);
+        const { error: err } = await deleteSupplier(item.id, "hard");
         error = err;
       } else if (item.type === "servicio") {
-        const { error: err } = await supabase.from("services").delete().eq("id", item.id);
+        const { error: err } = await deleteService(item.id, "hard");
         error = err;
       }
 
@@ -2186,6 +2207,42 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {rlsFunctions && rlsFunctions.length > 0 && (
+              <div style={{ marginTop: "15px", paddingTop: "15px", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+                <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.8)", fontWeight: "bold", marginBottom: "8px" }}>
+                  ⚙️ Funciones (RPC) ejecutables sin pasar por el servidor
+                </p>
+                <div style={{ maxHeight: "180px", overflowY: "auto" }}>
+                  {rlsFunctions.map((fn) => (
+                    <div
+                      key={fn.name}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "8px 10px",
+                        marginBottom: "6px",
+                        borderRadius: "6px",
+                        background: "rgba(239,68,68,0.1)",
+                        border: "1px solid rgba(239,68,68,0.3)",
+                      }}
+                    >
+                      <span style={{ fontFamily: "monospace", fontSize: "0.85rem" }}>
+                        {fn.name} <span style={{ opacity: 0.5, fontSize: "0.75rem" }}>({fn.grantees.join(", ")})</span>
+                      </span>
+                      <button
+                        onClick={() => copyCloseFunctionSql(fn)}
+                        title="Copiar el SQL para cerrar este RPC y pegarlo en Supabase"
+                        style={{ background: "rgba(239,68,68,0.15)", color: "#f87171", border: "1px solid rgba(239,68,68,0.4)", padding: "3px 8px", borderRadius: "4px", cursor: "pointer", fontSize: "0.72rem", whiteSpace: "nowrap" }}
+                      >
+                        {copiedSqlFn === fn.name ? "✅ Copiado" : "📋 Copiar SQL"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
