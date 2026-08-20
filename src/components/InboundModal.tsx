@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { reduceInventoryStock } from "../lib/inventoryClient";
 
 interface InventoryItem {
   id: string;
@@ -104,23 +105,11 @@ export default function InboundModal({ onClose, onSuccess }: InboundModalProps) 
       // modal — si una caja vendía el producto mientras se capturaba la
       // factura de recepción (puede tardar varios minutos), esa venta se
       // borraba en silencio al guardar.
-      const { error: rpcErr } = await supabase.rpc("reduce_inventory_stock", {
-        items: [{ id: item.id, qty: -totalQty }],
-        ref_id: `IN-${Date.now()}`,
-        user_name: "Recepción de Mercancía",
-        move_type: "restock",
-      });
-      if (rpcErr) {
-        console.warn("Falla al llamar RPC reduce_inventory_stock en recepción, reintentando con fallback manual...", rpcErr);
-        const { error: fallbackErr } = await supabase
-          .from("inventory")
-          .update({ stock: item.stock + totalQty })
-          .eq("id", item.id);
-        if (fallbackErr) {
-          console.error(fallbackErr);
-          hasError = true;
-          continue;
-        }
+      const { error: invErr } = await reduceInventoryStock([{ id: item.id, qty: -totalQty }], "restock", `IN-${Date.now()}`);
+      if (invErr) {
+        console.error(invErr.message);
+        hasError = true;
+        continue;
       }
 
       const { error: costErr } = await supabase

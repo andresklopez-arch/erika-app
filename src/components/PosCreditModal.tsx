@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { reduceInventoryStock } from "../lib/inventoryClient";
 
 interface Props {
   show: boolean;
@@ -135,27 +136,15 @@ export default function PosCreditModal({
 
       // Descontar existencias, igual que en ventas de contado/tarjeta.
       try {
-        const { error: rpcErr } = await supabase.rpc("reduce_inventory_stock", {
-          items: items.map((item) => {
+        const { error: invErr } = await reduceInventoryStock(
+          items.map((item) => {
             const invItem = globalCatalog.find((i) => i.name === item.name);
             return { id: invItem ? invItem.id : null, qty: item.qty };
-          }).filter((item) => item.id !== null),
-          ref_id: activeTicketId.toString(),
-          user_name: currentUserName || "Venta Mostrador",
-          move_type: "sale",
-        });
-
-        if (rpcErr) {
-          for (const item of items) {
-            const invItem = globalCatalog.find((i) => i.name === item.name);
-            if (invItem) {
-              await supabase
-                .from("inventory")
-                .update({ stock: invItem.stock - item.qty })
-                .eq("id", invItem.id);
-            }
-          }
-        }
+          }).filter((item): item is { id: string; qty: number } => item.id !== null),
+          "sale",
+          activeTicketId.toString(),
+        );
+        if (invErr) console.error("Error al ajustar inventario en venta a crédito:", invErr.message);
         onInventoryReduced?.();
       } catch (invErr) {
         console.error("Error crítico al actualizar inventario en venta a crédito:", invErr);

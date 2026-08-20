@@ -6,6 +6,7 @@ import { CustomerSchema } from "../lib/schemas";
 import { useBusinessProfile, useAuth } from "./AuthProvider";
 import { saveCustomer, deleteCustomer } from "../lib/customersClient";
 import { payLayaway, cancelLayaway } from "../lib/layawaysClient";
+import { reduceInventoryStock } from "../lib/inventoryClient";
 
 export default function CustomersModule() {
   const businessProfile = useBusinessProfile();
@@ -264,7 +265,7 @@ export default function CustomersModule() {
         failedItems.push(item.name);
         continue;
       }
-      const { error: updateError } = await supabase.from("inventory").update({ stock: currentStock.stock + item.qty }).eq("id", currentStock.id);
+      const { error: updateError } = await reduceInventoryStock([{ id: currentStock.id, qty: -item.qty }], "cancellation", `LAY-CANCEL-${layaway.id}`);
       if (updateError) failedItems.push(item.name);
     }
 

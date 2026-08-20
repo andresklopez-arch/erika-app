@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import { LayawaySchema } from "../lib/schemas";
 import { useBusinessProfile } from "./AuthProvider";
 import { payLayaway, cancelLayaway } from "../lib/layawaysClient";
+import { reduceInventoryStock } from "../lib/inventoryClient";
 
 export default function LayawaysModule() {
   const businessProfile = useBusinessProfile();
@@ -151,10 +152,7 @@ export default function LayawaysModule() {
         failedItems.push(item.name);
         continue;
       }
-      const { error: updateError } = await supabase
-        .from("inventory")
-        .update({ stock: currentStock.stock + item.qty })
-        .eq("id", currentStock.id);
+      const { error: updateError } = await reduceInventoryStock([{ id: currentStock.id, qty: -item.qty }], "cancellation", `LAY-CANCEL-${layaway.id}`);
       if (updateError) {
         failedItems.push(item.name);
       }

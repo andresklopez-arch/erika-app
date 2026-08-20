@@ -18,6 +18,7 @@ import { getOrReconnectBlePrinter, sendBleBytes, startBleKeepAlive, getBleStatus
 import { insertCashTransaction } from "../lib/cashTransactionClient";
 import { saveCustomer, adjustCustomerPoints } from "../lib/customersClient";
 import { createLayaway } from "../lib/layawaysClient";
+import { reduceInventoryStock } from "../lib/inventoryClient";
 
 interface POSItem {
   id: string;
@@ -1680,30 +1681,17 @@ export default function POSModule() {
            }
         }
 
-        // Reduce Inventory (Descontar existencias de Supabase mediante RPC o manual)
+        // Reduce Inventory (Descontar existencias vía /api/inventory/reduce-stock)
         try {
-          const { error: rpcErr } = await supabase.rpc("reduce_inventory_stock", {
-             items: activeTicket.items.map(item => {
-                const invItem = globalCatalog.find(i => i.name === item.name);
-                return { id: invItem ? invItem.id : null, qty: item.qty };
-             }).filter(item => item.id !== null),
-             ref_id: realTicketId.toString(),
-             user_name: currentUser?.name || "Venta Mostrador",
-             move_type: "sale"
-          });
-
-          if (rpcErr) {
-             console.warn("Falla al llamar RPC reduce_inventory_stock, reintentando con fallback manual...", rpcErr);
-             for (const item of activeTicket.items) {
-                const invItem = globalCatalog.find(i => i.name === item.name);
-                if (invItem) {
-                   await supabase
-                     .from("inventory")
-                     .update({ stock: invItem.stock - item.qty })
-                     .eq("id", invItem.id);
-                }
-             }
-          }
+          const { error: invStockErr } = await reduceInventoryStock(
+            activeTicket.items.map(item => {
+              const invItem = globalCatalog.find(i => i.name === item.name);
+              return { id: invItem ? invItem.id : null, qty: item.qty };
+            }).filter((item): item is { id: string; qty: number } => item.id !== null),
+            "sale",
+            realTicketId.toString(),
+          );
+          if (invStockErr) console.warn("Falla al ajustar inventario en checkout:", invStockErr.message);
         } catch (invErr) {
           console.error("Error crítico al actualizar inventario:", invErr);
           toast.error(
@@ -3838,15 +3826,8 @@ export default function POSModule() {
                           const qtyStr = window.prompt(`¿Cuántas unidades de "${product.name}" regresan al inventario?`, "1");
                           const qty = parseFloat((qtyStr || "").replace(",", "."));
                           if (!isNaN(qty) && qty > 0) {
-                             const { error: rpcErr } = await supabase.rpc("reduce_inventory_stock", {
-                                items: [{ id: product.id, qty: -qty }],
-                                ref_id: `RET-${Date.now()}`,
-                                user_name: currentUser?.name || "Venta Mostrador",
-                                move_type: "adjustment"
-                             });
-                             if (rpcErr) {
-                                await supabase.from("inventory").update({ stock: product.stock + qty }).eq("id", product.id);
-                             }
+                             const { error: invErr } = await reduceInventoryStock([{ id: product.id, qty: -qty }], "adjustment", `RET-${Date.now()}`);
+                             if (invErr) console.warn("Falla al ajustar inventario en devolución:", invErr.message);
                              setGlobalCatalog(prev => prev.map(i => i.id === product.id ? { ...i, stock: i.stock + qty } : i));
                           }
                        }
@@ -4006,25 +3987,15 @@ export default function POSModule() {
 
                   // Reduce Inventory
                   try {
-                     const { error: rpcErr } = await supabase.rpc("reduce_inventory_stock", {
-                        items: activeTicket.items.map(item => {
-                           const invItem = globalCatalog.find(i => i.name === item.name);
-                           return { id: invItem ? invItem.id : null, qty: item.qty };
-                        }).filter(item => item.id !== null),
-                        ref_id: `LAY-${Date.now()}`,
-                        user_name: currentUser?.name || "Venta Mostrador",
-                        move_type: "layaway"
-                     });
-
-                     if (rpcErr) {
-                        console.warn("Falla al llamar RPC reduce_inventory_stock en layaway, reintentando con fallback manual...", rpcErr);
-                        for (const item of activeTicket.items) {
-                           const invItem = globalCatalog.find(i => i.name === item.name);
-                           if (invItem) {
-                              await supabase.from("inventory").update({ stock: invItem.stock - item.qty }).eq("id", invItem.id);
-                           }
-                        }
-                     }
+                     const { error: invStockErr } = await reduceInventoryStock(
+                       activeTicket.items.map(item => {
+                         const invItem = globalCatalog.find(i => i.name === item.name);
+                         return { id: invItem ? invItem.id : null, qty: item.qty };
+                       }).filter((item): item is { id: string; qty: number } => item.id !== null),
+                       "layaway",
+                       `LAY-${Date.now()}`,
+                     );
+                     if (invStockErr) console.warn("Falla al ajustar inventario en apartado:", invStockErr.message);
                   } catch (invErr) {
                      console.error("Error crítico al actualizar inventario en layaway:", invErr);
                      toast.error(

@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient";
 import { insertCashTransaction } from "./cashTransactionClient";
+import { reduceInventoryStock } from "./inventoryClient";
 
 const DB_NAME = "ErikaOfflineDB";
 const STORE_NAME = "cash_transactions";
@@ -429,22 +430,13 @@ const runSyncOfflineTransactions = async (): Promise<number> => {
         // Sincronizar existencias e inventario del Kardex
         if (items && Array.isArray(items) && items.length > 0) {
           try {
-            const { error: rpcErr } = await supabase.rpc("reduce_inventory_stock", {
-              items: items.map((item: any) => ({ id: item.id, qty: item.qty })),
-              ref_id: "OFFLINE-SYNC",
-              user_name: "Sincronización Offline",
-              move_type: "sale"
-            });
-            if (rpcErr) {
-              console.warn("Falla al aplicar RPC en sincronización offline, reintentando con manual...", rpcErr);
-              for (const item of items) {
-                if (item.id) {
-                  const { data: invItem } = await supabase.from("inventory").select("stock").eq("id", item.id).single();
-                  if (invItem) {
-                    await supabase.from("inventory").update({ stock: invItem.stock - item.qty }).eq("id", item.id);
-                  }
-                }
-              }
+            const { error: invErr } = await reduceInventoryStock(
+              items.map((item: any) => ({ id: item.id, qty: item.qty })),
+              "sale",
+              "OFFLINE-SYNC",
+            );
+            if (invErr) {
+              console.warn("Falla al ajustar inventario en sincronización offline:", invErr.message);
             }
           } catch (invErr) {
             console.error("Error al sincronizar inventario offline:", invErr);

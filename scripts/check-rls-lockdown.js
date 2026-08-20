@@ -97,6 +97,10 @@ async function main() {
     // se mantenga así, ya que nada obliga a que una tabla nueva no se
     // reabra por error en una migración futura.
     ["deploy_checkpoints (INSERT)", "deploy_checkpoints", () => anon.from("deploy_checkpoints").insert({ tag_name: `RLS-CHECK-${Date.now()}`, commit_hash: "0000000" }).select("id").single()],
+    // items: [] a propósito — el permiso EXECUTE se evalúa antes de correr
+    // el cuerpo de la función, así que un arreglo vacío prueba el permiso
+    // real sin tocar ningún producto ni escribir en inventory_movements.
+    ["reduce_inventory_stock (RPC)", null, () => anon.rpc("reduce_inventory_stock", { items: [], ref_id: "RLS-CHECK", user_name: "RLS-CHECK", move_type: "adjustment" })],
   ];
 
   // Detectadas en la auditoría general de esta sesión (admin_list_rls_policies

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useBusinessProfile } from "./AuthProvider";
 import { payLayaway, cancelLayaway } from "../lib/layawaysClient";
+import { reduceInventoryStock } from "../lib/inventoryClient";
 
 export default function LayawayModal({ show, onClose }: { show: boolean; onClose: () => void }) {
   const businessProfile = useBusinessProfile();
@@ -91,7 +92,7 @@ export default function LayawayModal({ show, onClose }: { show: boolean; onClose
         failedItems.push(item.name);
         continue;
       }
-      const { error: updateError } = await supabase.from("inventory").update({ stock: currentStock.stock + item.qty }).eq("id", currentStock.id);
+      const { error: updateError } = await reduceInventoryStock([{ id: currentStock.id, qty: -item.qty }], "cancellation", `LAY-CANCEL-${layaway.id}`);
       if (updateError) {
         failedItems.push(item.name);
       }
