@@ -146,6 +146,37 @@ export default function SettingsModule() {
   const [errorLogs, setErrorLogs] = useState<ErrorLogItem[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
+  interface RlsTableStatus {
+    table: string;
+    openToWrite: boolean;
+    policies: { policy_name: string; cmd: string; roles: string[] }[];
+  }
+  const [rlsTables, setRlsTables] = useState<RlsTableStatus[] | null>(null);
+  const [isCheckingRls, setIsCheckingRls] = useState(false);
+
+  const checkRlsStatus = async () => {
+    const pin = window.prompt("🔑 Ingresa el PIN de Administrador para ver la auditoría de seguridad:");
+    if (!pin) return;
+    setIsCheckingRls(true);
+    try {
+      const res = await fetch("/api/admin/audit/rls-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adminPin: pin }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert("❌ " + (json.error || "No se pudo consultar la auditoría."));
+        return;
+      }
+      setRlsTables(json.tables);
+    } catch (e: any) {
+      alert("❌ Error: " + e.message);
+    } finally {
+      setIsCheckingRls(false);
+    }
+  };
+
   // Recycle Bin (Papelera) States
   interface TrashItem {
     id: string;
@@ -2015,6 +2046,48 @@ export default function SettingsModule() {
                 </table>
               )}
             </div>
+          </div>
+
+          <div className="glass-panel" style={{ border: "1px solid #f59e0b" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+              <h3 style={{ margin: 0, color: "#f59e0b", display: "flex", alignItems: "center", gap: "10px" }}>
+                🔒 Auditoría de Seguridad (RLS)
+              </h3>
+              <button
+                onClick={checkRlsStatus}
+                disabled={isCheckingRls}
+                style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b", border: "1px solid #f59e0b", padding: "5px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "0.8rem" }}
+              >
+                {isCheckingRls ? "Verificando..." : "🔍 Verificar Ahora"}
+              </button>
+            </div>
+            <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", marginBottom: "15px" }}>
+              Revisa qué tablas de la base de datos siguen permitiendo escritura directa desde cualquier navegador, sin pasar por el sistema. Requiere PIN de Administrador.
+            </p>
+            {rlsTables && (
+              <div style={{ maxHeight: "220px", overflowY: "auto" }}>
+                {rlsTables.map((t) => (
+                  <div
+                    key={t.table}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "8px 10px",
+                      marginBottom: "6px",
+                      borderRadius: "6px",
+                      background: t.openToWrite ? "rgba(239,68,68,0.1)" : "rgba(16,185,129,0.08)",
+                      border: t.openToWrite ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(16,185,129,0.2)",
+                    }}
+                  >
+                    <span style={{ fontFamily: "monospace", fontSize: "0.85rem" }}>{t.table}</span>
+                    <span style={{ fontSize: "0.75rem", fontWeight: "bold", color: t.openToWrite ? "#f87171" : "#10b981" }}>
+                      {t.openToWrite ? "🔓 ESCRITURA ABIERTA" : "🔒 Cerrada"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="glass-panel" style={{ border: "1px solid var(--color-primary)" }}>

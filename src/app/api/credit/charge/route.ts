@@ -43,6 +43,12 @@ export async function POST(request: Request) {
       }
       if (!adminPin || !(await verifyAdminPin(adminPin))) {
         recordFailedAttempt(rateLimitKey);
+        const { data: attemptingUser } = await supabaseAdmin.from("users").select("name").eq("id", userId).single();
+        await supabaseAdmin.from("error_logs").insert({
+          module: "Credito_Sobregiro_PIN_Rechazado",
+          error_details: `Intento de cargo a crédito de $${amount} a cliente "${customer.name}" (sobregiro) con PIN de administrador inválido.`,
+          usuario: attemptingUser?.name || "Desconocido",
+        });
         return NextResponse.json(
           { error: "Límite de crédito excedido. Se requiere PIN de Administrador para autorizar el sobregiro." },
           { status: 403 },

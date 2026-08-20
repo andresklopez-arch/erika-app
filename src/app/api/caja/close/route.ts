@@ -36,6 +36,12 @@ export async function POST(request: Request) {
     }
     if (!adminPin || !(await verifyAdminPin(adminPin))) {
       recordFailedAttempt(rateLimitKey);
+      const { data: attemptingUser } = await supabaseAdmin.from("users").select("name").eq("id", userId).single();
+      await supabaseAdmin.from("error_logs").insert({
+        module: "Caja_Cierre_PIN_Rechazado",
+        error_details: `Intento de cierre de caja (sesión ${sessionId}) con PIN de administrador inválido.`,
+        usuario: attemptingUser?.name || "Desconocido",
+      });
       return NextResponse.json({ error: "Acceso Denegado. PIN inválido o sin privilegios de administrador." }, { status: 403 });
     }
     clearAttempts(rateLimitKey);

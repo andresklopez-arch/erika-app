@@ -1,0 +1,31 @@
+name: Verificar Seguridad RLS
+
+# Corre npm run check-rls (scripts/check-rls-lockdown.js) después de cada
+# push a master (cuando Vercel despliega) y una vez al día, para detectar
+# automáticamente si alguien revierte una política RLS a "USING (true)" en
+# cash_sessions/credit_transactions/increment_customer_balance.
+#
+# NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY son públicas por
+# diseño (ya viajan al navegador de cualquier visitante) y por eso van
+# escritas aquí directamente, sin necesidad de configurar ningún secreto.
+on:
+  push:
+    branches: [master]
+  schedule:
+    - cron: "0 13 * * *" # ~7am hora CDMX
+  workflow_dispatch: {}
+
+env:
+  NEXT_PUBLIC_SUPABASE_URL: https://ryqmhfrlxdeekukhjndq.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_-xKMw3dhF7xSAu2APUhB6g_zxUT3qRP
+
+jobs:
+  check-rls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install @supabase/supabase-js --no-save
+      - run: node scripts/check-rls-lockdown.js
