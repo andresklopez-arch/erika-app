@@ -92,6 +92,11 @@ async function main() {
     // la evaluación real de la política, igual que el resto de esta lista,
     // y se autolimpia igual si llega a colarse.
     ["users (INSERT)", "users", () => anon.from("users").insert({ name: "RLS-CHECK", role: "cajero", permissions: {} }).select("id").single()],
+    // deploy_checkpoints se creó cerrada desde el día uno (solo SELECT
+    // público, escritura solo por service_role) — este check confirma que
+    // se mantenga así, ya que nada obliga a que una tabla nueva no se
+    // reabra por error en una migración futura.
+    ["deploy_checkpoints (INSERT)", "deploy_checkpoints", () => anon.from("deploy_checkpoints").insert({ tag_name: `RLS-CHECK-${Date.now()}`, commit_hash: "0000000" }).select("id").single()],
   ];
 
   // Detectadas en la auditoría general de esta sesión (admin_list_rls_policies

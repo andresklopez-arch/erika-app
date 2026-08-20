@@ -7,9 +7,12 @@
 // Uso: npm run checkpoint  [-- "mensaje opcional"]
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const { execSync } = require("child_process");
 const { createClient } = require("@supabase/supabase-js");
+
+const CHECKPOINT_RETENTION_DAYS = 90;
 
 function run(cmd) {
   return execSync(cmd, { encoding: "utf8" }).trim();
@@ -35,6 +38,23 @@ function loadEnvLocal() {
   return env;
 }
 
+// Prioriza la identidad de git (más confiable, es quien firma los commits)
+// sobre el nombre de usuario de Windows/macOS, que puede ser genérico
+// ("Usuario", "admin") y no dice nada de quién corrió el checkpoint.
+function getRunnerName() {
+  try {
+    const gitName = run("git config user.name");
+    if (gitName) return gitName;
+  } catch {
+    // sin identidad de git configurada — cae al nombre del sistema
+  }
+  try {
+    return os.userInfo().username;
+  } catch {
+    return "Desconocido";
+  }
+}
+
 // Registra el checkpoint en la tabla deploy_checkpoints para que el panel
 // de Configuración lo muestre sin tener que abrir una terminal. No es
 // crítico: si falla (llave no configurada, tabla no creada todavía), el
@@ -49,12 +69,24 @@ async function recordInSupabase(tagName, commitHash, message) {
     return;
   }
   const admin = createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
-  const { error } = await admin.from("deploy_checkpoints").insert({ tag_name: tagName, commit_hash: commitHash, message });
+  const { error } = await admin.from("deploy_checkpoints").insert({ tag_name: tagName, commit_hash: commitHash, message, created_by: getRunnerName() });
   if (error) {
     console.warn(`⚠️ El tag se creó bien, pero no se pudo registrar en el panel de Configuración: ${error.message}`);
     return;
   }
   console.log("✅ Registrado en el panel de Configuración → Auditoría de Seguridad.");
+
+  // Purga checkpoints viejos para que la tabla no crezca sin límite si
+  // esto se vuelve un hábito frecuente — el tag de git en sí nunca se
+  // borra, solo su registro informativo en este panel.
+  const cutoff = new Date(Date.now() - CHECKPOINT_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const { error: purgeError, count } = await admin
+    .from("deploy_checkpoints")
+    .delete({ count: "exact" })
+    .lt("created_at", cutoff);
+  if (!purgeError && count) {
+    console.log(`🧹 Se purgaron ${count} checkpoint(s) de hace más de ${CHECKPOINT_RETENTION_DAYS} días del panel.`);
+  }
 }
 
 async function main() {

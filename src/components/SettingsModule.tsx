@@ -163,6 +163,7 @@ export default function SettingsModule() {
     commit_hash: string;
     message: string | null;
     created_at: string;
+    created_by: string | null;
   }
   const [checkpoints, setCheckpoints] = useState<CheckpointRow[] | null>(null);
 
@@ -172,7 +173,7 @@ export default function SettingsModule() {
     // app, no necesita PIN de administrador.
     supabase
       .from("deploy_checkpoints")
-      .select("id, tag_name, commit_hash, message, created_at")
+      .select("id, tag_name, commit_hash, message, created_at, created_by")
       .order("created_at", { ascending: false })
       .limit(8)
       .then(({ data, error }: any) => {
@@ -2224,6 +2225,12 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
                       {" ("}
                       <span style={{ fontFamily: "monospace", color: "rgba(255,255,255,0.5)" }}>{c.commit_hash}</span>
                       {")"}
+                      {c.created_by && (
+                        <>
+                          {" — "}
+                          <span style={{ color: "rgba(255,255,255,0.5)" }}>{c.created_by}</span>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>

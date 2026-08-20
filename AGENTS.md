@@ -41,6 +41,16 @@ patrón (no crear políticas nuevas a mano ni copiar el bloque completo):
 5. Agregar la tabla/RPC a `mustBeBlocked` en `scripts/check-rls-lockdown.js`
    y correr `npm run check-rls` para confirmar.
 
+# Tablas nuevas con id `uuid DEFAULT gen_random_uuid()`
+
+`gen_random_uuid()` ya funcionó sin problema en este proyecto de Supabase
+(tabla `deploy_checkpoints`, migración `20260822010000`), así que la
+extensión `pgcrypto` ya está habilitada aquí — no hace falta activarla de
+nuevo. Si en el futuro se usa este mismo patrón en un proyecto de Supabase
+distinto y la migración falla con "function gen_random_uuid() does not
+exist", agregar `CREATE EXTENSION IF NOT EXISTS pgcrypto;` al inicio de esa
+migración antes del `CREATE TABLE`.
+
 # Qué llaves pueden ir en un workflow de GitHub Actions
 
 - **Seguras de escribir directo en el YAML** (`.github/workflows/*.yml`),
