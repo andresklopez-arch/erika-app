@@ -12,6 +12,7 @@ export default function Sidebar() {
 
   const [pendingLayawaysCount, setPendingLayawaysCount] = useState(0);
   const [pendingQuotesCount, setPendingQuotesCount] = useState(0);
+  const [hasOpenSecurityIssues, setHasOpenSecurityIssues] = useState(false);
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
   const [escHiddenGroup, setEscHiddenGroup] = useState<string | null>(null);
   const [isPinned, setIsPinned] = useState(() => {
@@ -59,6 +60,40 @@ export default function Sidebar() {
 
     const interval = setInterval(fetchCounts, 60000);
     return () => clearInterval(interval);
+  }, [currentUser]);
+
+  // Aviso silencioso de seguridad para administradores: antes había que
+  // entrar a Configuración → Auditoría de Seguridad y dar clic en
+  // "Verificar Ahora" para enterarse de que una tabla o RPC seguía
+  // abierto. Reutiliza el PIN que ya vive en el estado del admin (mismo
+  // patrón que equipo/page.tsx usa para no volver a pedirlo) — no se
+  // guarda nada nuevo ni se cambia cómo se obtiene ese PIN.
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== "admin" || !currentUser.pin) return;
+    let cancelled = false;
+    const checkSecurity = async () => {
+      try {
+        const res = await fetch("/api/admin/audit/rls-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ adminPin: currentUser.pin }),
+        });
+        const json = await res.json();
+        if (cancelled || !res.ok) return;
+        const anyOpenTable = (json.tables || []).some((t: any) => t.openToWrite);
+        const anyOpenFn = (json.functions || []).length > 0;
+        setHasOpenSecurityIssues(anyOpenTable || anyOpenFn);
+      } catch {
+        // silencioso a propósito: esto es solo un aviso de cortesía, no
+        // debe interrumpir la navegación si la red falla
+      }
+    };
+    checkSecurity();
+    const interval = setInterval(checkSecurity, 10 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [currentUser]);
 
   useEffect(() => {
@@ -358,9 +393,25 @@ export default function Sidebar() {
               href="/configuracion"
               className={isActive("/configuracion") ? "active" : ""}
               onClick={(e) => handleLinkClick(e, "/configuracion")}
-              title="Configuración (Alt + 6)"
+              title={hasOpenSecurityIssues ? "Configuración (Alt + 6) — hay tablas o funciones con escritura abierta" : "Configuración (Alt + 6)"}
             >
-              <span className="icon">⚙️</span>
+              <span className="icon" style={{ position: "relative" }}>
+                ⚙️
+                {hasOpenSecurityIssues && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: "-2px",
+                      right: "-4px",
+                      width: "8px",
+                      height: "8px",
+                      borderRadius: "50%",
+                      background: "#ef4444",
+                      border: "1px solid rgba(0,0,0,0.4)",
+                    }}
+                  />
+                )}
+              </span>
               <span className="nav-text">Configuración</span>
               <span className="shortcut-badge">Alt + 6</span>
             </Link>

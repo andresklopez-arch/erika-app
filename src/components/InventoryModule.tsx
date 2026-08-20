@@ -13,6 +13,7 @@ import LayawayModal from "./LayawayModal";
 import InboundModal from "./InboundModal";
 import AuditModule from "./AuditModule";
 import { useAuth } from "./AuthProvider";
+import { LoggerService } from "../services/loggerService";
 import { saveInventoryItem, bulkUpdateInventory, deleteInventoryItem, reduceInventoryStock, bulkImportInventory } from "../lib/inventoryClient";
 
 const normalizeString = (str: string) => {
@@ -840,11 +841,11 @@ export default function InventoryModule() {
         
         const originalItem = allItems.find((i) => i.id === itemId);
         if (originalItem) {
-          await supabase.from("error_logs").insert({
-            module: "Inventario_Edicion_Manual",
-            error_details: `Deshacer edición inline: [${originalItem.code || "Sin código"}] ${originalItem.name} -> Revirtió "${field}" al valor anterior "${oldValue}"`,
-            usuario: currentUser?.name || "Administrador"
-          });
+          await LoggerService.logError(
+            "Inventario_Edicion_Manual",
+            `Deshacer edición inline: [${originalItem.code || "Sin código"}] ${originalItem.name} -> Revirtió "${field}" al valor anterior "${oldValue}"`,
+            currentUser?.name || "Administrador",
+          );
         }
 
         setLastManualChange(null);
@@ -1000,13 +1001,11 @@ export default function InventoryModule() {
         const newVal = String(finalValue);
 
         if (oldVal !== newVal) {
-          supabase.from("error_logs").insert({
-            module: "Inventario_Edicion_Manual",
-            error_details: `Edición inline: [${originalItem.code || "Sin código"}] ${originalItem.name} -> Cambió "${label}" de "${oldVal}" a "${newVal}"`,
-            usuario: currentUser?.name || "Administrador"
-          }).then((res: any) => {
-            if (res.error) console.error("Error al registrar auditoría:", res.error);
-          });
+          LoggerService.logError(
+            "Inventario_Edicion_Manual",
+            `Edición inline: [${originalItem.code || "Sin código"}] ${originalItem.name} -> Cambió "${label}" de "${oldVal}" a "${newVal}"`,
+            currentUser?.name || "Administrador",
+          );
         }
       }
 

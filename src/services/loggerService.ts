@@ -6,12 +6,19 @@ export const LoggerService = {
    */
   logError: async (module: string, errorDetails: any, user: string = "Admin") => {
     try {
-      const { error } = await supabase.from("error_logs").insert({
-        module,
-        error_details: typeof errorDetails === "string" ? errorDetails : JSON.stringify(errorDetails),
-        usuario: user,
+      const res = await fetch("/api/logs/error", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          module,
+          error_details: typeof errorDetails === "string" ? errorDetails : JSON.stringify(errorDetails),
+          usuario: user,
+        }),
       });
-      if (error) console.error("Fallo al registrar error en DB:", error);
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        console.error("Fallo al registrar error en DB:", json.error);
+      }
     } catch (err) {
       console.error("Fallo crítico en logError:", err);
     }

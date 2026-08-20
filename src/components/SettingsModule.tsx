@@ -402,11 +402,7 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
         alert("Error al restaurar: " + error.message);
       } else {
         // Log audit event
-        await supabase.from("error_logs").insert({
-          module: "RecycleBin",
-          error_details: `Restaurado: ${item.type} "${item.name}" (ID: ${item.id})`,
-          usuario: currentUser?.name || "Administrador"
-        });
+        await LoggerService.logError("RecycleBin", `Restaurado: ${item.type} "${item.name}" (ID: ${item.id})`, currentUser?.name || "Administrador");
         alert(`✅ Restaurado exitosamente.`);
         fetchTrash();
         fetchErrorLogs();
@@ -440,11 +436,7 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
         alert("Error al eliminar permanentemente: " + error.message);
       } else {
         // Log audit event
-        await supabase.from("error_logs").insert({
-          module: "RecycleBin",
-          error_details: `Eliminado Definitivamente: ${item.type} "${item.name}" (ID: ${item.id})`,
-          usuario: currentUser?.name || "Administrador"
-        });
+        await LoggerService.logError("RecycleBin", `Eliminado Definitivamente: ${item.type} "${item.name}" (ID: ${item.id})`, currentUser?.name || "Administrador");
         alert("🚨 Eliminado definitivamente.");
         fetchTrash();
         fetchErrorLogs();

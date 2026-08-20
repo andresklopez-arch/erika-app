@@ -104,6 +104,7 @@ async function main() {
     ["inventory (INSERT)", "inventory", () => anon.from("inventory").insert({ name: "RLS-CHECK", price: 1, cost: 1, stock: 0 }).select("id").single()],
     ["services (INSERT)", "services", () => anon.from("services").insert({ customer_name: "RLS-CHECK", technician_name: "RLS-CHECK", service_type: "RLS-CHECK", scheduled_at: new Date().toISOString(), cost: 1, status: "pending" }).select("id").single()],
     ["suppliers (INSERT)", "suppliers", () => anon.from("suppliers").insert({ name: "RLS-CHECK" }).select("id").single()],
+    ["error_logs (INSERT)", "error_logs", () => anon.from("error_logs").insert({ module: "RLS-CHECK" }).select("id").single()],
   ];
 
   // Detectadas en la auditoría general de esta sesión (admin_list_rls_policies
@@ -120,7 +121,6 @@ async function main() {
       ? () => anon.from("supplier_orders").insert({ supplier_id: realSupplier.id, action_type: "RLS-CHECK", notes: "RLS-CHECK" }).select("id").single()
       : () => Promise.resolve({ data: null, error: { message: "No hay ningún proveedor real para probar la llave foránea." } })],
     ["quotes (INSERT)", "quotes", () => anon.from("quotes").insert({ customer_name: "RLS-CHECK", items: [], total: 1, status: "pending" }).select("id").single()],
-    ["error_logs (INSERT)", "error_logs", () => anon.from("error_logs").insert({ module: "RLS-CHECK" }).select("id").single()],
     ["internal_tasks (INSERT)", "internal_tasks", () => anon.from("internal_tasks").insert({ title: "RLS-CHECK", assigned_to: "RLS-CHECK", status: "pending", created_by: "RLS-CHECK" }).select("id").single()],
     ["inventory_audit_logs (INSERT)", "inventory_audit_logs", realInventoryItem
       ? () => anon.from("inventory_audit_logs").insert({ inventory_id: realInventoryItem.id, field: "RLS-CHECK", old_value: "0", new_value: "0", changed_by: "RLS-CHECK" }).select("id").single()
