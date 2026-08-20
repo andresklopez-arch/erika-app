@@ -16,7 +16,7 @@ import { useAuth, useBusinessProfile } from "./AuthProvider";
 import { CustomerSchema, CashSessionSchema } from "../lib/schemas";
 import { getOrReconnectBlePrinter, sendBleBytes, startBleKeepAlive, getBleStatus, BleStatusType } from "../utils/bluetoothPrinter";
 import { insertCashTransaction } from "../lib/cashTransactionClient";
-import { saveCustomer, adjustCustomerPoints } from "../lib/customersClient";
+import { saveCustomer, adjustCustomerPoints, fetchActiveCustomers } from "../lib/customersClient";
 import { createLayaway } from "../lib/layawaysClient";
 import { reduceInventoryStock } from "../lib/inventoryClient";
 import { cleanMexicanPhone, openWhatsAppChat } from "../lib/whatsapp";
@@ -793,18 +793,11 @@ export default function POSModule() {
         setGlobalCatalog(allData);
       }
 
-      let { data: custData, error: custError } = await supabase.from("customers").select("*").or("deleted.is.null,deleted.eq.false");
+      const { data: custData, error: custError } = await fetchActiveCustomers();
       if (custError) {
-        console.warn("Fallo el filtro de base de datos 'deleted' en clientes, usando fallback local:", custError.message);
-        const fallback = await supabase.from("customers").select("*");
-        if (fallback.error) {
-          console.error("Error al cargar clientes (fallback):", fallback.error);
-          LoggerService.logError("POSModule_fetchCustomers_fallback", fallback.error);
-          toast.error(`Error al cargar lista de clientes: ${fallback.error.message}`);
-        } else if (fallback.data) {
-          custData = fallback.data.filter((c: any) => c.deleted !== true);
-          custError = null;
-        }
+        console.error("Error al cargar clientes:", custError);
+        LoggerService.logError("POSModule_fetchCustomers_fallback", custError);
+        toast.error(`Error al cargar lista de clientes: ${custError.message}`);
       }
       if (!custError && custData) {
         const validated = custData.map((item: any) => {
@@ -3749,17 +3742,10 @@ export default function POSModule() {
                    alert(`✅ Canje exitoso. Se descontaron ${pointsToRedeem} puntos y se aplicó un descuento de $${discountAmount.toFixed(2)}.`);
                    
                    // Reload customers to refresh points
-                   let { data: custData, error: custError } = await supabase.from("customers").select("*").or("deleted.is.null,deleted.eq.false");
+                   const { data: custData, error: custError } = await fetchActiveCustomers();
                    if (custError) {
-                     console.warn("Fallo el filtro de base de datos 'deleted' al recargar clientes (puntos), usando fallback local:", custError.message);
-                     const fallback = await supabase.from("customers").select("*");
-                     if (fallback.error) {
-                       console.error("Error al recargar clientes (fallback):", fallback.error);
-                       LoggerService.logError("POSModule_reloadCustomers_Points_fallback", fallback.error);
-                     } else if (fallback.data) {
-                       custData = fallback.data.filter((c: any) => c.deleted !== true);
-                       custError = null;
-                     }
+                     console.error("Error al recargar clientes (puntos):", custError);
+                     LoggerService.logError("POSModule_reloadCustomers_Points_fallback", custError);
                    }
                    if (!custError && custData) {
                      setCustomers(custData);

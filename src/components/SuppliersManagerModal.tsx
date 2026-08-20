@@ -7,7 +7,7 @@ import { LoggerService } from "../services/loggerService";
 import { bulkUpdateInventory } from "../lib/inventoryClient";
 import { saveSupplier, deleteSupplier } from "../lib/suppliersClient";
 import { useBusinessProfile } from "./AuthProvider";
-import { openWhatsAppChat } from "../lib/whatsapp";
+import { cleanMexicanPhone, openWhatsAppChat } from "../lib/whatsapp";
 
 interface Supplier {
   id: string;
@@ -156,8 +156,20 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
 
   const handleWhatsApp = async (supplier: Supplier, template: "Pedido" | "Cotización" | "Garantía") => {
     if (!supplier.phone) return alert("El proveedor no tiene teléfono.");
-    const cleanPhone = supplier.phone.replace(/\D/g, "");
-    
+    // Solo avisamos si no calza con el formato mexicano esperado (10
+    // digitos, o 12 con el prefijo 52) en vez de bloquear el envio: a
+    // diferencia de clientes, un proveedor puede tener capturado un
+    // numero con formato distinto (extension, otro pais, etc.) y no
+    // queremos romper un envio que hoy si funciona.
+    const validatedPhone = cleanMexicanPhone(supplier.phone);
+    const cleanPhone = validatedPhone || supplier.phone.replace(/\D/g, "");
+    if (!validatedPhone) {
+      toast.error(
+        "⚠️ El teléfono del proveedor no tiene el formato de 10 dígitos esperado. Verifica el número antes de enviar el mensaje.",
+        { duration: 8000 },
+      );
+    }
+
     let rawMsg = "";
     if (template === 'Pedido') {
       rawMsg = `Hola ${supplier.contact_name || supplier.name}, necesitamos realizar un pedido para ${businessProfile.name}...\n`;

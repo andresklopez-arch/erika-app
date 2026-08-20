@@ -1,8 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
+import toast from "react-hot-toast";
 import { supabase } from "../lib/supabaseClient";
 import { useBusinessProfile, useAuth } from "./AuthProvider";
 import { cleanMexicanPhone, openWhatsAppChat } from "../lib/whatsapp";
+import { fetchActiveCustomers } from "../lib/customersClient";
 
 export default function QuotesModule() {
   const businessProfile = useBusinessProfile();
@@ -21,16 +23,8 @@ export default function QuotesModule() {
   };
 
   const fetchCustomers = async () => {
-    const { data, error } = await supabase
-      .from("customers")
-      .select("id, name, phone")
-      .or("deleted.is.null,deleted.eq.false");
-    if (!error && data) {
-      setCustomers(data);
-      return;
-    }
-    const fallback = await supabase.from("customers").select("id, name, phone");
-    if (fallback.data) setCustomers(fallback.data);
+    const { data, error } = await fetchActiveCustomers();
+    if (!error && data) setCustomers(data);
   };
 
   useEffect(() => {
@@ -258,6 +252,13 @@ export default function QuotesModule() {
     );
   };
 
+  // El botón de WhatsApp solo vive en el panel de detalle (hay que
+  // seleccionar la cotización primero). Este acceso directo reenvía la
+  // última sin que el cajero tenga que volver a buscarla en la lista.
+  const lastSentQuote = quotes
+    .filter((q) => q.whatsapp_sent_at)
+    .sort((a, b) => new Date(b.whatsapp_sent_at).getTime() - new Date(a.whatsapp_sent_at).getTime())[0];
+
   return (
     <div
       className="animate-fade-in"
@@ -285,8 +286,34 @@ export default function QuotesModule() {
           >
             Presupuestos Guardados
           </h3>
+          {lastSentQuote && (
+            <button
+              onClick={() => sendWhatsApp(lastSentQuote)}
+              style={{
+                width: "100%",
+                marginTop: "10px",
+                padding: "8px 12px",
+                background: "rgba(34, 197, 94, 0.1)",
+                border: "1px dashed rgba(34, 197, 94, 0.5)",
+                borderRadius: "8px",
+                color: "inherit",
+                fontSize: "0.8rem",
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              🔁 Reenviar por WhatsApp a {lastSentQuote.customer_name} (última cotización enviada)
+            </button>
+          )}
           <ul style={{ listStyle: "none", padding: 0, marginTop: "10px" }}>
-            {quotes.map((q) => (
+            {quotes.map((q) => {
+              const daysSinceSent = q.whatsapp_sent_at
+                ? Math.floor((Date.now() - new Date(q.whatsapp_sent_at).getTime()) / 86400000)
+                : null;
+              // Un presupuesto enviado que sigue "Pendiente" pasados unos
+              // dias probablemente necesita seguimiento manual.
+              const needsFollowUp = q.status === "pending" && daysSinceSent !== null && daysSinceSent >= 2;
+              return (
               <li
                 key={q.id}
                 onClick={() => setSelectedQuoteId(q.id)}
@@ -315,7 +342,15 @@ export default function QuotesModule() {
                         📵 sin teléfono
                       </span>
                     )}
-                    {q.whatsapp_sent_at && (
+                    {q.whatsapp_sent_at && needsFollowUp && (
+                      <span
+                        title={`Enviado por WhatsApp el ${new Date(q.whatsapp_sent_at).toLocaleString()} y sigue sin convertirse en venta. Considera darle seguimiento.`}
+                        style={{ marginLeft: "6px", fontSize: "0.75rem", color: "#f97316" }}
+                      >
+                        ⏰ sin respuesta hace {daysSinceSent}d
+                      </span>
+                    )}
+                    {q.whatsapp_sent_at && !needsFollowUp && (
                       <span
                         title={`Enviado por WhatsApp: ${new Date(q.whatsapp_sent_at).toLocaleString()}`}
                         style={{ marginLeft: "6px", fontSize: "0.75rem", color: "#22c55e" }}
@@ -351,7 +386,8 @@ export default function QuotesModule() {
                   )}
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </div>
 
@@ -388,6 +424,39 @@ export default function QuotesModule() {
                           <p style={{ color: "rgba(255,255,255,0.6)" }}>
                             Cliente: {q.customer_name}
                           </p>
+                          {resolveQuotePhone(q) && (
+                            <p
+                              style={{
+                                color: "rgba(255,255,255,0.6)",
+                                fontSize: "0.9rem",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px",
+                              }}
+                            >
+                              Tel: {resolveQuotePhone(q)}
+                              <button
+                                onClick={() => {
+                                  const phone = resolveQuotePhone(q);
+                                  if (!phone) return;
+                                  navigator.clipboard.writeText(phone);
+                                  toast.success("Teléfono copiado");
+                                }}
+                                title="Copiar teléfono"
+                                style={{
+                                  background: "transparent",
+                                  border: "1px solid rgba(255,255,255,0.2)",
+                                  borderRadius: "4px",
+                                  color: "inherit",
+                                  fontSize: "0.75rem",
+                                  padding: "1px 6px",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                📋 copiar
+                              </button>
+                            </p>
+                          )}
                           <p
                             style={{
                               color: "rgba(255,255,255,0.6)",

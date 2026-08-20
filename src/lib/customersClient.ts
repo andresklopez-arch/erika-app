@@ -3,9 +3,28 @@
 // escribían en `customers` directo desde el navegador cambiando una sola
 // línea, sin tocar el resto de su lógica (duplicados, confirmaciones, etc).
 
+import { supabase } from "./supabaseClient";
+
 interface Result {
   data: any | null;
   error: { message: string } | null;
+}
+
+// Lectura de `customers` sigue permitida directo desde el navegador (RLS
+// solo bloquea escrituras en esta tabla). Centraliza el patrón de filtro
+// "no borrados" + fallback que antes estaba duplicado en POSModule (dos
+// veces) y QuotesModule.
+export async function fetchActiveCustomers(): Promise<Result> {
+  const { data, error } = await supabase
+    .from("customers")
+    .select("*")
+    .or("deleted.is.null,deleted.eq.false");
+  if (!error) return { data, error: null };
+
+  console.warn("Fallo el filtro de base de datos 'deleted' en clientes, usando fallback local:", error.message);
+  const fallback = await supabase.from("customers").select("*");
+  if (fallback.error) return { data: null, error: { message: fallback.error.message } };
+  return { data: (fallback.data || []).filter((c: any) => c.deleted !== true), error: null };
 }
 
 export async function saveCustomer(fields: Record<string, any>): Promise<Result> {
