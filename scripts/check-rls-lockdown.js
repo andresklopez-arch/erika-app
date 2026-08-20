@@ -77,11 +77,34 @@ async function main() {
     ["business_losses (INSERT)", "business_losses", () => anon.from("business_losses").insert({ loss_type: "RLS-CHECK", amount: 1, description: "RLS-CHECK" }).select("id").single()],
     ["increment_layaway_balance (RPC)", null, () => anon.rpc("increment_layaway_balance", { p_layaway_id: "00000000-0000-0000-0000-000000000000", p_delta: 1 })],
     ["increment_supplier_debt_balance (RPC)", null, () => anon.rpc("increment_supplier_debt_balance", { p_debt_id: "00000000-0000-0000-0000-000000000000", p_delta: 1 })],
+    // INSERT (no UPDATE): un UPDATE .eq("id", uuid-falso) no toca ninguna
+    // fila real, así que Postgres nunca evalúa la política y el check
+    // "pasaría" sin importar si RLS está bloqueando o no. INSERT sí fuerza
+    // la evaluación real de la política, igual que el resto de esta lista,
+    // y se autolimpia igual si llega a colarse.
+    ["users (INSERT)", "users", () => anon.from("users").insert({ name: "RLS-CHECK", role: "cajero", permissions: {} }).select("id").single()],
   ];
 
-  // Ya no quedan tablas de negocio conocidas como pendientes — todas las
-  // detectadas en la auditoría de esta sesión ya están en mustBeBlocked.
-  const knownOpenPending = [];
+  // Detectadas en la auditoría general de esta sesión (admin_list_rls_policies
+  // sobre TODAS las tablas, no solo las de dinero) — todavía con "USING (true)".
+  // No bloquean el check todavía porque cerrarlas requiere mover cada punto de
+  // escritura del navegador a una ruta de servidor primero (mismo patrón,
+  // documentado en AGENTS.md); moverlas a mustBeBlocked conforme se cierren.
+  // business_settings queda fuera de esta lista a propósito: es una sola fila
+  // real de configuración del negocio, y un UPDATE de prueba no tendría cómo
+  // autolimpiarse a su valor original — su estado se puede ver sin tocar datos
+  // reales desde el panel "Auditoría de Seguridad (RLS)" en Configuración.
+  const knownOpenPending = [
+    ["inventory (INSERT)", "inventory", () => anon.from("inventory").insert({ name: "RLS-CHECK" }).select("id").single()],
+    ["services (INSERT)", "services", () => anon.from("services").insert({ customer_name: "RLS-CHECK" }).select("id").single()],
+    ["suppliers (INSERT)", "suppliers", () => anon.from("suppliers").insert({ name: "RLS-CHECK" }).select("id").single()],
+    ["supplier_orders (INSERT)", "supplier_orders", () => anon.from("supplier_orders").insert({ description: "RLS-CHECK" }).select("id").single()],
+    ["quotes (INSERT)", "quotes", () => anon.from("quotes").insert({ customer_name: "RLS-CHECK" }).select("id").single()],
+    ["error_logs (INSERT)", "error_logs", () => anon.from("error_logs").insert({ module: "RLS-CHECK" }).select("id").single()],
+    ["internal_tasks (INSERT)", "internal_tasks", () => anon.from("internal_tasks").insert({ title: "RLS-CHECK" }).select("id").single()],
+    ["inventory_audit_logs (INSERT)", "inventory_audit_logs", () => anon.from("inventory_audit_logs").insert({ description: "RLS-CHECK" }).select("id").single()],
+    ["inventory_movements (INSERT)", "inventory_movements", () => anon.from("inventory_movements").insert({ description: "RLS-CHECK" }).select("id").single()],
+  ];
 
   console.log("== Tablas que DEBEN estar cerradas ==");
   let failures = 0;
