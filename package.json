@@ -9,6 +9,7 @@
     "lint": "eslint",
     "smoke-check": "node scripts/smoke-check.js",
     "check-rls": "node scripts/check-rls-lockdown.js",
+    "test-caja": "node scripts/test-caja-checkout-flow.js",
     "prepare": "husky"
   },
   "dependencies": {

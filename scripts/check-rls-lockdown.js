@@ -71,29 +71,33 @@ async function main() {
     ["customers (INSERT)", "customers", () => anon.from("customers").insert({ name: "RLS-CHECK" }).select("id").single()],
     ["increment_customer_balance (RPC)", null, () => anon.rpc("increment_customer_balance", { p_customer_id: "00000000-0000-0000-0000-000000000000", p_delta: 1 })],
     ["increment_customer_points (RPC)", null, () => anon.rpc("increment_customer_points", { p_customer_id: "00000000-0000-0000-0000-000000000000", p_delta: 1 })],
-  ];
-
-  // Tablas que TODAVÍA están abiertas a propósito (pendientes, seguimiento
-  // de una sesión futura) — solo informativas, no hacen fallar el script.
-  // En cuanto se cierren, este reporte empezará a mostrarlas como
-  // bloqueadas automáticamente, sin tener que tocar este archivo.
-  const knownOpenPending = [
     ["supplier_debts (INSERT)", "supplier_debts", () => anon.from("supplier_debts").insert({ amount: 1, balance: 1, due_date: "2026-01-01", concept: "RLS-CHECK" }).select("id").single()],
+    ["supplier_payments (INSERT)", "supplier_payments", () => anon.from("supplier_payments").insert({ debt_id: "00000000-0000-0000-0000-000000000000", amount: 1, notes: "RLS-CHECK" }).select("id").single()],
     ["layaways (INSERT)", "layaways", () => anon.from("layaways").insert({ total_amount: 1, down_payment: 1, balance: 1, items: [] }).select("id").single()],
     ["business_losses (INSERT)", "business_losses", () => anon.from("business_losses").insert({ loss_type: "RLS-CHECK", amount: 1, description: "RLS-CHECK" }).select("id").single()],
+    ["increment_layaway_balance (RPC)", null, () => anon.rpc("increment_layaway_balance", { p_layaway_id: "00000000-0000-0000-0000-000000000000", p_delta: 1 })],
+    ["increment_supplier_debt_balance (RPC)", null, () => anon.rpc("increment_supplier_debt_balance", { p_debt_id: "00000000-0000-0000-0000-000000000000", p_delta: 1 })],
   ];
+
+  // Ya no quedan tablas de negocio conocidas como pendientes — todas las
+  // detectadas en la auditoría de esta sesión ya están en mustBeBlocked.
+  const knownOpenPending = [];
 
   console.log("== Tablas que DEBEN estar cerradas ==");
   let failures = 0;
+  const summaryRows = [];
   for (const [name, table, run] of mustBeBlocked) {
     const result = await runCheck(name, table, run);
     if (result.blocked) {
       console.log(`✅ Bloqueado correctamente: ${name}`);
+      summaryRows.push(`| ${name} | ✅ Bloqueado | |`);
     } else if (result.inconclusive) {
       console.warn(`⚠️  Resultado inesperado en "${name}": ${result.message}`);
+      summaryRows.push(`| ${name} | ⚠️ Inconcluso | ${result.message} |`);
       failures++;
     } else {
       console.error(`❌ INSEGURO: ${name} — la escritura se permitió (RLS NO está bloqueando).`);
+      summaryRows.push(`| ${name} | ❌ **INSEGURO** | La escritura se permitió |`);
       failures++;
     }
   }
@@ -103,11 +107,30 @@ async function main() {
     const result = await runCheck(name, table, run);
     if (result.blocked) {
       console.log(`✅ Ya cerrada: ${name} (¡se puede quitar de la lista "pendiente"!)`);
+      summaryRows.push(`| ${name} (pendiente) | ✅ Ya cerrada | Quitar de knownOpenPending |`);
     } else if (result.inconclusive) {
       console.warn(`⚠️  Resultado inesperado en "${name}": ${result.message}`);
+      summaryRows.push(`| ${name} (pendiente) | ⚠️ Inconcluso | ${result.message} |`);
     } else {
       console.log(`🔓 Abierta (pendiente): ${name}`);
+      summaryRows.push(`| ${name} (pendiente) | 🔓 Abierta (esperado) | |`);
     }
+  }
+
+  // Si corre dentro de GitHub Actions, escribe un resumen en Markdown
+  // visible directamente en la pestaña "Actions" del run — sin esto había
+  // que abrir los logs completos del job para ver qué tabla falló.
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    const summary = [
+      "## 🔒 Verificación de seguridad RLS",
+      "",
+      "| Verificación | Resultado | Detalle |",
+      "| --- | --- | --- |",
+      ...summaryRows,
+      "",
+      failures > 0 ? `❌ **${failures} verificación(es) obligatorias fallaron.**` : "✅ Todas las escrituras sensibles ya aseguradas están correctamente bloqueadas.",
+    ].join("\n");
+    fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + "\n");
   }
 
   if (failures > 0) {

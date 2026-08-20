@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { saveLoss } from "../lib/lossesClient";
 
 interface Loss {
   id: string;
@@ -49,7 +50,7 @@ export default function LossesManagerModal({ onClose }: LossesManagerModalProps)
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { error } = await supabase.from("business_losses").insert({
+    const { error } = await saveLoss({
       loss_type: lossType,
       amount: parseFloat(amount),
       description,

@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useBusinessProfile } from "./AuthProvider";
+import { saveSupplierDebt, paySupplierDebt } from "../lib/supplierDebtsClient";
 
 interface Supplier {
   id: string;
@@ -85,10 +86,9 @@ export default function AccountsPayableModal({ onClose }: AccountsPayableModalPr
     e.preventDefault();
     if (!supplierId) return alert("Selecciona un proveedor.");
     
-    const { error } = await supabase.from("supplier_debts").insert({
+    const { error } = await saveSupplierDebt({
       supplier_id: supplierId,
       amount: parseFloat(amount),
-      balance: parseFloat(amount),
       due_date: dueDate,
       concept,
       penalty_rate_percent: parseFloat(penaltyRate) || 0
@@ -184,49 +184,15 @@ export default function AccountsPayableModal({ onClose }: AccountsPayableModalPr
         return alert("El monto del abono debe ser mayor a 0 y no puede exceder el saldo pendiente + intereses.");
     }
 
-    // 1. Insert Payment
-    const { error: payError } = await supabase.from("supplier_payments").insert({
-        debt_id: paymentModalDebt.id,
-        amount: payAmt,
-        notes: paymentNotes + (calculatedInterest > 0 ? ` (Incluye mora: $${calculatedInterest.toFixed(2)})` : "")
-    });
-
+    // El servidor recalcula el interés por mora, inserta el abono y ajusta
+    // el saldo/status de la deuda de forma atómica — antes cada uno de esos
+    // tres pasos se hacía por separado desde el navegador con la llave
+    // pública, confiando en el interés que ya había calculado el cliente.
+    const { error: payError, newBalance: resultBalance } = await paySupplierDebt(paymentModalDebt.id, payAmt, paymentNotes);
     if (payError) {
         return alert("❌ Error al registrar el abono: " + payError.message);
     }
-
-    // 2. Update Debt Balance de forma atómica en el servidor (evita que dos
-    // abonos casi simultáneos a la misma deuda se pisen entre sí — antes
-    // el nuevo saldo se calculaba en el cliente a partir del balance ya
-    // cargado en pantalla). El delta incluye el interés del día porque
-    // "balance" en la BD no lo tiene sumado todavía (se calcula al vuelo).
-    let newBalance: number;
-    const { data: rpcBalance, error: rpcErr } = await supabase.rpc("increment_supplier_debt_balance", {
-        p_debt_id: paymentModalDebt.id,
-        p_delta: calculatedInterest - payAmt,
-    });
-    if (rpcErr) {
-        newBalance = Math.max(0, totalDue - payAmt);
-        const { error: balanceError } = await supabase.from("supplier_debts")
-            .update({ balance: newBalance })
-            .eq("id", paymentModalDebt.id);
-        if (balanceError) {
-            return alert(
-                "⚠️ Se registró el abono, pero no se pudo actualizar el saldo de la deuda. Revisa manualmente: " +
-                balanceError.message
-            );
-        }
-    } else {
-        newBalance = Number(rpcBalance);
-    }
-
-    const newStatus = newBalance === 0 ? 'paid' : paymentModalDebt.status;
-    const { error: statusError } = await supabase.from("supplier_debts")
-        .update({ status: newStatus })
-        .eq("id", paymentModalDebt.id);
-    if (statusError) {
-        console.error("No se pudo actualizar el estado de la deuda:", statusError);
-    }
+    const newBalance = resultBalance as number;
 
     alert(`✅ Abono de $${payAmt.toFixed(2)} registrado con éxito.`);
     

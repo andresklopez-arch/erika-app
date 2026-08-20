@@ -17,6 +17,7 @@ import { CustomerSchema, CashSessionSchema } from "../lib/schemas";
 import { getOrReconnectBlePrinter, sendBleBytes, startBleKeepAlive, getBleStatus, BleStatusType } from "../utils/bluetoothPrinter";
 import { insertCashTransaction } from "../lib/cashTransactionClient";
 import { saveCustomer, adjustCustomerPoints } from "../lib/customersClient";
+import { createLayaway } from "../lib/layawaysClient";
 
 interface POSItem {
   id: string;
@@ -3992,7 +3993,7 @@ export default function POSModule() {
 
               const makeLayaway = async () => {
                  const customer = customers.find(c => c.id === selectedCustomerId);
-                 const { error } = await supabase.from("layaways").insert({
+                 const { error } = await createLayaway({
                     customer_id: selectedCustomerId,
                     customer_name: customer?.name || "Desconocido",
                     total_amount: finalTotal,
@@ -4000,7 +4001,6 @@ export default function POSModule() {
                     balance: finalTotal - downPayment,
                     due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
                     items: activeTicket.items,
-                    status: "pending"
                  });
                  if (error) return alert("Error al crear apartado: " + error.message);
 

@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { LayawaySchema } from "../lib/schemas";
 import { useBusinessProfile } from "./AuthProvider";
+import { payLayaway, cancelLayaway } from "../lib/layawaysClient";
 
 export default function LayawaysModule() {
   const businessProfile = useBusinessProfile();
@@ -72,31 +73,9 @@ export default function LayawaysModule() {
     if (payment > layaway.balance)
       return alert("El abono no puede superar el saldo pendiente.");
 
-    // Decremento atómico en el servidor (evita que dos abonos casi
-    // simultáneos al mismo apartado se pisen el saldo entre sí — antes se
-    // calculaba en el cliente a partir del balance ya cargado en pantalla).
-    let newBalance: number;
-    const { data: rpcBalance, error: rpcErr } = await supabase.rpc("increment_layaway_balance", {
-      p_layaway_id: layaway.id,
-      p_delta: -payment,
-    });
-    if (rpcErr) {
-      newBalance = layaway.balance - payment;
-      const { error } = await supabase
-        .from("layaways")
-        .update({ balance: newBalance })
-        .eq("id", layaway.id);
-      if (error) return alert("Error al registrar el abono.");
-    } else {
-      newBalance = Number(rpcBalance);
-    }
-
-    const isCompleted = newBalance <= 0.01; // floating point safe
-    const { error: statusError } = await supabase
-      .from("layaways")
-      .update({ status: isCompleted ? "completed" : "pending" })
-      .eq("id", layaway.id);
-    if (statusError) return alert("El abono se registró, pero no se pudo actualizar el estado del apartado.");
+    const { error, newBalance: resultBalance, isCompleted } = await payLayaway(layaway.id, payment);
+    if (error) return alert("Error al registrar el abono: " + error.message);
+    const newBalance = resultBalance as number;
 
     // Print Thermal Ticket for Abono
     const ticketWindow = window.open("", "_blank", "width=300,height=500");
@@ -181,10 +160,7 @@ export default function LayawaysModule() {
       }
     }
 
-    const { error } = await supabase
-      .from("layaways")
-      .update({ status: "cancelled" })
-      .eq("id", layaway.id);
+    const { error } = await cancelLayaway(layaway.id);
     if (error) return alert("Error al cancelar.");
 
     if (failedItems.length > 0) {
