@@ -4,7 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "./AuthProvider";
 import { LoggerService } from "../services/loggerService";
 import { getOrReconnectBlePrinter, sendBleBytes } from "../utils/bluetoothPrinter";
-import { deleteCustomer } from "../lib/customersClient";
+import { deleteCustomer, OPERATIONAL_WARNING_EVENT, CUSTOMER_COUNT_WARNED_COUNT_KEY } from "../lib/customersClient";
 import { deleteInventoryItem } from "../lib/inventoryClient";
 import { deleteSupplier } from "../lib/suppliersClient";
 import { deleteService } from "../lib/servicesClient";
@@ -167,6 +167,20 @@ export default function SettingsModule() {
   const [showTestInstructions, setShowTestInstructions] = useState(false);
   const [copiedSqlTable, setCopiedSqlTable] = useState<string | null>(null);
   const [copiedSqlFn, setCopiedSqlFn] = useState<string | null>(null);
+  const [customerCountWarning, setCustomerCountWarning] = useState<number | null>(null);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(CUSTOMER_COUNT_WARNED_COUNT_KEY);
+      if (saved) setCustomerCountWarning(Number(saved));
+    } catch (e) {}
+    const handleWarning = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.type === "customer_list_size") setCustomerCountWarning(detail.count);
+    };
+    window.addEventListener(OPERATIONAL_WARNING_EVENT, handleWarning);
+    return () => window.removeEventListener(OPERATIONAL_WARNING_EVENT, handleWarning);
+  }, []);
 
   const copyCloseFunctionSql = async (fn: RlsFunctionStatus) => {
     const sql = `REVOKE EXECUTE ON FUNCTION ${fn.signature} FROM PUBLIC, anon, authenticated;\nGRANT EXECUTE ON FUNCTION ${fn.signature} TO service_role;`;
@@ -585,8 +599,8 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
   const saveQuoteFollowupConfig = async () => {
     if (!checkAdmin()) return;
     const days = parseNumOr(quoteFollowupDays, 2);
-    if (days < 1) {
-      return alert("❌ El umbral de seguimiento debe ser de al menos 1 día.");
+    if (days < 1 || days > 90) {
+      return alert("❌ El umbral de seguimiento debe estar entre 1 y 90 días.");
     }
     const success = await updateBusinessSettings({
       config: {
@@ -1490,7 +1504,7 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
               <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>
                 Días sin respuesta antes de marcar un presupuesto enviado para seguimiento:
               </label>
-              <input type="number" min="1" value={quoteFollowupDays} onChange={e => setQuoteFollowupDays(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
+              <input type="number" min="1" max="90" value={quoteFollowupDays} onChange={e => setQuoteFollowupDays(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
             </div>
             <button className="btn-primary" onClick={saveQuoteFollowupConfig} style={{ width: "100%", background: "transparent", border: "1px solid #f97316", color: "#f97316" }}>
               💾 Guardar Umbral de Seguimiento
@@ -2268,6 +2282,18 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {customerCountWarning !== null && (
+              <div style={{ marginTop: "15px", paddingTop: "15px", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+                <p style={{ fontSize: "0.8rem", color: "#f97316", fontWeight: "bold", marginBottom: "4px" }}>
+                  ⚠️ Aviso operativo: lista de clientes creciendo
+                </p>
+                <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.7)", margin: 0 }}>
+                  Hay {customerCountWarning} clientes activos. El POS y Presupuestos cargan la lista completa de un jalón;
+                  conviene implementar paginación/búsqueda antes de que se acerque al límite de 5000.
+                </p>
               </div>
             )}
 

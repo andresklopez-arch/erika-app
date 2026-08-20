@@ -104,3 +104,25 @@ siguiendo el mismo patrón que `inventoryFields.ts`) antes de correr el
 - `QuotesModule.tsx` — `sendWhatsApp` actualiza `whatsapp_sent_at` con un
   `.update()` directo después de abrir el chat.
 
+# Avisos operativos con OPERATIONAL_WARNING_EVENT
+
+`OPERATIONAL_WARNING_EVENT` (`src/lib/customersClient.ts`) es un
+`CustomEvent` de `window` para avisos de "esto va a fallar pronto si no se
+atiende" que **no** son de seguridad RLS (esos usan su propio mecanismo:
+`/api/admin/audit/rls-status` + el punto rojo en Sidebar). Hoy solo tiene
+un emisor: `warnAboutCustomerListSize` (tamaño de la lista de clientes).
+Lo escuchan `Sidebar.tsx` (punto naranja en "⚙️ Configuración") y
+`SettingsModule.tsx` (detalle del aviso, junto a la Auditoría de
+Seguridad).
+
+Si se agrega un segundo aviso operativo (ej. otra tabla creciendo mucho,
+otro límite acercándose):
+1. Reutilizar el mismo evento, no crear uno nuevo — el punto naranja del
+   Sidebar ya está cableado a este nombre.
+2. Darle a `detail.type` un valor distinto a `"customer_list_size"` para
+   que cada listener sepa distinguirlos (ver el `if (detail?.type === ...)`
+   en `SettingsModule.tsx`).
+3. Si el aviso necesita persistir para pantallas que montan después de que
+   el evento ya se disparó (como pasa con Configuración), guardar el dato
+   en `sessionStorage` también, no solo disparar el evento en vivo.
+

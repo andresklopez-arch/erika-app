@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth, useBusinessProfile } from "./AuthProvider";
 import UnitSalesSummary from "./UnitSalesSummary";
@@ -26,6 +27,7 @@ const roundTo50 = (value: number): number => Math.round(value * 2) / 2;
 const formatPrice = (value: number): string => roundTo50(value).toFixed(2);
 
 export default function ReportsModule() {
+  const router = useRouter();
   const { businessSettings, currentUser } = useAuth();
   const businessProfile = useBusinessProfile();
   const monthlyGoal = businessSettings.monthly_goals;
@@ -70,6 +72,9 @@ export default function ReportsModule() {
   // whatsapp_sent_at puede no existir todavía si no se corrió la migración).
   const [quoteStatsAvailable, setQuoteStatsAvailable] = useState(false);
   const [quoteStatsMigrationPending, setQuoteStatsMigrationPending] = useState(false);
+  const [copiedQuoteMigrationSql, setCopiedQuoteMigrationSql] = useState(false);
+  const QUOTE_WHATSAPP_MIGRATION_SQL =
+    "ALTER TABLE quotes ADD COLUMN IF NOT EXISTS customer_phone text;\nALTER TABLE quotes ADD COLUMN IF NOT EXISTS whatsapp_sent_at timestamptz;";
 
   const fetchData = async () => {
     const today = new Date();
@@ -546,7 +551,7 @@ export default function ReportsModule() {
           </h3>
           <div style={{ display: "flex", gap: "25px" }}>
             <button
-              onClick={() => { window.location.href = "/clientes?tab=presupuestos"; }}
+              onClick={() => router.push("/clientes?tab=presupuestos")}
               title="Ver todos los presupuestos"
               style={{ background: "transparent", border: "none", cursor: "pointer", textAlign: "center", color: "inherit" }}
             >
@@ -558,7 +563,7 @@ export default function ReportsModule() {
             <button
               onClick={() => {
                 try { localStorage.setItem("ERIKA_QUOTES_ONLY_FOLLOWUP", "true"); } catch (e) {}
-                window.location.href = "/clientes?tab=presupuestos";
+                router.push("/clientes?tab=presupuestos");
               }}
               title="Ver solo los presupuestos que necesitan seguimiento"
               style={{ background: "transparent", border: "none", cursor: "pointer", textAlign: "center", color: "inherit" }}
@@ -577,12 +582,27 @@ export default function ReportsModule() {
           className="glass-panel"
           style={{
             fontSize: "0.85rem",
-            opacity: 0.8,
+            opacity: 0.9,
             border: "1px dashed rgba(255,255,255,0.2)",
           }}
         >
-          📄 El panel de "Presupuestos por WhatsApp" necesita una migración pendiente en Supabase
-          (columna <code>whatsapp_sent_at</code> en <code>quotes</code>) para poder mostrarse.
+          <p style={{ margin: "0 0 8px 0" }}>
+            📄 El panel de "Presupuestos por WhatsApp" necesita una migración pendiente en Supabase
+            (columnas <code>customer_phone</code> y <code>whatsapp_sent_at</code> en <code>quotes</code>). Corre esto en el SQL Editor de Supabase:
+          </p>
+          <pre style={{ background: "rgba(0,0,0,0.35)", padding: "10px", borderRadius: "4px", overflowX: "auto", margin: "0 0 8px 0", fontFamily: "monospace", fontSize: "0.78rem" }}>
+            {QUOTE_WHATSAPP_MIGRATION_SQL}
+          </pre>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(QUOTE_WHATSAPP_MIGRATION_SQL);
+              setCopiedQuoteMigrationSql(true);
+              setTimeout(() => setCopiedQuoteMigrationSql(false), 2000);
+            }}
+            style={{ background: "rgba(249,115,22,0.15)", color: "#f97316", border: "1px solid #f97316", padding: "5px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "0.8rem" }}
+          >
+            {copiedQuoteMigrationSql ? "✅ Copiado" : "📋 Copiar SQL"}
+          </button>
         </div>
       )}
 

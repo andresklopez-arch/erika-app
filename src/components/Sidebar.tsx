@@ -4,7 +4,7 @@ import { useAuth } from "./AuthProvider";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../lib/supabaseClient";
-import { OPERATIONAL_WARNING_EVENT } from "../lib/customersClient";
+import { OPERATIONAL_WARNING_EVENT, CUSTOMER_COUNT_WARNED_KEY } from "../lib/customersClient";
 
 export default function Sidebar() {
   const { currentUser } = useAuth();
@@ -35,7 +35,7 @@ export default function Sidebar() {
   // pronto si no se atiende" como el tamaño de la lista de clientes.
   useEffect(() => {
     try {
-      if (sessionStorage.getItem("ERIKA_CUSTOMER_COUNT_WARNED")) {
+      if (sessionStorage.getItem(CUSTOMER_COUNT_WARNED_KEY)) {
         setHasOperationalWarning(true);
       }
     } catch (e) {}
