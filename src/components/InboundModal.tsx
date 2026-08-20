@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { reduceInventoryStock } from "../lib/inventoryClient";
+import { reduceInventoryStock, saveInventoryItem } from "../lib/inventoryClient";
 
 interface InventoryItem {
   id: string;
@@ -112,12 +112,9 @@ export default function InboundModal({ onClose, onSuccess }: InboundModalProps) 
         continue;
       }
 
-      const { error: costErr } = await supabase
-        .from("inventory")
-        .update({ cost: finalCost })
-        .eq("id", item.id);
+      const { error: costErr } = await saveInventoryItem({ id: item.id, fields: { cost: finalCost } });
       if (costErr) {
-         console.error(costErr);
+         console.error(costErr.message);
          hasError = true;
       }
     }

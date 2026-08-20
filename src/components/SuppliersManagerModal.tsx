@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabaseClient";
 import toast from "react-hot-toast";
 import { LoggerService } from "../services/loggerService";
+import { bulkUpdateInventory } from "../lib/inventoryClient";
 
 interface Supplier {
   id: string;
@@ -122,10 +123,10 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
         toast.error(`Error de Supabase: ${error.message || JSON.stringify(error)}`);
       } else {
         if (previousName && previousName !== name) {
-          const { error: cascadeErr } = await supabase
-            .from("inventory")
-            .update({ supplier: name })
-            .eq("supplier", previousName);
+          const { error: cascadeErr } = await bulkUpdateInventory({
+            filter: { supplier: previousName },
+            fields: { supplier: name },
+          });
           if (cascadeErr) {
             toast.error(
               `Proveedor actualizado, pero no se pudieron reasignar los productos de "${previousName}" al nuevo nombre. Corrígelos manualmente.`,

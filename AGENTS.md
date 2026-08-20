@@ -6,10 +6,29 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Patrón: cerrar una tabla de Supabase con RLS abierta
 
-Todas las tablas de negocio (dinero: cajas, créditos, apartados, deudas a
-proveedores, gastos) ya están cerradas — ver `supabase/migrations/2026082*`.
-Si se agrega una tabla nueva con datos financieros, seguir este mismo
+Todas las tablas de dinero (cajas, créditos, apartados, deudas a
+proveedores, gastos), `users` y `inventory` (+ el RPC
+`reduce_inventory_stock`) ya están cerradas — ver
+`supabase/migrations/2026082*`. Quedan 9 tablas de menor riesgo sin cerrar
+(`services`, `suppliers`, `supplier_orders`, `quotes`, `business_settings`,
+`error_logs`, `internal_tasks`, `inventory_audit_logs`,
+`inventory_movements` — ver `knownOpenPending` en
+`scripts/check-rls-lockdown.js`). Si se agrega una tabla nueva con datos
+sensibles, o se retoma alguna de las 9 pendientes, seguir este mismo
 patrón (no crear políticas nuevas a mano ni copiar el bloque completo):
+
+**Para una tabla con MUCHOS puntos de escritura distintos** (como
+`inventory`, con 22 sitios en 8 archivos): no hace falta una ruta de
+servidor por sitio. Agrupar por la FORMA del cambio, no por quién lo pide:
+`/api/<tabla>/save` (crear/editar un registro por id, con una lista blanca
+de columnas — ver `src/lib/inventoryFields.ts`), `/api/<tabla>/bulk-update`
+(igual pero filtrando por una columna en vez de por id), `/api/<tabla>/delete`
+(soft/restore/hard, mismo shape que `customersClient`), y si aplica un
+`/api/<tabla>/bulk-import` aparte para cargas masivas (con un límite de
+filas por request). La lógica de PREPARAR los datos (parsear un Excel,
+detectar duplicados, decidir qué va en cada lote) puede quedarse en el
+navegador tal cual — ahí no hay ningún problema de seguridad; lo único que
+se mueve es la escritura final a la base de datos.
 
 1. Escribir la escritura (INSERT/UPDATE/DELETE) en una ruta de servidor
    bajo `src/app/api/**`, usando `supabaseAdmin` (Service Role Key,

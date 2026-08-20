@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth, useBusinessProfile } from "./AuthProvider";
 import UnitSalesSummary from "./UnitSalesSummary";
+import { saveInventoryItem } from "../lib/inventoryClient";
 
 interface CashSession {
   id: string;
@@ -234,23 +235,16 @@ export default function ReportsModule() {
       if (isNaN(parsedValue)) parsedValue = 0.0;
     }
 
-    const { error: updateErr } = await supabase
-      .from("inventory")
-      .update({ [log.field]: parsedValue })
-      .eq("id", log.inventory_id);
+    const { error: updateErr } = await saveInventoryItem({
+      id: log.inventory_id,
+      fields: { [log.field]: parsedValue },
+      auditLog: [{ field: log.field, oldValue: currentValue ?? "", newValue: log.old_value ?? "", note: "Reversión" }],
+    });
 
     if (updateErr) {
       alert("❌ Error al revertir el valor: " + updateErr.message);
       return;
     }
-
-    await supabase.from("inventory_audit_logs").insert({
-      inventory_id: log.inventory_id,
-      field: log.field,
-      old_value: String(currentValue ?? ""),
-      new_value: String(log.old_value ?? ""),
-      changed_by: `Reversión por ${currentUser?.name || "Administrador"}`
-    });
 
     alert("✅ El cambio ha sido revertido exitosamente.");
     fetchData();

@@ -5,6 +5,7 @@ import { useAuth } from "./AuthProvider";
 import { LoggerService } from "../services/loggerService";
 import { getOrReconnectBlePrinter, sendBleBytes } from "../utils/bluetoothPrinter";
 import { deleteCustomer } from "../lib/customersClient";
+import { deleteInventoryItem } from "../lib/inventoryClient";
 
 // A diferencia de `Number(x) || fallback`, esto no pisa un 0 explícito con el
 // valor por defecto (Number("0") || 5 evaluaba a 5, impidiendo desactivar
@@ -337,7 +338,7 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
 
         if (daysInTrash > 33) {
           if (item.type === "producto") {
-            await supabase.from("inventory").delete().eq("id", item.id);
+            await deleteInventoryItem({ id: item.id, action: "hard" });
           } else if (item.type === "cliente") {
             await deleteCustomer(item.id, "hard");
           } else if (item.type === "proveedor") {
@@ -363,7 +364,7 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
     try {
       let error;
       if (item.type === "producto") {
-        const { error: err } = await supabase.from("inventory").update({ deleted: false, deleted_at: null }).eq("id", item.id);
+        const { error: err } = await deleteInventoryItem({ id: item.id, action: "restore" });
         error = err;
       } else if (item.type === "cliente") {
         const { error: err } = await deleteCustomer(item.id, "restore");
@@ -401,7 +402,7 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
     try {
       let error;
       if (item.type === "producto") {
-        const { error: err } = await supabase.from("inventory").delete().eq("id", item.id);
+        const { error: err } = await deleteInventoryItem({ id: item.id, action: "hard" });
         error = err;
       } else if (item.type === "cliente") {
         const { error: err } = await deleteCustomer(item.id, "hard");

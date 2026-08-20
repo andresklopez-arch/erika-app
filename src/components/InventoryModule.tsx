@@ -13,6 +13,7 @@ import LayawayModal from "./LayawayModal";
 import InboundModal from "./InboundModal";
 import AuditModule from "./AuditModule";
 import { useAuth } from "./AuthProvider";
+import { saveInventoryItem, bulkUpdateInventory, deleteInventoryItem, reduceInventoryStock, bulkImportInventory } from "../lib/inventoryClient";
 
 const normalizeString = (str: string) => {
   if (!str) return "";
@@ -231,18 +232,21 @@ export default function InventoryModule() {
     const lastUndoLog = undoStack[undoStack.length - 1];
     for (const log of lastUndoLog) {
       if (log.isNew) {
-        await supabase.from("inventory").delete().eq("code", log.code);
+        await deleteInventoryItem({ code: log.code, action: "hard" });
       } else {
-        await supabase.from("inventory").update({
-          cost: log.cost,
-          price: log.price,
-          stock: log.stock,
-          supplier: log.supplier,
-          location: log.location,
-          priceChanged: log.priceChanged,
-          deleted: log.deleted,
-          deleted_at: log.deleted_at
-        }).eq("id", log.id);
+        await saveInventoryItem({
+          id: log.id,
+          fields: {
+            cost: log.cost,
+            price: log.price,
+            stock: log.stock,
+            supplier: log.supplier,
+            location: log.location,
+            priceChanged: log.priceChanged,
+            deleted: log.deleted,
+            deleted_at: log.deleted_at,
+          },
+        });
       }
     }
     const newStack = undoStack.slice(0, -1);
@@ -320,17 +324,19 @@ export default function InventoryModule() {
       }
     }
 
-    const { error } = await supabase.from("inventory").insert({
-      code: finalCode,
-      name: newProductName,
-      cost: c,
-      price: priceWasProvided ? p : c * 1.5,
-      stock: s,
-      minStock: 5,
-      location: "Pendiente",
-      supplier: "Pendiente",
-      autoPriced: !priceWasProvided,
-      sale_unit: newProductUnit
+    const { error } = await saveInventoryItem({
+      fields: {
+        code: finalCode,
+        name: newProductName,
+        cost: c,
+        price: priceWasProvided ? p : c * 1.5,
+        stock: s,
+        minStock: 5,
+        location: "Pendiente",
+        supplier: "Pendiente",
+        autoPriced: !priceWasProvided,
+        sale_unit: newProductUnit,
+      },
     });
 
     if (error) {
@@ -478,10 +484,7 @@ export default function InventoryModule() {
   const handleDeleteProduct = async (id: string, name: string) => {
     if (!window.confirm(`⚠️ ¿Seguro que deseas eliminar el producto "${name}"?\nSe enviará a la Papelera.`)) return;
 
-    const { error } = await supabase
-      .from("inventory")
-      .update({ deleted: true, deleted_at: new Date().toISOString() })
-      .eq("id", id);
+    const { error } = await deleteInventoryItem({ id, action: "soft" });
 
     if (error) {
       alert("Error al eliminar producto: " + error.message);
@@ -509,44 +512,23 @@ export default function InventoryModule() {
       return;
     }
 
-    const { error } = await supabase
-      .from("inventory")
-      .update({
+    const { error } = await saveInventoryItem({
+      id: editingDiscountItem.id,
+      fields: {
         discount_pct: pct,
         discount_start_at: startVal,
         discount_end_at: endVal,
-      })
-      .eq("id", editingDiscountItem.id);
+      },
+      auditLog: [
+        { field: "discount_pct", oldValue: editingDiscountItem.discount_pct || "0", newValue: pct },
+        { field: "discount_start_at", oldValue: editingDiscountItem.discount_start_at || "", newValue: startVal || "" },
+        { field: "discount_end_at", oldValue: editingDiscountItem.discount_end_at || "", newValue: endVal || "" },
+      ],
+    });
 
     if (error) {
       alert("❌ Error al guardar descuento promocional: " + error.message);
     } else {
-      supabase.from("inventory_audit_logs").insert([
-        {
-          inventory_id: editingDiscountItem.id,
-          field: "discount_pct",
-          old_value: String(editingDiscountItem.discount_pct || "0"),
-          new_value: String(pct),
-          changed_by: currentUser?.name || "Administrador",
-        },
-        {
-          inventory_id: editingDiscountItem.id,
-          field: "discount_start_at",
-          old_value: String(editingDiscountItem.discount_start_at || ""),
-          new_value: String(startVal || ""),
-          changed_by: currentUser?.name || "Administrador",
-        },
-        {
-          inventory_id: editingDiscountItem.id,
-          field: "discount_end_at",
-          old_value: String(editingDiscountItem.discount_end_at || ""),
-          new_value: String(endVal || ""),
-          changed_by: currentUser?.name || "Administrador",
-        }
-      ]).then(({ error: logErr }: any) => {
-        if (logErr) console.warn("Fallo al registrar bitácora de auditoría:", logErr);
-      });
-
       alert("✅ Descuento promocional configurado con éxito.");
       setEditingDiscountItem(null);
       fetchInventory(0, debouncedSearchQuery, true, true);
@@ -569,12 +551,7 @@ export default function InventoryModule() {
       return;
     }
 
-    let dbQuery = supabase.from("inventory").update({
-      discount_pct: pct,
-      discount_start_at: startVal,
-      discount_end_at: endVal,
-    });
-
+    let filter: { supplier?: string; location?: string; ids?: string[] };
     let itemsToLog: InventoryItem[] = [];
 
     if (bulkTargetMode === "supplier") {
@@ -582,14 +559,14 @@ export default function InventoryModule() {
         alert("⚠️ Por favor selecciona un proveedor.");
         return;
       }
-      dbQuery = dbQuery.eq("supplier", bulkSelectedSupplier);
+      filter = { supplier: bulkSelectedSupplier };
       itemsToLog = allItems.filter(i => i.supplier === bulkSelectedSupplier);
     } else if (bulkTargetMode === "location") {
       if (!bulkSelectedLocation) {
         alert("⚠️ Por favor selecciona una ubicación.");
         return;
       }
-      dbQuery = dbQuery.eq("location", bulkSelectedLocation);
+      filter = { location: bulkSelectedLocation };
       itemsToLog = allItems.filter(i => i.location === bulkSelectedLocation);
     } else {
       const ids = items.map(i => i.id);
@@ -597,31 +574,21 @@ export default function InventoryModule() {
         alert("⚠️ No hay productos visibles para actualizar.");
         return;
       }
-      dbQuery = dbQuery.in("id", ids);
+      filter = { ids };
       itemsToLog = [...items];
     }
 
     setIsReverting(true);
-    const { error } = await dbQuery;
+    const { error } = await bulkUpdateInventory({
+      filter,
+      fields: { discount_pct: pct, discount_start_at: startVal, discount_end_at: endVal },
+      auditLog: itemsToLog.map(i => ({ id: i.id, field: "discount_pct", oldValue: i.discount_pct || "0", newValue: pct })),
+    });
     setIsReverting(false);
 
     if (error) {
       alert("❌ Error al aplicar descuento masivo: " + error.message);
     } else {
-      const auditRecords = itemsToLog.map(i => ({
-        inventory_id: i.id,
-        field: "discount_pct",
-        old_value: String(i.discount_pct || "0"),
-        new_value: String(pct),
-        changed_by: currentUser?.name || "Administrador"
-      }));
-
-      if (auditRecords.length > 0) {
-        supabase.from("inventory_audit_logs").insert(auditRecords).then(({ error: logErr }: any) => {
-          if (logErr) console.warn("Fallo al registrar bitácora masiva:", logErr);
-        });
-      }
-
       alert(`✅ Descuento masivo del ${pct}% aplicado a ${itemsToLog.length} productos con éxito.`);
       setShowBulkPromoModal(false);
       setBulkPromoPct("");
@@ -793,35 +760,23 @@ export default function InventoryModule() {
         });
       }
 
-      // Se vuelve a leer el stock actual del producto principal justo antes de
-      // escribir, en vez de usar el valor cacheado desde que se cargó la página.
-      // Antes, si una venta de POS descontaba stock entre que se abrió esta
-      // pantalla y se dio clic en "Combinar aquí", la fusión sobrescribía ese
-      // descuento real con una suma basada en el valor viejo, "resucitando" stock
-      // que ya se había vendido.
-      const { data: freshPrincipal, error: freshErr } = await supabase
-        .from("inventory")
-        .select("stock")
-        .eq("id", principalItem.id)
-        .single();
-      if (freshErr) throw freshErr;
-      const freshNewStock = (freshPrincipal?.stock ?? principalItem.stock) + totalStockToTransfer;
+      // El RPC reduce_inventory_stock (vía /api/inventory/reduce-stock) resta
+      // `qty` de forma atómica dentro de la misma transacción SQL — ya no
+      // hace falta leer el stock fresco a mano antes de escribir: antes, si
+      // una venta de POS descontaba stock entre que se abrió esta pantalla y
+      // se dio clic en "Combinar aquí", la fusión sobrescribía ese descuento
+      // real con una suma basada en el valor viejo, "resucitando" stock que
+      // ya se había vendido.
+      const { error: updateError } = await reduceInventoryStock(
+        [{ id: principalItem.id, qty: -totalStockToTransfer }],
+        "adjustment",
+        `MERGE-${principalItem.id}`,
+      );
+      if (updateError) throw new Error(updateError.message);
 
-      const { error: updateError } = await supabase
-        .from("inventory")
-        .update({ stock: freshNewStock })
-        .eq("id", principalItem.id);
-
-      if (updateError) throw updateError;
-
-      const nowStr = new Date().toISOString();
       for (const duplicate of duplicates) {
-        const { error: deleteError } = await supabase
-          .from("inventory")
-          .update({ deleted: true, deleted_at: nowStr })
-          .eq("id", duplicate.id);
-        
-        if (deleteError) throw deleteError;
+        const { error: deleteError } = await deleteInventoryItem({ id: duplicate.id, action: "soft" });
+        if (deleteError) throw new Error(deleteError.message);
       }
 
       setUndoStack(prev => {
@@ -857,10 +812,7 @@ export default function InventoryModule() {
 
     setIsReverting(true);
     try {
-      const { error } = await supabase
-        .from("inventory")
-        .update({ [field]: oldValue })
-        .eq("id", itemId);
+      const { error } = await saveInventoryItem({ id: itemId, fields: { [field]: oldValue } });
 
       if (error) {
         alert("❌ Error al deshacer cambio: " + error.message);
@@ -988,27 +940,17 @@ export default function InventoryModule() {
       updateObj.autoPriced = false;
     }
 
-    const { error } = await supabase
-      .from("inventory")
-      .update(updateObj)
-      .eq("id", itemId);
+    const { error } = await saveInventoryItem({
+      id: itemId,
+      fields: updateObj,
+      auditLog: originalItem
+        ? [{ field, oldValue: originalItem[field as keyof InventoryItem] ?? "", newValue: finalValue }]
+        : undefined,
+    });
 
     if (error) {
       alert("❌ Error al actualizar producto: " + error.message);
     } else {
-      // Log change to audit logs (Sugerencia 1)
-      if (originalItem) {
-        supabase.from("inventory_audit_logs").insert({
-          inventory_id: itemId,
-          field: field,
-          old_value: String(originalItem[field as keyof InventoryItem] ?? ""),
-          new_value: String(finalValue),
-          changed_by: currentUser?.name || "Administrador"
-        }).then(({ error: logErr }: any) => {
-          if (logErr) console.warn("Fallo al registrar bitácora de auditoría:", logErr);
-        });
-      }
-
       // Guardar cambio para el deshacer
       if (originalItem) {
         setLastManualChange({
@@ -2811,66 +2753,25 @@ export default function InventoryModule() {
                 }
               }
 
-              // Ejecutar inserciones en lotes de 50 para que un código duplicado
-              // no anule toda la importación.
-              const BATCH_SIZE = 50;
+              // La escritura real (inserciones en lote, respaldo uno-por-uno,
+              // relectura de stock fresco si se acumula, y el upsert final)
+              // ahora vive en /api/inventory/bulk-import — ver ese archivo
+              // para el detalle de cada paso (es exactamente la misma lógica
+              // que había aquí, solo que corre en el servidor).
               let failedInserts = 0;
-              if (inserts.length > 0) {
-                for (let batchStart = 0; batchStart < inserts.length; batchStart += BATCH_SIZE) {
-                  const batch = inserts.slice(batchStart, batchStart + BATCH_SIZE);
-                  const { error: insertError } = await supabase.from("inventory").insert(batch);
-                  if (insertError) {
-                    // Intento de recuperación: insertar uno por uno para salvar los que sí pasan
-                    for (const item of batch) {
-                      const { error: singleErr } = await supabase.from("inventory").insert([item]);
-                      if (singleErr) {
-                        console.warn(`[Import] No se pudo insertar "${item.name}" (${item.code}): ${singleErr.message}`);
-                        failedInserts++;
-                        newCount--; // descontar del total reportado
-                      }
-                    }
-                  }
-                }
-              }
-
-              // Si se está acumulando stock (sumar sobre lo existente, no
-              // reemplazar), se vuelve a leer el stock ACTUAL de cada
-              // producto justo antes de escribir y se recalcula sobre ese
-              // valor fresco — el mismo patrón ya usado en la fusión de
-              // duplicados. Antes esto usaba dbAllItems, una foto tomada al
-              // iniciar el import, así que una venta ocurrida mientras el
-              // usuario revisaba el preview (puede tardar varios minutos)
-              // se borraba en silencio al guardar.
-              if (accumulateStock && importedDeltaById.size > 0) {
-                const idsToRefresh = Array.from(importedDeltaById.keys());
-                const { data: freshItems } = await supabase
-                  .from("inventory")
-                  .select("id, stock")
-                  .in("id", idsToRefresh);
-                if (freshItems) {
-                  const freshStockById = new Map<string, number>(freshItems.map((f: any) => [f.id, f.stock || 0]));
-                  updates.forEach((u, idx) => {
-                    const delta = importedDeltaById.get(u.id);
-                    if (delta !== undefined && freshStockById.has(u.id)) {
-                      updates[idx] = { ...u, stock: (freshStockById.get(u.id) || 0) + delta };
-                    }
-                  });
-                }
-              }
-
-              // Ejecutar actualizaciones en lote. Se atrapa el error aquí mismo
-              // (en vez de relanzarlo) porque antes, si esto fallaba, saltaba
-              // directo al catch general y NUNCA se guardaba el registro de
-              // deshacer (undoLog) de los inserts que ya se habían confirmado
-              // arriba — dejando datos ya escritos sin forma de deshacerlos, y
-              // un mensaje de error que sugería que nada se había guardado.
               let updateError: { message: string } | null = null;
-              if (updates.length > 0) {
-                const result = await supabase.from("inventory").upsert(updates);
-                updateError = result.error;
-                if (updateError) {
-                  console.error("[Import] Falló el upsert de actualizaciones:", updateError);
-                }
+              const { data: importResult, error: importErr } = await bulkImportInventory({
+                inserts,
+                updates,
+                accumulateStock: !!accumulateStock,
+                importedDeltaById: Object.fromEntries(importedDeltaById),
+              });
+              if (importErr) {
+                updateError = importErr;
+              } else if (importResult) {
+                newCount = importResult.newCount;
+                failedInserts = importResult.failedInserts;
+                if (importResult.updateErrorMessage) updateError = { message: importResult.updateErrorMessage };
               }
 
               if (undoLog.length > 0) {
