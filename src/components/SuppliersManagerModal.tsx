@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import { LoggerService } from "../services/loggerService";
 import { bulkUpdateInventory } from "../lib/inventoryClient";
 import { saveSupplier, deleteSupplier } from "../lib/suppliersClient";
+import { useBusinessProfile } from "./AuthProvider";
 
 interface Supplier {
   id: string;
@@ -29,6 +30,7 @@ interface SuppliersManagerModalProps {
 }
 
 export default function SuppliersManagerModal({ onClose }: SuppliersManagerModalProps) {
+  const businessProfile = useBusinessProfile();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
@@ -157,11 +159,11 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
     
     let msg = "";
     if (template === 'Pedido') {
-      msg = encodeURIComponent(`Hola ${supplier.contact_name || supplier.name}, necesitamos realizar un pedido para Ferretería Erika...\n`);
+      msg = encodeURIComponent(`Hola ${supplier.contact_name || supplier.name}, necesitamos realizar un pedido para ${businessProfile.name}...\n`);
     } else if (template === 'Cotización') {
-      msg = encodeURIComponent(`Hola ${supplier.contact_name || supplier.name}, ¿podrías apoyarnos con la cotización de los siguientes materiales para Ferretería Erika?...\n`);
+      msg = encodeURIComponent(`Hola ${supplier.contact_name || supplier.name}, ¿podrías apoyarnos con la cotización de los siguientes materiales para ${businessProfile.name}?...\n`);
     } else {
-      msg = encodeURIComponent(`Hola ${supplier.contact_name || supplier.name}, tenemos un tema de garantía con un producto de Ferretería Erika...\n`);
+      msg = encodeURIComponent(`Hola ${supplier.contact_name || supplier.name}, tenemos un tema de garantía con un producto de ${businessProfile.name}...\n`);
     }
 
     // Registrar historial
@@ -184,7 +186,7 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
   const handleEmail = async (supplier: Supplier) => {
     if (!supplier.email) return alert("El proveedor no tiene correo electrónico.");
     await supabase.from("supplier_orders").insert({ supplier_id: supplier.id, action_type: 'Email', notes: "Correo electrónico enviado" });
-    window.open(`mailto:${supplier.email}?subject=Pedido Ferretería Erika&body=Hola ${supplier.contact_name || supplier.name},`);
+    window.open(`mailto:${supplier.email}?subject=${encodeURIComponent(`Pedido ${businessProfile.name}`)}&body=${encodeURIComponent(`Hola ${supplier.contact_name || supplier.name},`)}`);
   };
 
   const fetchHistory = async (supplier: Supplier) => {

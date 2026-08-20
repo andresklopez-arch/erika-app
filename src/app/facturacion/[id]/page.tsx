@@ -2,8 +2,10 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
+import { useBusinessProfile } from "../../../components/AuthProvider";
 
 export default function FacturacionExpress() {
+  const businessProfile = useBusinessProfile();
   const params = useParams();
   const ticketId = params.id as string;
   const [rfc, setRfc] = useState("");
@@ -161,7 +163,7 @@ export default function FacturacionExpress() {
     <div style={{ minHeight: "100vh", background: "#f0f2f5", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
       <div style={{ background: "white", padding: "30px", borderRadius: "10px", boxShadow: "0 4px 6px rgba(0,0,0,0.1)", maxWidth: "500px", width: "100%" }}>
         <div style={{ textAlign: "center", marginBottom: "20px" }}>
-           <h1 style={{ margin: "0 0 10px 0", color: "#1e293b", fontSize: "24px" }}>Ferretería Erika</h1>
+           <h1 style={{ margin: "0 0 10px 0", color: "#1e293b", fontSize: "24px" }}>{businessProfile.name}</h1>
            <p style={{ margin: 0, color: "#64748b" }}>Auto-Facturación Express</p>
         </div>
         

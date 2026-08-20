@@ -1918,7 +1918,10 @@ export default function POSModule() {
       setBold(true);
       writeText(`Ticket: #${realTicketId}\n`);
       setBold(false);
-      
+      if (paymentMethod === "credito") {
+        writeText("*** VENTA A CREDITO ***\n");
+      }
+
       setAlign(0);
       writeText(`Fecha: ${new Date().toLocaleString()}\n`);
       // Orden alineado con la lista de "Campos a Imprimir" en Configuración
@@ -2311,7 +2314,22 @@ export default function POSModule() {
     const showWarranty = fields.includes("warranty");
 
     const printWindow = window.open("", "_blank", `width=${paperSize === "58mm" ? 300 : 400},height=500`);
-    if (!printWindow) return;
+    if (!printWindow) {
+      // Antes esto fallaba en silencio. La segunda copia (apartados,
+      // crédito) se abre 1.5s después dentro de un setTimeout, sin
+      // relación directa con el clic del usuario — muchos navegadores
+      // bloquean ese window.open() por default como si fuera una ventana
+      // emergente no solicitada, mientras que la primera copia (que sí
+      // abre en el mismo instante del clic) pasa sin problema. Esto
+      // explica por qué solo llegaba a imprimirse 1 de los 2 tickets.
+      toast.error(
+        job.isCopy
+          ? "⚠️ El navegador bloqueó la ventana de la copia extra. Permite las ventanas emergentes para este sitio en la configuración de Chrome."
+          : "⚠️ El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para este sitio en la configuración de Chrome.",
+        { duration: 10000 },
+      );
+      return;
+    }
 
     const copyLabelHtml = job.isCopy 
       ? `<div style="text-align:center; font-weight:bold; border: 2px dashed #000; padding: 6px; margin-bottom: 12px; font-size: 0.9em; background: #eee;">*** COPIA PARA EL NEGOCIO ***</div>`
@@ -2321,7 +2339,10 @@ export default function POSModule() {
       const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = job.data;
       const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
       const printDiscountPct = discountPct < 0 ? 0 : discountPct;
-      
+      const creditLabelHtml = paymentMethod === "credito"
+        ? `<div style="text-align:center; font-weight:bold; border: 2px solid #b91c1c; color: #b91c1c; padding: 6px; margin-bottom: 12px; font-size: 0.9em;">*** VENTA A CRÉDITO ***</div>`
+        : "";
+
       const itemsHtml = items.map((i: any) => {
         const p = (getItemFinalPrice(i, wholesaleRules) * increaseFactor);
         return `
@@ -2362,6 +2383,7 @@ export default function POSModule() {
           <body>
             <div style="text-align: ${marginAlign}; width: 100%;">
               ${copyLabelHtml}
+              ${creditLabelHtml}
               ${showLogo ? `<div class="center"><img src="${businessProfile.logo || config.business_logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
               ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name || config.business_name || "FERRETERÍA ERIKA"}</div>` : ""}
               ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc || config.business_rfc}</div>` : ""}
@@ -4075,6 +4097,9 @@ export default function POSModule() {
           <div>
             <h3 style={{ margin: 0, fontWeight: "bold", fontSize: "16px" }}>{printTitle}</h3>
             {printTicketId && <p style={{ margin: "2px 0", fontWeight: "bold" }}>Ticket: #{printTicketId}</p>}
+            {printPaymentMethod === "credito" && (
+              <p style={{ margin: "2px 0", fontWeight: "bold", color: "#b91c1c" }}>*** VENTA A CRÉDITO ***</p>
+            )}
           </div>
           <div style={{ textAlign: "right" }}>
             <p style={{ margin: "2px 0" }}>{new Date().toLocaleDateString()}</p>
