@@ -4,6 +4,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../components/AuthProvider";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import { getOrReconnectBlePrinter, sendBleBytes } from "../../utils/bluetoothPrinter";
+import { insertCashTransaction } from "../../lib/cashTransactionClient";
 
 interface Denominations {
   b1000: number;
@@ -41,24 +42,6 @@ export default function CajaModule() {
   const { currentUser } = useAuth();
   const [showTicket, setShowTicket] = useState(false);
   const [ticketData, setTicketData] = useState<any>(null);
-
-  // Verifica un PIN de administrador del lado del servidor (Service Role
-  // Key, nunca expuesta al cliente) — antes se comparaba directamente
-  // contra `users` desde el navegador con la llave pública.
-  const verifyAdminPinRemote = async (pin: string): Promise<boolean> => {
-    try {
-      const res = await fetch("/api/auth/verify-pin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin, requireRole: "admin" }),
-      });
-      const json = await res.json();
-      return res.ok && json.valid === true;
-    } catch (e) {
-      console.error("Error al verificar PIN de administrador:", e);
-      return false;
-    }
-  };
 
   const fetchSession = async () => {
     setIsLoading(true);
@@ -127,7 +110,11 @@ export default function CajaModule() {
     const amount = parseFloat(amountStr);
     if (isNaN(amount) || amount <= 0) return alert("Monto inválido.");
 
-    // VERIFICACIÓN DE SEGURIDAD (FASE 6)
+    // VERIFICACIÓN DE SEGURIDAD (FASE 6): el PIN se recolecta aquí para la
+    // UX, pero quien realmente lo valida es /api/caja/transaction — ahí se
+    // confirma el rol de administrador contra la base de datos real, no
+    // contra lo que este componente crea que es currentUser.role.
+    let adminPin: string | undefined;
     if (
       type === "withdrawal" &&
       amount > 2000 &&
@@ -137,22 +124,23 @@ export default function CajaModule() {
         "⚠️ LÍMITE SUPERADO. Este retiro de alto valor requiere PIN de Administrador:",
       );
       if (!pin) return;
-      if (!(await verifyAdminPinRemote(pin)))
-        return alert("❌ PIN Inválido o sin privilegios de administrador.");
-      alert("✅ Retiro mayor autorizado por Administrador.");
+      adminPin = pin;
     }
     const desc = window.prompt("Motivo / Concepto:");
     if (!desc) return alert("Debe especificar un motivo.");
 
-    const { error } = await supabase.from("cash_transactions").insert({
-      session_id: session.id,
-      type,
-      amount,
-      description: desc,
-    });
+    const { error } = await insertCashTransaction({ type, amount, description: desc }, adminPin);
 
-    if (error) alert("Error: " + error.message);
-    else fetchSession();
+    if (error) {
+      alert(
+        adminPin && error.message.toLowerCase().includes("pin")
+          ? "❌ PIN Inválido o sin privilegios de administrador."
+          : "Error: " + error.message,
+      );
+    } else {
+      if (adminPin) alert("✅ Retiro mayor autorizado por Administrador.");
+      fetchSession();
+    }
   };
 
   const calculateTotalCounted = () => {

@@ -1,0 +1,28 @@
+name: CI (build + type-check)
+
+# Corre en cada push y cada Pull Request para detectar errores de
+# compilacion/tipos ANTES de que lleguen a master (y por lo tanto antes de
+# que Vercel los despliegue). `next build` ya incluye la verificacion de
+# TypeScript, asi que no hace falta un paso separado.
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://ryqmhfrlxdeekukhjndq.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_-xKMw3dhF7xSAu2APUhB6g_zxUT3qRP
+      SUPABASE_SERVICE_ROLE_KEY: placeholder-solo-para-build
+      SESSION_SECRET: placeholder-solo-para-build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build

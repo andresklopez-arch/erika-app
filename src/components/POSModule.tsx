@@ -15,6 +15,7 @@ import PosCreditModal from "./PosCreditModal";
 import { useAuth, useBusinessProfile } from "./AuthProvider";
 import { CustomerSchema, CashSessionSchema } from "../lib/schemas";
 import { getOrReconnectBlePrinter, sendBleBytes, startBleKeepAlive, getBleStatus, BleStatusType } from "../utils/bluetoothPrinter";
+import { insertCashTransaction } from "../lib/cashTransactionClient";
 
 interface POSItem {
   id: string;
@@ -1568,32 +1569,26 @@ export default function POSModule() {
           }
         }
 
-        const { error } = await supabase
-          .from("cash_transactions")
-          .insert({
-            session_id: session.id,
-            type: "sale",
-            amount: totalAmt,
-            description: descriptionText,
-            device_info: navigator.userAgent,
-            payment_method: selectedMethod,
-            cash_amount: cashAmt,
-            card_amount: cardAmt,
-            transfer_amount: transferAmt
-          });
+        const { error } = await insertCashTransaction({
+          type: "sale",
+          amount: totalAmt,
+          description: descriptionText,
+          device_info: navigator.userAgent,
+          payment_method: selectedMethod,
+          cash_amount: cashAmt,
+          card_amount: cardAmt,
+          transfer_amount: transferAmt
+        });
 
         if (error) {
           console.warn("Falla al insertar nuevas columnas de método de pago, reintentando con fallback...");
-          const { error: fallbackError } = await supabase
-            .from("cash_transactions")
-            .insert({
-              session_id: session.id,
-              type: "sale",
-              amount: totalAmt,
-              description: descriptionText,
-              device_info: navigator.userAgent
-            });
-          
+          const { error: fallbackError } = await insertCashTransaction({
+            type: "sale",
+            amount: totalAmt,
+            description: descriptionText,
+            device_info: navigator.userAgent
+          });
+
           if (fallbackError) {
             setIsProcessingPayment(false);
             return alert("Error al cobrar: " + fallbackError.message);
@@ -3821,8 +3816,7 @@ export default function POSModule() {
                  }
                  if (!session) return alert("La caja está cerrada.");
                  
-                 const { error } = await supabase.from("cash_transactions").insert({
-                    session_id: session.id,
+                 const { error } = await insertCashTransaction({
                     type: "withdrawal",
                     amount: -amount,
                     description: `Devolución: ${reason}`

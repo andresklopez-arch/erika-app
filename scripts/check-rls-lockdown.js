@@ -66,6 +66,7 @@ async function main() {
   // con error (código de salida 1) para poder usarse como gate en CI.
   const mustBeBlocked = [
     ["cash_sessions (INSERT)", "cash_sessions", () => anon.from("cash_sessions").insert({ initial_balance: 0, opened_by: "RLS-CHECK" }).select("id").single()],
+    ["cash_transactions (INSERT)", "cash_transactions", () => anon.from("cash_transactions").insert({ type: "deposit", amount: 1, description: "RLS-CHECK" }).select("id").single()],
     ["credit_transactions (INSERT)", "credit_transactions", () => anon.from("credit_transactions").insert({ customer_id: "00000000-0000-0000-0000-000000000000", type: "charge", amount: 1 }).select("id").single()],
     ["increment_customer_balance (RPC)", null, () => anon.rpc("increment_customer_balance", { p_customer_id: "00000000-0000-0000-0000-000000000000", p_delta: 1 })],
   ];

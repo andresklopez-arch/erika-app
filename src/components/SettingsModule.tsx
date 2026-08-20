@@ -2088,6 +2088,29 @@ export default function SettingsModule() {
                 ))}
               </div>
             )}
+
+            {(() => {
+              const rejectedPinLogs = errorLogs.filter((l) => l.module.includes("PIN_Rechazado"));
+              if (rejectedPinLogs.length === 0) return null;
+              return (
+                <div style={{ marginTop: "15px", paddingTop: "15px", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+                  <p style={{ fontSize: "0.8rem", color: "#f87171", fontWeight: "bold", marginBottom: "8px" }}>
+                    🚨 Intentos de PIN de administrador rechazados ({rejectedPinLogs.length})
+                  </p>
+                  <div style={{ maxHeight: "150px", overflowY: "auto" }}>
+                    {rejectedPinLogs.map((log) => (
+                      <div key={log.id} style={{ fontSize: "0.78rem", padding: "6px 8px", marginBottom: "4px", background: "rgba(239,68,68,0.08)", borderRadius: "4px" }}>
+                        <span style={{ color: "rgba(255,255,255,0.6)" }}>{new Date(log.created_at).toLocaleString()}</span>
+                        {" — "}
+                        <span style={{ color: "white" }}>{log.usuario}</span>
+                        {": "}
+                        <span style={{ color: "#f87171" }}>{log.error_details}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="glass-panel" style={{ border: "1px solid var(--color-primary)" }}>

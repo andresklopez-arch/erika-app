@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+import { insertCashTransaction } from "./cashTransactionClient";
 
 const DB_NAME = "ErikaOfflineDB";
 const STORE_NAME = "cash_transactions";
@@ -395,7 +396,7 @@ const runSyncOfflineTransactions = async (): Promise<number> => {
     for (const t of pending) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { id, offline_created_at, items, ...data } = t;
-      const { error } = await supabase.from("cash_transactions").insert(data);
+      const { error } = await insertCashTransaction(data);
       if (!error) {
         synced++;
         // Se borra únicamente este registro ya confirmado en el servidor. Antes
