@@ -3,6 +3,7 @@ import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import toast from "react-hot-toast";
 import { LoggerService } from "../services/loggerService";
+import { saveCustomer } from "../lib/customersClient";
 
 interface ClientCaptureModalProps {
   onClose: () => void;
@@ -49,13 +50,12 @@ export default function ClientCaptureModal({ onClose, onSuccess }: ClientCapture
     }
 
     setIsSubmitting(true);
-    const { error } = await supabase.from("customers").insert({
+    const { error } = await saveCustomer({
       name,
       rfc: requiresInvoice ? rfc : "XAXX010101000",
       company_name: requiresInvoice ? companyName : name,
       email: email || "sin_correo@erika.com",
       credit_limit: creditLimit,
-      balance: 0,
     });
 
     setIsSubmitting(false);

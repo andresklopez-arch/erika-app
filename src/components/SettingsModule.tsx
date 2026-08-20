@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "./AuthProvider";
 import { LoggerService } from "../services/loggerService";
 import { getOrReconnectBlePrinter, sendBleBytes } from "../utils/bluetoothPrinter";
+import { deleteCustomer } from "../lib/customersClient";
 
 // A diferencia de `Number(x) || fallback`, esto no pisa un 0 explícito con el
 // valor por defecto (Number("0") || 5 evaluaba a 5, impidiendo desactivar
@@ -272,7 +273,7 @@ export default function SettingsModule() {
           if (item.type === "producto") {
             await supabase.from("inventory").delete().eq("id", item.id);
           } else if (item.type === "cliente") {
-            await supabase.from("customers").delete().eq("id", item.id);
+            await deleteCustomer(item.id, "hard");
           } else if (item.type === "proveedor") {
             await supabase.from("suppliers").delete().eq("id", item.id);
           } else if (item.type === "servicio") {
@@ -299,7 +300,7 @@ export default function SettingsModule() {
         const { error: err } = await supabase.from("inventory").update({ deleted: false, deleted_at: null }).eq("id", item.id);
         error = err;
       } else if (item.type === "cliente") {
-        const { error: err } = await supabase.from("customers").update({ deleted: false, deleted_at: null }).eq("id", item.id);
+        const { error: err } = await deleteCustomer(item.id, "restore");
         error = err;
       } else if (item.type === "proveedor") {
         const { error: err } = await supabase.from("suppliers").update({ deleted: false, deleted_at: null }).eq("id", item.id);
@@ -337,7 +338,7 @@ export default function SettingsModule() {
         const { error: err } = await supabase.from("inventory").delete().eq("id", item.id);
         error = err;
       } else if (item.type === "cliente") {
-        const { error: err } = await supabase.from("customers").delete().eq("id", item.id);
+        const { error: err } = await deleteCustomer(item.id, "hard");
         error = err;
       } else if (item.type === "proveedor") {
         const { error: err } = await supabase.from("suppliers").delete().eq("id", item.id);

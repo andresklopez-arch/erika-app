@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import toast from "react-hot-toast";
 import { CustomerSchema } from "../lib/schemas";
 import { useBusinessProfile, useAuth } from "./AuthProvider";
+import { saveCustomer, deleteCustomer } from "../lib/customersClient";
 
 export default function CustomersModule() {
   const businessProfile = useBusinessProfile();
@@ -412,7 +413,7 @@ export default function CustomersModule() {
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingCustomerId) {
-      const { error } = await supabase.from("customers").update(newCustomer).eq("id", editingCustomerId);
+      const { error } = await saveCustomer({ id: editingCustomerId, ...newCustomer });
       if (error) alert("Error al actualizar: " + error.message);
       else {
         setShowAddModal(false);
@@ -442,7 +443,7 @@ export default function CustomersModule() {
         if (!proceed) return;
       }
 
-      const { error } = await supabase.from("customers").insert([newCustomer]);
+      const { error } = await saveCustomer(newCustomer);
       if (error) {
         alert("Error al insertar: " + error.message);
       } else {
@@ -515,10 +516,7 @@ export default function CustomersModule() {
       }
     }
 
-    const { error } = await supabase
-      .from("customers")
-      .update({ deleted: true, deleted_at: new Date().toISOString() })
-      .eq("id", custId);
+    const { error } = await deleteCustomer(custId, "soft");
 
     if (error) {
       alert("Error al eliminar cliente: " + error.message);
@@ -533,10 +531,7 @@ export default function CustomersModule() {
 
   const handleUndoDelete = async () => {
     if (!undoCustomerId) return;
-    const { error } = await supabase
-      .from("customers")
-      .update({ deleted: false, deleted_at: null })
-      .eq("id", undoCustomerId);
+    const { error } = await deleteCustomer(undoCustomerId, "restore");
 
     if (error) {
       alert("Error al deshacer la eliminación: " + error.message);

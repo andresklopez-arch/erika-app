@@ -16,6 +16,7 @@ import { useAuth, useBusinessProfile } from "./AuthProvider";
 import { CustomerSchema, CashSessionSchema } from "../lib/schemas";
 import { getOrReconnectBlePrinter, sendBleBytes, startBleKeepAlive, getBleStatus, BleStatusType } from "../utils/bluetoothPrinter";
 import { insertCashTransaction } from "../lib/cashTransactionClient";
+import { saveCustomer, adjustCustomerPoints } from "../lib/customersClient";
 
 interface POSItem {
   id: string;
@@ -348,12 +349,11 @@ export default function POSModule() {
     if (!quickCustomerName.trim()) return alert("El nombre del cliente es obligatorio.");
     setIsSavingQuickCustomer(true);
     try {
-      const { data, error } = await supabase.from("customers").insert({
+      const { data, error } = await saveCustomer({
         name: quickCustomerName.trim().toUpperCase(),
         phone: quickCustomerPhone.trim() || null,
-        points: 0
-      }).select().single();
-      
+      });
+
       if (error) throw error;
       
       setCustomers(prev => [...prev, data]);
@@ -1663,17 +1663,15 @@ export default function POSModule() {
               if (customer) {
                  puntosGanados = Math.floor(totalAmt / loyaltyRates.earnRate) * loyaltyRates.earnPoints;
                  if (puntosGanados > 0) {
-                    // Incremento atómico (evita perder puntos si dos ventas
-                    // casi simultáneas al mismo cliente parten del mismo
-                    // valor de "points" cacheado en memoria).
-                    const { error: rpcEarnErr } = await supabase.rpc("increment_customer_points", {
-                      p_customer_id: selectedCustomerId,
-                      p_delta: puntosGanados,
-                    });
-                    if (rpcEarnErr) {
-                       await supabase.from("customers").update({ points: (customer.points || 0) + puntosGanados }).eq("id", selectedCustomerId);
+                    // Incremento atómico en el servidor (evita perder puntos
+                    // si dos ventas casi simultáneas al mismo cliente parten
+                    // del mismo valor de "points" cacheado en memoria).
+                    const { error: pointsErr } = await adjustCustomerPoints(selectedCustomerId, puntosGanados);
+                    if (pointsErr) {
+                       console.error("Error al otorgar puntos:", pointsErr.message);
+                    } else {
+                       alert(`⭐ El cliente ganó ${puntosGanados} Erika Puntos.`);
                     }
-                    alert(`⭐ El cliente ganó ${puntosGanados} Erika Puntos.`);
                  }
               }
            } catch (ptsErr) {
@@ -3653,16 +3651,11 @@ export default function POSModule() {
                    const discountAmount = pointsToRedeem / loyaltyRates.redeemRate;
                    if (discountAmount > finalTotal) return alert("El descuento no puede ser mayor al total de la cuenta.");
 
-                   // Incremento atómico (evita que dos canjes casi
-                   // simultáneos al mismo cliente pierdan puntos entre sí).
-                   const { error: rpcPointsErr } = await supabase.rpc("increment_customer_points", {
-                     p_customer_id: customer.id,
-                     p_delta: -pointsToRedeem,
-                   });
-                   if (rpcPointsErr) {
-                     const { error } = await supabase.from("customers").update({ points: customer.points - pointsToRedeem }).eq("id", customer.id);
-                     if (error) return alert("Error al descontar puntos.");
-                   }
+                   // Decremento atómico en el servidor (evita que dos
+                   // canjes casi simultáneos al mismo cliente pierdan
+                   // puntos entre sí).
+                   const { error: pointsErr } = await adjustCustomerPoints(customer.id, -pointsToRedeem);
+                   if (pointsErr) return alert("Error al descontar puntos.");
 
                    // Apply as a fixed discount item
                    setTickets(tickets.map(t => {
