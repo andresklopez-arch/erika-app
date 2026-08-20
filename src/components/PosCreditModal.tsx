@@ -97,53 +97,41 @@ export default function PosCreditModal({
       }
     }
 
+    let overdraftPin: string | undefined;
     if (customer.balance + finalTotal > customer.credit_limit) {
       const pin = window.prompt(
         `🚩 ALERTA ROJA: Límite de crédito excedido. Disponible: $${(customer.credit_limit - customer.balance).toFixed(2)}\n\nIngrese PIN Maestro para autorizar la venta (Sobregiro):`
       );
       if (!pin) return alert("❌ Operación cancelada.");
-
-      if (!(await verifyAdminPinRemote(pin))) {
-         return alert("❌ Acceso Denegado. Venta a crédito cancelada.");
-      }
-      alert("⚠️ Sobregiro autorizado por Administrador.");
+      overdraftPin = pin;
     }
 
     setIsSubmitting(true);
     try {
-      const { error: txError } = await supabase
-        .from("credit_transactions")
-        .insert({
-          customer_id: customer.id,
-          type: "charge",
+      // El INSERT en credit_transactions y el incremento atómico del saldo
+      // ahora ocurren en el servidor (Service Role Key), que además vuelve
+      // a validar ahí mismo el límite de crédito/PIN de sobregiro — antes
+      // cualquiera con la consola del navegador abierta podía forjar un
+      // cargo a cualquier cliente saltándose por completo esa validación.
+      const res = await fetch("/api/credit/charge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId: customer.id,
           amount: finalTotal,
-          notes: `Venta a Crédito Ticket #${activeTicketId}`,
-        });
-
-      if (txError) return alert("Error al cobrar a crédito: " + txError.message);
-
-      // Incremento atómico en el servidor (evita que dos ventas a crédito
-      // casi simultáneas al mismo cliente se pisen el saldo entre sí). Si
-      // el RPC aún no está desplegado, se cae al cálculo local anterior.
-      const { error: rpcBalanceErr } = await supabase.rpc("increment_customer_balance", {
-        p_customer_id: customer.id,
-        p_delta: finalTotal,
+          ticketId: activeTicketId,
+          adminPin: overdraftPin,
+        }),
       });
-      if (rpcBalanceErr) {
-        const { error: balanceError } = await supabase
-          .from("customers")
-          .update({
-            balance: customer.balance + finalTotal,
-          })
-          .eq("id", customer.id);
-
-        if (balanceError) {
-          return alert(
-            "⚠️ Se registró el cargo pero falló la actualización del saldo del cliente. Revisa manualmente: " +
-              balanceError.message,
-          );
-        }
+      const json = await res.json();
+      if (!res.ok) {
+        return alert(
+          res.status === 403
+            ? "❌ Acceso Denegado. Venta a crédito cancelada."
+            : "Error al cobrar a crédito: " + (json.error || "Error desconocido"),
+        );
       }
+      if (overdraftPin) alert("⚠️ Sobregiro autorizado por Administrador.");
 
       // Descontar existencias, igual que en ventas de contado/tarjeta.
       try {

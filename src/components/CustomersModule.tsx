@@ -470,41 +470,22 @@ export default function CustomersModule() {
     const customer = customers.find((c) => c.id === selectedCustomerId);
     if (!customer) return;
 
-    // Insert payment transaction
-    const { error: txError } = await supabase
-      .from("credit_transactions")
-      .insert({
-        customer_id: customer.id,
-        type: "payment",
-        amount: amount,
-        notes: "Abono a cuenta",
-      });
-
-    if (txError) return alert("Error: " + txError.message);
-
-    // Decremento atómico en el servidor (evita perder abonos si dos pagos
-    // casi simultáneos al mismo cliente se pisan entre sí) y SÍ se
-    // verifica el error — antes esta escritura no revisaba el resultado,
-    // así que si fallaba el usuario veía "abono registrado exitosamente"
-    // aunque el saldo del cliente nunca se hubiera actualizado.
-    const { error: balanceError, data: rpcBalance } = await supabase.rpc("increment_customer_balance", {
-      p_customer_id: customer.id,
-      p_delta: -amount,
-    });
+    // El INSERT en credit_transactions y el decremento atómico del saldo
+    // ahora ocurren en el servidor (Service Role Key) — antes cualquiera
+    // con la consola del navegador abierta podía forjar un abono a
+    // cualquier cliente sin que el dinero hubiera entrado nunca a la caja.
     let effectiveNewBalance = customer.balance - amount;
-    if (balanceError) {
-      const { error: fallbackError } = await supabase
-        .from("customers")
-        .update({ balance: effectiveNewBalance })
-        .eq("id", customer.id);
-      if (fallbackError) {
-        return alert(
-          "⚠️ Se registró el abono en el historial, pero falló la actualización del saldo del cliente. Revisa manualmente: " +
-            fallbackError.message,
-        );
-      }
-    } else {
-      effectiveNewBalance = Number(rpcBalance);
+    try {
+      const res = await fetch("/api/credit/payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId: customer.id, amount, notes: "Abono a cuenta" }),
+      });
+      const json = await res.json();
+      if (!res.ok) return alert("Error: " + (json.error || "No se pudo registrar el abono."));
+      effectiveNewBalance = json.newBalance;
+    } catch (e: any) {
+      return alert("Error: " + e.message);
     }
 
     alert(`✅ Abono de $${amount.toFixed(2)} registrado exitosamente.`);

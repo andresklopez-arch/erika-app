@@ -97,26 +97,26 @@ export default function CajaModule() {
     if (initialBalance < 0)
       return alert("El fondo inicial no puede ser negativo.");
 
-    // Revalidar justo antes de insertar: si dos dispositivos abren la caja
-    // casi al mismo tiempo, sin este chequeo ambos inserts pasan y quedan
-    // dos sesiones "open" simultáneas descuadrando la caja.
-    const { data: existing } = await supabase
-      .from("cash_sessions")
-      .select("id")
-      .eq("status", "open")
-      .limit(1)
-      .maybeSingle();
-    if (existing) {
-      alert("Ya hay una caja abierta. Actualizando...");
-      return fetchSession();
+    // El INSERT real ahora ocurre en el servidor (Service Role Key), que
+    // revalida ahí mismo que no haya otra caja abierta antes de escribir.
+    try {
+      const res = await fetch("/api/caja/open", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initialBalance }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        if (res.status === 409) {
+          alert("Ya hay una caja abierta. Actualizando...");
+          return fetchSession();
+        }
+        return alert("Error al abrir caja: " + (json.error || "Error desconocido"));
+      }
+      fetchSession();
+    } catch (e: any) {
+      alert("Error al abrir caja: " + e.message);
     }
-
-    const { error } = await supabase.from("cash_sessions").insert({
-      initial_balance: initialBalance,
-      opened_by: currentUser?.name || "Desconocido",
-    });
-    if (error) alert("Error al abrir caja: " + error.message);
-    else fetchSession();
   };
 
   const registerMovement = async (type: "deposit" | "withdrawal") => {
@@ -177,104 +177,31 @@ export default function CajaModule() {
     // Autorización de Administrador para Cierre de Caja Ciego. Antes esto
     // era un window.confirm() (cualquiera podía dar clic en "Aceptar") con
     // un PIN de respaldo hardcodeado ("admin123") visible en el bundle del
-    // navegador. Ahora se valida contra la tabla real de usuarios, igual
-    // que el resto de autorizaciones de administrador en la app.
+    // navegador. Ahora el PIN viaja al servidor y es ahí (Service Role Key)
+    // donde se recalcula el corte completo desde las transacciones reales y
+    // se vuelve a validar el PIN — el navegador ya no decide el descuadre.
     const pin = window.prompt(
       "🔑 [AUTORIZACIÓN REQUERIDA]\n\nIngresa el PIN de Administrador para autorizar el Cierre de Caja Ciego:",
     );
     if (!pin) return;
-    if (!(await verifyAdminPinRemote(pin))) {
-      return alert("❌ Acceso Denegado. PIN inválido o sin privilegios de administrador.");
+
+    let json: any;
+    try {
+      const res = await fetch("/api/caja/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id, countedTotal, adminPin: pin }),
+      });
+      json = await res.json();
+      if (!res.ok) {
+        return alert("❌ " + (json.error || "No se pudo cerrar la caja."));
+      }
+    } catch (e: any) {
+      return alert("❌ Error al cerrar caja: " + e.message);
     }
 
-    interface TransactionItem {
-      cash_amount?: number | null;
-      card_amount?: number | null;
-      transfer_amount?: number | null;
-      amount: number;
-      description?: string | null;
-    }
-
-    const getCashAmount = (t: TransactionItem) => {
-      if (t.cash_amount !== undefined && t.cash_amount !== null) {
-        return Number(t.cash_amount);
-      }
-      if (t.description) {
-        const match = t.description.match(/\[CASH:([\d.]+)\]/);
-        if (match) return parseFloat(match[1]);
-        if (t.description.includes("[METODO:tarjeta]") || t.description.includes("[METODO:transferencia]")) {
-          return 0;
-        }
-      }
-      return Number(t.amount || 0);
-    };
-
-    const getCardAmount = (t: TransactionItem) => {
-      if (t.card_amount !== undefined && t.card_amount !== null) {
-        return Number(t.card_amount);
-      }
-      if (t.description) {
-        const match = t.description.match(/\[CARD:([\d.]+)\]/);
-        if (match) return parseFloat(match[1]);
-        if (t.description.includes("[METODO:tarjeta]")) {
-          return Number(t.amount || 0);
-        }
-      }
-      return 0;
-    };
-
-    const getTransferAmount = (t: TransactionItem) => {
-      if (t.transfer_amount !== undefined && t.transfer_amount !== null) {
-        return Number(t.transfer_amount);
-      }
-      if (t.description) {
-        const match = t.description.match(/\[TRANS:([\d.]+)\]/);
-        if (match) return parseFloat(match[1]);
-        if (t.description.includes("[METODO:transferencia]")) {
-          return Number(t.amount || 0);
-        }
-      }
-      return 0;
-    };
-
-    const expectedCashSales = transactions
-      .filter((t) => t.type === "sale")
-      .reduce((sum, t) => sum + getCashAmount(t), 0);
-
-    const expectedCardSales = transactions
-      .filter((t) => t.type === "sale")
-      .reduce((sum, t) => sum + getCardAmount(t), 0);
-
-    const expectedTransferSales = transactions
-      .filter((t) => t.type === "sale")
-      .reduce((sum, t) => sum + getTransferAmount(t), 0);
-
-    const expectedDeposits = transactions
-      .filter((t) => t.type === "deposit")
-      .reduce((sum, t) => sum + t.amount, 0);
-    const expectedWithdrawals = transactions
-      .filter((t) => t.type === "withdrawal")
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    const expectedTotal =
-      Number(session.initial_balance) +
-      expectedCashSales +
-      expectedDeposits -
-      expectedWithdrawals;
-      
-    const discrepancy = countedTotal - expectedTotal;
-
-    await supabase
-      .from("cash_sessions")
-      .update({
-        closed_at: new Date().toISOString(),
-        expected_balance: expectedTotal,
-        counted_balance: countedTotal,
-        discrepancy: discrepancy,
-        status: "closed",
-        total_sales: expectedCashSales + expectedCardSales + expectedTransferSales,
-      })
-      .eq("id", session.id);
+    const { ticket } = json;
+    const discrepancy = ticket.descuadre;
 
     // ALERTA PUSH AL DUEÑO SI FALTAN MÁS DE $500
     if (
@@ -291,15 +218,15 @@ export default function CajaModule() {
     setTicketData({
       date: new Date().toLocaleString(),
       cajero: currentUser?.name,
-      fondo: session.initial_balance,
-      ventas: expectedCashSales + expectedCardSales + expectedTransferSales,
-      ventasEfectivo: expectedCashSales,
-      ventasTarjeta: expectedCardSales,
-      ventasTransferencia: expectedTransferSales,
-      ingresos: expectedDeposits,
-      retiros: expectedWithdrawals,
-      esperado: expectedTotal,
-      fisico: countedTotal,
+      fondo: ticket.fondo,
+      ventas: ticket.ventas,
+      ventasEfectivo: ticket.ventasEfectivo,
+      ventasTarjeta: ticket.ventasTarjeta,
+      ventasTransferencia: ticket.ventasTransferencia,
+      ingresos: ticket.ingresos,
+      retiros: ticket.retiros,
+      esperado: ticket.esperado,
+      fisico: ticket.fisico,
       descuadre: discrepancy,
     });
     setShowTicket(true);
@@ -317,7 +244,7 @@ export default function CajaModule() {
       m1: 0,
       m05: 0,
     });
-    
+
     alert(`✅ Caja Cerrada. ${discrepancy !== 0 ? `\n⚠️ DESCUADRE DETECTADO: $${discrepancy.toFixed(2)}` : '\n✅ Caja Cuadrada Perfectamente.'}`);
   };
 
