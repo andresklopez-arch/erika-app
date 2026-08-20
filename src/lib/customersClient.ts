@@ -17,16 +17,23 @@ interface Result {
 // antes de llegar ahi, pero el limite real tambien depende del "Max Rows"
 // configurado en Supabase > API Settings).
 const CUSTOMER_LIST_WARN_THRESHOLD = 2000;
+// Por encima de este segundo umbral el aviso pasa de "hay que planear
+// paginación" (naranja) a "esto está a punto de truncarse" (rojo) — mucho
+// más cerca del limite duro de abajo.
+const CUSTOMER_LIST_DANGER_THRESHOLD = 4000;
 const CUSTOMER_LIST_HARD_LIMIT = 5000;
 
+export type CustomerListWarningSeverity = "warn" | "danger";
+
 // Sidebar escucha este evento para prender el mismo punto rojo que ya usa
-// para avisos de seguridad, pero en naranja (aviso operativo, no de RLS).
-// Ver AGENTS.md ("Avisos operativos con OPERATIONAL_WARNING_EVENT") antes
-// de agregar un segundo emisor: el `type` en el detail distingue de cuál
-// aviso se trata para no pisar este.
+// para avisos de seguridad, en naranja o rojo segun `severity` (aviso
+// operativo, no de RLS). Ver AGENTS.md ("Avisos operativos con
+// OPERATIONAL_WARNING_EVENT") antes de agregar un segundo emisor: el
+// `type` en el detail distingue de cuál aviso se trata para no pisar este.
 export const OPERATIONAL_WARNING_EVENT = "erika:operational-warning";
 export const CUSTOMER_COUNT_WARNED_KEY = "ERIKA_CUSTOMER_COUNT_WARNED";
 export const CUSTOMER_COUNT_WARNED_COUNT_KEY = "ERIKA_CUSTOMER_COUNT_WARNED_COUNT";
+export const CUSTOMER_COUNT_WARNED_SEVERITY_KEY = "ERIKA_CUSTOMER_COUNT_WARNED_SEVERITY";
 
 // Un console.warn no lo ve nadie en producción. Se registra tambien en
 // error_logs (una vez por sesion de pestaña, para no llenar la tabla en
@@ -35,11 +42,13 @@ export const CUSTOMER_COUNT_WARNED_COUNT_KEY = "ERIKA_CUSTOMER_COUNT_WARNED_COUN
 // conteo tambien se guarda en sessionStorage para que una pantalla que
 // monta despues del evento (ej. Configuración) pueda mostrar el detalle.
 function warnAboutCustomerListSize(count: number) {
+  const severity: CustomerListWarningSeverity = count > CUSTOMER_LIST_DANGER_THRESHOLD ? "danger" : "warn";
   console.warn(`fetchActiveCustomers: ${count} clientes activos — considerar paginar antes de llegar al limite de ${CUSTOMER_LIST_HARD_LIMIT}.`);
   try {
     if (typeof window === "undefined") return;
-    window.dispatchEvent(new CustomEvent(OPERATIONAL_WARNING_EVENT, { detail: { type: "customer_list_size", count } }));
+    window.dispatchEvent(new CustomEvent(OPERATIONAL_WARNING_EVENT, { detail: { type: "customer_list_size", count, severity } }));
     sessionStorage.setItem(CUSTOMER_COUNT_WARNED_COUNT_KEY, String(count));
+    sessionStorage.setItem(CUSTOMER_COUNT_WARNED_SEVERITY_KEY, severity);
     if (sessionStorage.getItem(CUSTOMER_COUNT_WARNED_KEY)) return;
     sessionStorage.setItem(CUSTOMER_COUNT_WARNED_KEY, "1");
   } catch (e) {
@@ -47,7 +56,7 @@ function warnAboutCustomerListSize(count: number) {
   }
   LoggerService.logError(
     "fetchActiveCustomers_size_warning",
-    `${count} clientes activos, por encima del umbral de ${CUSTOMER_LIST_WARN_THRESHOLD}. Considerar paginar antes de llegar al limite de ${CUSTOMER_LIST_HARD_LIMIT}.`,
+    `${count} clientes activos (severidad: ${severity}), por encima del umbral de ${CUSTOMER_LIST_WARN_THRESHOLD}. Considerar paginar antes de llegar al limite de ${CUSTOMER_LIST_HARD_LIMIT}.`,
   );
 }
 

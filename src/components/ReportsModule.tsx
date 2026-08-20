@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth, useBusinessProfile } from "./AuthProvider";
 import UnitSalesSummary from "./UnitSalesSummary";
 import { saveInventoryItem } from "../lib/inventoryClient";
+import { QUOTES_WHATSAPP_MIGRATION_SQL } from "../lib/pendingMigrations";
 
 interface CashSession {
   id: string;
@@ -73,8 +74,6 @@ export default function ReportsModule() {
   const [quoteStatsAvailable, setQuoteStatsAvailable] = useState(false);
   const [quoteStatsMigrationPending, setQuoteStatsMigrationPending] = useState(false);
   const [copiedQuoteMigrationSql, setCopiedQuoteMigrationSql] = useState(false);
-  const QUOTE_WHATSAPP_MIGRATION_SQL =
-    "ALTER TABLE quotes ADD COLUMN IF NOT EXISTS customer_phone text;\nALTER TABLE quotes ADD COLUMN IF NOT EXISTS whatsapp_sent_at timestamptz;";
 
   const fetchData = async () => {
     const today = new Date();
@@ -591,11 +590,11 @@ export default function ReportsModule() {
             (columnas <code>customer_phone</code> y <code>whatsapp_sent_at</code> en <code>quotes</code>). Corre esto en el SQL Editor de Supabase:
           </p>
           <pre style={{ background: "rgba(0,0,0,0.35)", padding: "10px", borderRadius: "4px", overflowX: "auto", margin: "0 0 8px 0", fontFamily: "monospace", fontSize: "0.78rem" }}>
-            {QUOTE_WHATSAPP_MIGRATION_SQL}
+            {QUOTES_WHATSAPP_MIGRATION_SQL}
           </pre>
           <button
             onClick={() => {
-              navigator.clipboard.writeText(QUOTE_WHATSAPP_MIGRATION_SQL);
+              navigator.clipboard.writeText(QUOTES_WHATSAPP_MIGRATION_SQL);
               setCopiedQuoteMigrationSql(true);
               setTimeout(() => setCopiedQuoteMigrationSql(false), 2000);
             }}
@@ -693,7 +692,7 @@ export default function ReportsModule() {
                   </div>
                   <button 
                     onClick={() => {
-                      window.location.href = `/inventario?create=${encodeURIComponent(item.term)}`;
+                      router.push(`/inventario?create=${encodeURIComponent(item.term)}`);
                     }}
                     style={{
                       background: "var(--color-primary)",

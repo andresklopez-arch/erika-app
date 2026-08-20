@@ -366,7 +366,7 @@ export default function InventoryModule() {
   };
 
   const clearTabParam = () => {
-    window.location.href = "/inventario";
+    router.push("/inventario");
   };
 
   const loadAllItems = async () => {

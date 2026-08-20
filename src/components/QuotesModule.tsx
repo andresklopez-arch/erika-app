@@ -112,6 +112,10 @@ export default function QuotesModule() {
     alert(
       `✅ Cotización de ${quote.customer_name} enviada a caja. Serás redirigido para proceder con el cobro.`,
     );
+    // Recarga completa a propósito (no router.push): esto va a cobrar
+    // dinero real, así que se prefiere que POSModule monte desde cero y
+    // lea el localStorage recien escrito, en vez de depender de una
+    // navegación cliente que nunca se probó contra este flujo.
     window.location.href = "/caja";
   };
 
@@ -155,7 +159,9 @@ export default function QuotesModule() {
     // "converted" aquí — eso ahora ocurre solo cuando el cobro se
     // completa de verdad en POSModule.
 
-    // 3. Redirigir de inmediato al punto de venta (home page /)
+    // 3. Redirigir de inmediato al punto de venta (home page /). Recarga
+    // completa a propósito, mismo motivo que convertToSale: dinero real
+    // de por medio, se prefiere un montaje limpio de POSModule.
     window.location.href = "/";
   };
 

@@ -4,7 +4,7 @@ import { useAuth } from "./AuthProvider";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../lib/supabaseClient";
-import { OPERATIONAL_WARNING_EVENT, CUSTOMER_COUNT_WARNED_KEY } from "../lib/customersClient";
+import { OPERATIONAL_WARNING_EVENT, CUSTOMER_COUNT_WARNED_KEY, CUSTOMER_COUNT_WARNED_SEVERITY_KEY, CustomerListWarningSeverity } from "../lib/customersClient";
 
 export default function Sidebar() {
   const { currentUser } = useAuth();
@@ -15,6 +15,7 @@ export default function Sidebar() {
   const [pendingQuotesCount, setPendingQuotesCount] = useState(0);
   const [hasOpenSecurityIssues, setHasOpenSecurityIssues] = useState(false);
   const [hasOperationalWarning, setHasOperationalWarning] = useState(false);
+  const [operationalWarningSeverity, setOperationalWarningSeverity] = useState<CustomerListWarningSeverity>("warn");
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
   const [escHiddenGroup, setEscHiddenGroup] = useState<string | null>(null);
   const [isPinned, setIsPinned] = useState(() => {
@@ -37,9 +38,15 @@ export default function Sidebar() {
     try {
       if (sessionStorage.getItem(CUSTOMER_COUNT_WARNED_KEY)) {
         setHasOperationalWarning(true);
+        const savedSeverity = sessionStorage.getItem(CUSTOMER_COUNT_WARNED_SEVERITY_KEY);
+        if (savedSeverity === "danger") setOperationalWarningSeverity("danger");
       }
     } catch (e) {}
-    const handleWarning = () => setHasOperationalWarning(true);
+    const handleWarning = (e: Event) => {
+      setHasOperationalWarning(true);
+      const detail = (e as CustomEvent).detail;
+      if (detail?.severity === "danger") setOperationalWarningSeverity("danger");
+    };
     window.addEventListener(OPERATIONAL_WARNING_EVENT, handleWarning);
     return () => window.removeEventListener(OPERATIONAL_WARNING_EVENT, handleWarning);
   }, []);
@@ -413,7 +420,9 @@ export default function Sidebar() {
                 hasOpenSecurityIssues
                   ? "Configuración (Alt + 6) — hay tablas o funciones con escritura abierta"
                   : hasOperationalWarning
-                    ? "Configuración (Alt + 6) — hay un aviso operativo pendiente de revisar"
+                    ? operationalWarningSeverity === "danger"
+                      ? "Configuración (Alt + 6) — aviso operativo urgente pendiente de revisar"
+                      : "Configuración (Alt + 6) — hay un aviso operativo pendiente de revisar"
                     : "Configuración (Alt + 6)"
               }
             >
@@ -442,7 +451,7 @@ export default function Sidebar() {
                       width: "8px",
                       height: "8px",
                       borderRadius: "50%",
-                      background: "#f97316",
+                      background: operationalWarningSeverity === "danger" ? "#ef4444" : "#f97316",
                       border: "1px solid rgba(0,0,0,0.4)",
                     }}
                   />

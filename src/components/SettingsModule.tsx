@@ -1,10 +1,11 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "./AuthProvider";
 import { LoggerService } from "../services/loggerService";
 import { getOrReconnectBlePrinter, sendBleBytes } from "../utils/bluetoothPrinter";
-import { deleteCustomer, OPERATIONAL_WARNING_EVENT, CUSTOMER_COUNT_WARNED_COUNT_KEY } from "../lib/customersClient";
+import { deleteCustomer, OPERATIONAL_WARNING_EVENT, CUSTOMER_COUNT_WARNED_COUNT_KEY, CUSTOMER_COUNT_WARNED_SEVERITY_KEY, CustomerListWarningSeverity } from "../lib/customersClient";
 import { deleteInventoryItem } from "../lib/inventoryClient";
 import { deleteSupplier } from "../lib/suppliersClient";
 import { deleteService } from "../lib/servicesClient";
@@ -168,19 +169,32 @@ export default function SettingsModule() {
   const [copiedSqlTable, setCopiedSqlTable] = useState<string | null>(null);
   const [copiedSqlFn, setCopiedSqlFn] = useState<string | null>(null);
   const [customerCountWarning, setCustomerCountWarning] = useState<number | null>(null);
+  const [customerCountWarningSeverity, setCustomerCountWarningSeverity] = useState<CustomerListWarningSeverity>("warn");
+  const [customerWarningDismissed, setCustomerWarningDismissed] = useState(false);
 
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem(CUSTOMER_COUNT_WARNED_COUNT_KEY);
       if (saved) setCustomerCountWarning(Number(saved));
+      const savedSeverity = sessionStorage.getItem(CUSTOMER_COUNT_WARNED_SEVERITY_KEY);
+      if (savedSeverity === "danger") setCustomerCountWarningSeverity("danger");
+      if (sessionStorage.getItem("ERIKA_CUSTOMER_WARNING_DISMISSED")) setCustomerWarningDismissed(true);
     } catch (e) {}
     const handleWarning = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (detail?.type === "customer_list_size") setCustomerCountWarning(detail.count);
+      if (detail?.type === "customer_list_size") {
+        setCustomerCountWarning(detail.count);
+        if (detail.severity === "danger") setCustomerCountWarningSeverity("danger");
+      }
     };
     window.addEventListener(OPERATIONAL_WARNING_EVENT, handleWarning);
     return () => window.removeEventListener(OPERATIONAL_WARNING_EVENT, handleWarning);
   }, []);
+
+  const dismissCustomerWarning = () => {
+    setCustomerWarningDismissed(true);
+    try { sessionStorage.setItem("ERIKA_CUSTOMER_WARNING_DISMISSED", "1"); } catch (e) {}
+  };
 
   const copyCloseFunctionSql = async (fn: RlsFunctionStatus) => {
     const sql = `REVOKE EXECUTE ON FUNCTION ${fn.signature} FROM PUBLIC, anon, authenticated;\nGRANT EXECUTE ON FUNCTION ${fn.signature} TO service_role;`;
@@ -2285,15 +2299,32 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
               </div>
             )}
 
-            {customerCountWarning !== null && (
+            {customerCountWarning !== null && !customerWarningDismissed && (
               <div style={{ marginTop: "15px", paddingTop: "15px", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-                <p style={{ fontSize: "0.8rem", color: "#f97316", fontWeight: "bold", marginBottom: "4px" }}>
-                  ⚠️ Aviso operativo: lista de clientes creciendo
-                </p>
-                <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.7)", margin: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px" }}>
+                  <p style={{ fontSize: "0.8rem", color: customerCountWarningSeverity === "danger" ? "#ef4444" : "#f97316", fontWeight: "bold", marginBottom: "4px" }}>
+                    {customerCountWarningSeverity === "danger" ? "🚨" : "⚠️"} Aviso operativo: lista de clientes {customerCountWarningSeverity === "danger" ? "cerca del límite" : "creciendo"}
+                  </p>
+                  <button
+                    onClick={dismissCustomerWarning}
+                    title="Descartar por esta sesión"
+                    style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: "0.75rem", flexShrink: 0 }}
+                  >
+                    ✕ descartar
+                  </button>
+                </div>
+                <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.7)", margin: "0 0 8px 0" }}>
                   Hay {customerCountWarning} clientes activos. El POS y Presupuestos cargan la lista completa de un jalón;
-                  conviene implementar paginación/búsqueda antes de que se acerque al límite de 5000.
+                  {customerCountWarningSeverity === "danger"
+                    ? " esto ya está cerca del límite de 5000 — conviene implementar paginación/búsqueda pronto."
+                    : " conviene implementar paginación/búsqueda antes de que se acerque al límite de 5000."}
                 </p>
+                <Link
+                  href="/clientes"
+                  style={{ fontSize: "0.78rem", color: customerCountWarningSeverity === "danger" ? "#ef4444" : "#f97316" }}
+                >
+                  → Ver Clientes
+                </Link>
               </div>
             )}
 

@@ -111,9 +111,14 @@ siguiendo el mismo patrón que `inventoryFields.ts`) antes de correr el
 atiende" que **no** son de seguridad RLS (esos usan su propio mecanismo:
 `/api/admin/audit/rls-status` + el punto rojo en Sidebar). Hoy solo tiene
 un emisor: `warnAboutCustomerListSize` (tamaño de la lista de clientes).
-Lo escuchan `Sidebar.tsx` (punto naranja en "⚙️ Configuración") y
-`SettingsModule.tsx` (detalle del aviso, junto a la Auditoría de
-Seguridad).
+Lo escuchan `Sidebar.tsx` (punto naranja/rojo en "⚙️ Configuración") y
+`SettingsModule.tsx` (detalle del aviso, botón "descartar" y acceso directo
+a Clientes, junto a la Auditoría de Seguridad).
+
+El `detail` lleva `{ type, count, severity }` — `severity` es `"warn"` o
+`"danger"` (naranja vs. rojo, según qué tan cerca esté del límite duro) y
+ya se usa tanto en el punto del Sidebar como en el color del panel de
+Configuración.
 
 Si se agrega un segundo aviso operativo (ej. otra tabla creciendo mucho,
 otro límite acercándose):
@@ -125,4 +130,7 @@ otro límite acercándose):
 3. Si el aviso necesita persistir para pantallas que montan después de que
    el evento ya se disparó (como pasa con Configuración), guardar el dato
    en `sessionStorage` también, no solo disparar el evento en vivo.
+4. Si el aviso admite un botón "descartar", usar su propia llave de
+   `sessionStorage` (ej. `ERIKA_CUSTOMER_WARNING_DISMISSED`) — no reutilizar
+   la de otro aviso, o descartar uno ocultaría el otro sin querer.
 

@@ -26,6 +26,9 @@ export default function GlobalError({
       // ignore
     }
     fetch("/api/auth/logout", { method: "POST" }).finally(() => {
+      // Recarga completa a propósito: el árbol de React ya truena en este
+      // boundary, así que no hay contexto de router confiable del que
+      // depender para una navegación cliente.
       window.location.href = "/";
     });
   };

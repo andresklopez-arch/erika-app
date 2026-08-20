@@ -388,6 +388,9 @@ export default function CustomersModule() {
     alert(
       `✅ Cotización de ${quote.customer_name} enviada a caja. Serás redirigido para proceder con el cobro.`,
     );
+    // Recarga completa a propósito (no router.push): mismo motivo que en
+    // QuotesModule — esto va a cobrar dinero real, se prefiere que
+    // POSModule monte desde cero y lea el localStorage recien escrito.
     window.location.href = "/caja";
   };
 
