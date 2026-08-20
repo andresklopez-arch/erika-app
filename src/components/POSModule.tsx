@@ -793,7 +793,10 @@ export default function POSModule() {
         setGlobalCatalog(allData);
       }
 
-      const { data: custData, error: custError } = await fetchActiveCustomers();
+      const { data: custData, error: custError } = await fetchActiveCustomers({
+        warn: businessSettings?.config?.customer_list_warn_threshold,
+        danger: businessSettings?.config?.customer_list_danger_threshold,
+      });
       if (custError) {
         console.error("Error al cargar clientes:", custError);
         LoggerService.logError("POSModule_fetchCustomers_fallback", custError);
@@ -3742,7 +3745,10 @@ export default function POSModule() {
                    alert(`✅ Canje exitoso. Se descontaron ${pointsToRedeem} puntos y se aplicó un descuento de $${discountAmount.toFixed(2)}.`);
                    
                    // Reload customers to refresh points
-                   const { data: custData, error: custError } = await fetchActiveCustomers();
+                   const { data: custData, error: custError } = await fetchActiveCustomers({
+                     warn: businessSettings?.config?.customer_list_warn_threshold,
+                     danger: businessSettings?.config?.customer_list_danger_threshold,
+                   });
                    if (custError) {
                      console.error("Error al recargar clientes (puntos):", custError);
                      LoggerService.logError("POSModule_reloadCustomers_Points_fallback", custError);

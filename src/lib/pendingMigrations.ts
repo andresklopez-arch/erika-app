@@ -5,6 +5,13 @@
 // el único lugar donde vive el string en código (antes vivía embebido
 // directo en ReportsModule.tsx). Si se edita una, editar también el
 // archivo de migración correspondiente para que no se desincronicen.
+//
+// Cuándo quitar una entrada: en cuanto la columna/tabla que verifica ya
+// existe siempre en producción (confirmado, no solo "probablemente ya la
+// corrieron"), borrar la constante de aquí Y el `if (error)` que la
+// dispara en el componente que la usa. El archivo .sql en
+// supabase/migrations/ NUNCA se borra (es historial), solo esta copia de
+// exhibición en la UI deja de tener sentido una vez aplicada en todos lados.
 
 // Fuente: supabase/migrations/20260827000000_add_quotes_whatsapp_columns.sql
 export const QUOTES_WHATSAPP_MIGRATION_SQL =

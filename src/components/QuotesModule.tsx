@@ -28,7 +28,10 @@ export default function QuotesModule() {
   };
 
   const fetchCustomers = async () => {
-    const { data, error } = await fetchActiveCustomers();
+    const { data, error } = await fetchActiveCustomers({
+      warn: businessSettings?.config?.customer_list_warn_threshold,
+      danger: businessSettings?.config?.customer_list_danger_threshold,
+    });
     if (!error && data) setCustomers(data);
   };
 

@@ -4,7 +4,7 @@ import { useAuth } from "./AuthProvider";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../lib/supabaseClient";
-import { OPERATIONAL_WARNING_EVENT, CUSTOMER_COUNT_WARNED_KEY, CUSTOMER_COUNT_WARNED_SEVERITY_KEY, CustomerListWarningSeverity } from "../lib/customersClient";
+import { OPERATIONAL_WARNING_EVENT, CUSTOMER_COUNT_WARNED_KEY, CUSTOMER_COUNT_WARNED_SEVERITY_KEY, isCustomerWarningDismissed, CustomerListWarningSeverity } from "../lib/customersClient";
 
 export default function Sidebar() {
   const { currentUser } = useAuth();
@@ -35,17 +35,25 @@ export default function Sidebar() {
   // de Configuración, en naranja, para otros avisos de "esto va a fallar
   // pronto si no se atiende" como el tamaño de la lista de clientes.
   useEffect(() => {
+    const recompute = (severity: CustomerListWarningSeverity) => {
+      setOperationalWarningSeverity(severity);
+      setHasOperationalWarning(!isCustomerWarningDismissed(severity));
+    };
     try {
       if (sessionStorage.getItem(CUSTOMER_COUNT_WARNED_KEY)) {
-        setHasOperationalWarning(true);
-        const savedSeverity = sessionStorage.getItem(CUSTOMER_COUNT_WARNED_SEVERITY_KEY);
-        if (savedSeverity === "danger") setOperationalWarningSeverity("danger");
+        const savedSeverity = sessionStorage.getItem(CUSTOMER_COUNT_WARNED_SEVERITY_KEY) === "danger" ? "danger" : "warn";
+        recompute(savedSeverity);
       }
     } catch (e) {}
     const handleWarning = (e: Event) => {
-      setHasOperationalWarning(true);
       const detail = (e as CustomEvent).detail;
-      if (detail?.severity === "danger") setOperationalWarningSeverity("danger");
+      if (detail?.type === "customer_list_size_dismissed") {
+        // dismissCustomerListWarning() siempre descarta con la severidad
+        // actual, así que apagar el punto aquí es seguro sin releer nada.
+        setHasOperationalWarning(false);
+        return;
+      }
+      recompute(detail?.severity === "danger" ? "danger" : "warn");
     };
     window.addEventListener(OPERATIONAL_WARNING_EVENT, handleWarning);
     return () => window.removeEventListener(OPERATIONAL_WARNING_EVENT, handleWarning);

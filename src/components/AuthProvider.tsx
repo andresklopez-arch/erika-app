@@ -69,6 +69,8 @@ const AuthContext = createContext<AuthContextType>({
       max_cajero_discount_pct: 5,
       iva_rate: 0.16,
       quote_followup_days: 2,
+      customer_list_warn_threshold: 2000,
+      customer_list_danger_threshold: 4000,
     },
   },
   updateBusinessSettings: async () => false,
@@ -177,6 +179,8 @@ export default function AuthProvider({
         max_cajero_discount_pct: localStorage.getItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT") !== null ? Number(localStorage.getItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT")) : 5,
         iva_rate: localStorage.getItem("ERIKA_IVA_RATE") !== null ? Number(localStorage.getItem("ERIKA_IVA_RATE")) : 0.16,
         quote_followup_days: 2,
+        customer_list_warn_threshold: 2000,
+        customer_list_danger_threshold: 4000,
       };
 
       return {
@@ -227,6 +231,8 @@ export default function AuthProvider({
         max_cajero_discount_pct: 5,
         iva_rate: 0.16,
         quote_followup_days: 2,
+        customer_list_warn_threshold: 2000,
+        customer_list_danger_threshold: 4000,
       },
     };
   });
@@ -316,7 +322,7 @@ export default function AuthProvider({
       }
 
       // Cast strings to numbers where required
-      const numKeys = ["earn_rate", "earn_points", "redeem_rate", "wholesale_min_qty", "wholesale_discount", "quote_followup_days"];
+      const numKeys = ["earn_rate", "earn_points", "redeem_rate", "wholesale_min_qty", "wholesale_discount", "quote_followup_days", "customer_list_warn_threshold", "customer_list_danger_threshold"];
       numKeys.forEach((key) => {
         if (key in updatedConfig) {
           (updatedConfig as any)[key] = Number((updatedConfig as any)[key]);

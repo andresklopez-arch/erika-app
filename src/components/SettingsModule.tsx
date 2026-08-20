@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "./AuthProvider";
 import { LoggerService } from "../services/loggerService";
 import { getOrReconnectBlePrinter, sendBleBytes } from "../utils/bluetoothPrinter";
-import { deleteCustomer, OPERATIONAL_WARNING_EVENT, CUSTOMER_COUNT_WARNED_COUNT_KEY, CUSTOMER_COUNT_WARNED_SEVERITY_KEY, CustomerListWarningSeverity } from "../lib/customersClient";
+import { deleteCustomer, OPERATIONAL_WARNING_EVENT, CUSTOMER_COUNT_WARNED_COUNT_KEY, CUSTOMER_COUNT_WARNED_SEVERITY_KEY, isCustomerWarningDismissed, dismissCustomerListWarning, CustomerListWarningSeverity } from "../lib/customersClient";
 import { deleteInventoryItem } from "../lib/inventoryClient";
 import { deleteSupplier } from "../lib/suppliersClient";
 import { deleteService } from "../lib/servicesClient";
@@ -44,6 +44,8 @@ export default function SettingsModule() {
   const [wholesaleMinQty, setWholesaleMinQty] = useState("10");
   const [wholesaleDiscount, setWholesaleDiscount] = useState("10");
   const [quoteFollowupDays, setQuoteFollowupDays] = useState("2");
+  const [customerListWarnThreshold, setCustomerListWarnThreshold] = useState("2000");
+  const [customerListDangerThreshold, setCustomerListDangerThreshold] = useState("4000");
   const [lowStockThreshold, setLowStockThreshold] = useState("5");
   const [maxCajeroDiscountPct, setMaxCajeroDiscountPct] = useState("5");
   const [ivaRatePct, setIvaRatePct] = useState("16");
@@ -178,7 +180,6 @@ export default function SettingsModule() {
       if (saved) setCustomerCountWarning(Number(saved));
       const savedSeverity = sessionStorage.getItem(CUSTOMER_COUNT_WARNED_SEVERITY_KEY);
       if (savedSeverity === "danger") setCustomerCountWarningSeverity("danger");
-      if (sessionStorage.getItem("ERIKA_CUSTOMER_WARNING_DISMISSED")) setCustomerWarningDismissed(true);
     } catch (e) {}
     const handleWarning = (e: Event) => {
       const detail = (e as CustomEvent).detail;
@@ -191,9 +192,16 @@ export default function SettingsModule() {
     return () => window.removeEventListener(OPERATIONAL_WARNING_EVENT, handleWarning);
   }, []);
 
+  // El descartado persiste en localStorage (no por sesión) y reaparece
+  // solo si la severidad empeoró desde que se descartó (ver
+  // isCustomerWarningDismissed en customersClient.ts).
+  useEffect(() => {
+    setCustomerWarningDismissed(isCustomerWarningDismissed(customerCountWarningSeverity));
+  }, [customerCountWarningSeverity]);
+
   const dismissCustomerWarning = () => {
+    dismissCustomerListWarning(customerCountWarningSeverity);
     setCustomerWarningDismissed(true);
-    try { sessionStorage.setItem("ERIKA_CUSTOMER_WARNING_DISMISSED", "1"); } catch (e) {}
   };
 
   const copyCloseFunctionSql = async (fn: RlsFunctionStatus) => {
@@ -505,6 +513,8 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
       setWholesaleMinQty(String(businessSettings.config.wholesale_min_qty));
       setWholesaleDiscount(String(businessSettings.config.wholesale_discount));
       setQuoteFollowupDays(String(businessSettings.config.quote_followup_days || 2));
+      setCustomerListWarnThreshold(String(businessSettings.config.customer_list_warn_threshold || 2000));
+      setCustomerListDangerThreshold(String(businessSettings.config.customer_list_danger_threshold || 4000));
       setTargetUtility(String(businessSettings.target_utility));
       setMonthlyGoals(String(businessSettings.monthly_goals));
       setBusinessName(businessSettings.config.business_name);
@@ -623,6 +633,30 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
     });
     if (success) {
       alert("✅ Umbral de seguimiento de presupuestos guardado.");
+    }
+  };
+
+  const saveCustomerListThresholds = async () => {
+    if (!checkAdmin()) return;
+    const warn = parseNumOr(customerListWarnThreshold, 2000);
+    const danger = parseNumOr(customerListDangerThreshold, 4000);
+    if (warn < 1 || danger < 1) {
+      return alert("❌ Los umbrales deben ser mayores a 0.");
+    }
+    if (danger <= warn) {
+      return alert("❌ El umbral rojo debe ser mayor al umbral naranja.");
+    }
+    if (danger > 5000) {
+      return alert("❌ El umbral rojo no puede pasar de 5000 (el límite duro de carga).");
+    }
+    const success = await updateBusinessSettings({
+      config: {
+        customer_list_warn_threshold: warn,
+        customer_list_danger_threshold: danger,
+      }
+    });
+    if (success) {
+      alert("✅ Umbrales de la lista de clientes guardados.");
     }
   };
 
@@ -1522,6 +1556,26 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
             </div>
             <button className="btn-primary" onClick={saveQuoteFollowupConfig} style={{ width: "100%", background: "transparent", border: "1px solid #f97316", color: "#f97316" }}>
               💾 Guardar Umbral de Seguimiento
+            </button>
+          </div>
+
+          <div className="glass-panel" style={{ border: "1px solid #f97316" }}>
+            <h3 style={{ margin: "0 0 20px 0", color: "#f97316", display: "flex", alignItems: "center", gap: "10px" }}>
+              👥 Umbrales de la Lista de Clientes
+            </h3>
+            <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", marginBottom: "15px" }}>
+              El POS y Presupuestos cargan la lista completa de clientes activos de un jalón. Estos umbrales controlan cuándo aparece el aviso operativo (naranja/rojo) en "⚙️ Configuración".
+            </p>
+            <div style={{ marginBottom: "15px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Aviso naranja a partir de (clientes activos):</label>
+              <input type="number" min="1" value={customerListWarnThreshold} onChange={e => setCustomerListWarnThreshold(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
+            </div>
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Aviso rojo a partir de (clientes activos, máx. 5000):</label>
+              <input type="number" min="1" max="5000" value={customerListDangerThreshold} onChange={e => setCustomerListDangerThreshold(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
+            </div>
+            <button className="btn-primary" onClick={saveCustomerListThresholds} style={{ width: "100%", background: "transparent", border: "1px solid #f97316", color: "#f97316" }}>
+              💾 Guardar Umbrales de Clientes
             </button>
           </div>
 
