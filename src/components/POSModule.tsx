@@ -4230,7 +4230,27 @@ export default function POSModule() {
             })
           );
         }}
-        onSuccess={() => {
+        onSuccess={(customer) => {
+          // Antes una venta a crédito nunca disparaba ninguna impresión
+          // (ni siquiera el primer ticket) — PosCreditModal solo cerraba
+          // el modal. "Doble copia para Apartados y Crédito" nunca podía
+          // funcionar en crédito porque este triggerPrint no existía.
+          try {
+            triggerPrint({
+              type: "ticket",
+              data: {
+                realTicketId: activeTicketId,
+                items: [...activeTicket.items],
+                finalTotal,
+                paymentMethod: "credito",
+                discountPct: activeTicket.discountPct || 0,
+                applyIva: applyIva,
+                customerName: customer?.name || "",
+              },
+            });
+          } catch (printErr) {
+            console.error("Error al disparar la impresión de venta a crédito:", printErr);
+          }
           setShowCreditModal(false);
           setTickets(
             tickets.map((t) =>

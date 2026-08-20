@@ -12,7 +12,7 @@ interface Props {
   items: any[];
   globalCatalog: any[];
   currentUserName?: string;
-  onSuccess: () => void;
+  onSuccess: (customer: any) => void;
   onInventoryReduced?: () => void;
   reloadCustomers: () => void;
 }
@@ -153,7 +153,7 @@ export default function PosCreditModal({
 
       alert(`✅ Venta a crédito registrada a ${customer.name}.`);
       setSelectedCustomerId("");
-      onSuccess();
+      onSuccess(customer);
       reloadCustomers();
     } finally {
       setIsSubmitting(false);

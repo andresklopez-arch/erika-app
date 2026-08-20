@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
-import { useAuth } from "../../components/AuthProvider";
+import { useAuth, useBusinessProfile } from "../../components/AuthProvider";
 import ProtectedRoute from "../../components/ProtectedRoute";
 import { getOrReconnectBlePrinter, sendBleBytes } from "../../utils/bluetoothPrinter";
 import { insertCashTransaction } from "../../lib/cashTransactionClient";
@@ -40,6 +40,7 @@ export default function CajaModule() {
     m05: 0,
   });
   const { currentUser } = useAuth();
+  const businessProfile = useBusinessProfile();
   const [showTicket, setShowTicket] = useState(false);
   const [ticketData, setTicketData] = useState<any>(null);
 
@@ -273,7 +274,7 @@ export default function CajaModule() {
         write([0x1b, 0x61, 0x01]);
         write([0x1b, 0x45, 0x01]);
         write([0x1d, 0x21, 0x11]);
-        writeText("FERRETERIA ERIKA\n");
+        writeText(`${(businessProfile.name || "Ferreteria Erika").toUpperCase()}\n`);
         write([0x1d, 0x21, 0x00]);
         writeText("TICKET DE CORTE DE CAJA\n");
         write([0x1b, 0x45, 0x00]);
@@ -356,7 +357,7 @@ export default function CajaModule() {
             </style>
           </head>
           <body>
-            <div class="center bold" style="font-size: 1.2em;">FERRETERÍA ERIKA</div>
+            <div class="center bold" style="font-size: 1.2em;">${(businessProfile.name || "Ferretería Erika").toUpperCase()}</div>
             <div class="center bold">TICKET DE CORTE DE CAJA</div>
             <div class="divider"></div>
             <div><strong>Fecha:</strong> ${ticketData.date}</div>
@@ -538,6 +539,7 @@ export default function CajaModule() {
               type="number"
               value={initialBalance}
               onChange={(e) => setInitialBalance(Number(e.target.value))}
+              onFocus={(e) => e.target.select()}
               style={{
                 padding: "15px",
                 fontSize: "1.2rem",
@@ -693,6 +695,7 @@ export default function CajaModule() {
                           [`b${val}`]: Number(e.target.value) || 0,
                         })
                       }
+                      onFocus={(e) => e.target.select()}
                       style={{
                         width: "60px",
                         padding: "5px",
@@ -725,6 +728,7 @@ export default function CajaModule() {
                             [key]: Number(e.target.value) || 0,
                           })
                         }
+                        onFocus={(e) => e.target.select()}
                         style={{
                           width: "60px",
                           padding: "5px",

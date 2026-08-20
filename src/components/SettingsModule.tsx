@@ -838,7 +838,7 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
         write([0x1b, 0x42, 0x03, 0x02]); // Beep EC-MP-300
         write([0x1b, 0x61, 0x01]); // Align Center
         write([0x1b, 0x45, 0x01]); // Bold
-        writeText("FERRETERIA ERIKA\r\n");
+        writeText(`${(businessName || "Ferreteria Erika").toUpperCase()}\r\n`);
         writeText("EC-MP-300 PRUEBA OK\r\n");
         write([0x1b, 0x45, 0x00]); // Bold off
         writeText("--------------------------------\r\n");
