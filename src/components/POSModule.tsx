@@ -19,6 +19,7 @@ import { insertCashTransaction } from "../lib/cashTransactionClient";
 import { saveCustomer, adjustCustomerPoints } from "../lib/customersClient";
 import { createLayaway } from "../lib/layawaysClient";
 import { reduceInventoryStock } from "../lib/inventoryClient";
+import { cleanMexicanPhone, openWhatsAppChat } from "../lib/whatsapp";
 
 // Único valor de método de pago que dispara lógica especial de crédito
 // (segunda copia, etiqueta "VENTA A CRÉDITO", validaciones). Se compara
@@ -2677,17 +2678,12 @@ export default function POSModule() {
        phone = window.prompt("Ingresa el número de WhatsApp a 10 dígitos (sin espacios):") || "";
     }
     if (!phone) return;
-    
-    // Sanitizar telefono (dejar solo digitos)
-    let cleanPhone = phone.replace(/\D/g, "");
-    if (cleanPhone.length === 10) {
-      cleanPhone = "52" + cleanPhone;
-    } else if (cleanPhone.length === 12 && cleanPhone.startsWith("52")) {
-      // ya tiene prefijo 52 y los 10 digitos
-    } else {
+
+    const cleanPhone = cleanMexicanPhone(phone);
+    if (!cleanPhone) {
       return alert("❌ Número inválido. Por favor ingresa un número de 10 dígitos (ej: 5512345678).");
     }
-    
+
     const bizUpper = businessProfile.name.toUpperCase();
     const title = type === "quote" ? `*COTIZACIÓN - ${bizUpper}*` : `*RECIBO DE COMPRA - ${bizUpper}*`;
     const discountPct = activeTicket.discountPct || 0;
@@ -2705,9 +2701,8 @@ export default function POSModule() {
       : "";
     
     const rawMsg = `${title}\n\n${itemsText}\n\n${totalText}${billingText}\n\n¡Gracias por su preferencia!`;
-    const msg = encodeURIComponent(rawMsg);
-    
-    window.open(`https://wa.me/${cleanPhone}?text=${msg}`, "_blank");
+
+    openWhatsAppChat(cleanPhone, rawMsg);
   };
 
   // Variables dinámicas para el recibo de impresión (para cotizaciones, ventas directas o apartados)
@@ -3951,13 +3946,23 @@ export default function POSModule() {
                 );
                 if (!customerName) return;
 
-                const { error } = await supabase.from("quotes").insert({
+                const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
+                const quoteInsertObj: any = {
                   customer_name: customerName,
                   customer_id: selectedCustomerId || null,
+                  customer_phone: selectedCustomer?.phone || null,
                   items: activeTicket.items,
                   total: finalTotal,
                   status: "pending",
-                });
+                };
+                let { error } = await supabase.from("quotes").insert(quoteInsertObj);
+                if (error) {
+                  // La columna customer_phone puede no existir aun si la
+                  // migracion correspondiente no se ha corrido en Supabase.
+                  console.warn("Falla al insertar quotes con customer_phone, reintentando sin ella...");
+                  delete quoteInsertObj.customer_phone;
+                  ({ error } = await supabase.from("quotes").insert(quoteInsertObj));
+                }
                 if (error)
                   return alert("Error al guardar cotización: " + error.message);
                 alert("✅ Cotización guardada con éxito.");

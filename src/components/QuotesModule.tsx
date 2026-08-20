@@ -2,12 +2,14 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useBusinessProfile, useAuth } from "./AuthProvider";
+import { cleanMexicanPhone, openWhatsAppChat } from "../lib/whatsapp";
 
 export default function QuotesModule() {
   const businessProfile = useBusinessProfile();
   const { currentUser } = useAuth();
   const [quotes, setQuotes] = useState<any[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
+  const [customers, setCustomers] = useState<any[]>([]);
 
   const fetchQuotes = async () => {
     const { data } = await supabase
@@ -18,9 +20,35 @@ export default function QuotesModule() {
     if (data) setQuotes(data);
   };
 
+  const fetchCustomers = async () => {
+    const { data, error } = await supabase
+      .from("customers")
+      .select("id, name, phone")
+      .or("deleted.is.null,deleted.eq.false");
+    if (!error && data) {
+      setCustomers(data);
+      return;
+    }
+    const fallback = await supabase.from("customers").select("id, name, phone");
+    if (fallback.data) setCustomers(fallback.data);
+  };
+
   useEffect(() => {
     fetchQuotes();
+    fetchCustomers();
   }, []);
+
+  // Resuelve el telefono de una cotizacion sin volver a consultar la base:
+  // primero el snapshot guardado en la cotizacion (customer_phone), luego
+  // el cliente enlazado por customer_id, y por ultimo un cliente con el
+  // mismo nombre (para cotizaciones viejas sin customer_id).
+  const resolveQuotePhone = (quote: any): string | null => {
+    if (quote.customer_phone) return quote.customer_phone;
+    const byId = quote.customer_id && customers.find((c) => c.id === quote.customer_id);
+    if (byId?.phone) return byId.phone;
+    const byName = customers.find((c) => c.name === quote.customer_name);
+    return byName?.phone || null;
+  };
 
   // Verifica el PIN capturado contra el usuario actual o la tabla de
   // personal. Devuelve true si es válido. Compartida por convertToSale y
@@ -186,30 +214,9 @@ export default function QuotesModule() {
   const sendWhatsApp = async (quote: any) => {
     // Antes esto abría `wa.me/?text=...` SIN número de teléfono, lo cual en
     // WhatsApp Web/Desktop suele mostrar un error de "número inválido" en
-    // vez de abrir el chat del cliente. Buscamos el teléfono igual que
-    // handleDirectCharge: primero por customer_id, luego por nombre.
-    let phone = "";
-    if (quote.customer_id) {
-      const { data: customer } = await supabase
-        .from("customers")
-        .select("phone")
-        .eq("id", quote.customer_id)
-        .single();
-      if (customer?.phone) phone = customer.phone;
-    }
-    if (!phone) {
-      try {
-        const { data: customer } = await supabase
-          .from("customers")
-          .select("phone")
-          .eq("name", quote.customer_name)
-          .eq("deleted", false)
-          .single();
-        if (customer?.phone) phone = customer.phone;
-      } catch (e) {
-        console.error("Error al buscar telefono del cliente por nombre:", e);
-      }
-    }
+    // vez de abrir el chat del cliente. resolveQuotePhone busca primero el
+    // snapshot guardado en la cotización, luego el cliente enlazado.
+    let phone = resolveQuotePhone(quote) || "";
     if (!phone) {
       phone =
         window.prompt(
@@ -218,12 +225,8 @@ export default function QuotesModule() {
     }
     if (!phone) return;
 
-    let cleanPhone = phone.replace(/\D/g, "");
-    if (cleanPhone.length === 10) {
-      cleanPhone = "52" + cleanPhone;
-    } else if (cleanPhone.length === 12 && cleanPhone.startsWith("52")) {
-      // ya tiene prefijo 52 y los 10 digitos
-    } else {
+    const cleanPhone = cleanMexicanPhone(phone);
+    if (!cleanPhone) {
       return alert("❌ Número inválido. Por favor ingresa un número de 10 dígitos (ej: 5512345678).");
     }
 
@@ -231,8 +234,16 @@ export default function QuotesModule() {
       `Hola ${quote.customer_name}, te enviamos tu cotización de *${businessProfile.name}* por un total de *$${quote.total.toFixed(2)}*.\n\n` +
       quote.items.map((i: any) => `- ${i.qty} ${i.unit} ${i.name}`).join("\n") +
       `\n\nVálida por 7 días. ¡Quedamos a tus órdenes!`;
-    const encodedText = encodeURIComponent(text);
-    window.open(`https://wa.me/${cleanPhone}?text=${encodedText}`, "_blank");
+
+    if (openWhatsAppChat(cleanPhone, text)) {
+      // Best-effort: si la columna whatsapp_sent_at todavia no existe en
+      // esta base (falta correr la migracion), simplemente no se guarda.
+      const { error } = await supabase
+        .from("quotes")
+        .update({ whatsapp_sent_at: new Date().toISOString() })
+        .eq("id", quote.id);
+      if (!error) fetchQuotes();
+    }
   };
 
   // La conexión real con el proveedor de timbrado (Facturama) aún no está
@@ -296,6 +307,22 @@ export default function QuotesModule() {
                 <div className="flex-between">
                   <strong style={{ fontSize: "1.1rem" }}>
                     {q.customer_name}
+                    {!resolveQuotePhone(q) && (
+                      <span
+                        title="Sin teléfono guardado: se pedirá al enviar por WhatsApp"
+                        style={{ marginLeft: "6px", fontSize: "0.75rem", color: "#ef4444" }}
+                      >
+                        📵 sin teléfono
+                      </span>
+                    )}
+                    {q.whatsapp_sent_at && (
+                      <span
+                        title={`Enviado por WhatsApp: ${new Date(q.whatsapp_sent_at).toLocaleString()}`}
+                        style={{ marginLeft: "6px", fontSize: "0.75rem", color: "#22c55e" }}
+                      >
+                        ✓ enviado
+                      </span>
+                    )}
                   </strong>
                   <strong style={{ color: "#3b82f6" }}>
                     ${q.total.toFixed(2)}

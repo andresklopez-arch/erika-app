@@ -7,6 +7,7 @@ import { LoggerService } from "../services/loggerService";
 import { bulkUpdateInventory } from "../lib/inventoryClient";
 import { saveSupplier, deleteSupplier } from "../lib/suppliersClient";
 import { useBusinessProfile } from "./AuthProvider";
+import { openWhatsAppChat } from "../lib/whatsapp";
 
 interface Supplier {
   id: string;
@@ -157,13 +158,13 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
     if (!supplier.phone) return alert("El proveedor no tiene teléfono.");
     const cleanPhone = supplier.phone.replace(/\D/g, "");
     
-    let msg = "";
+    let rawMsg = "";
     if (template === 'Pedido') {
-      msg = encodeURIComponent(`Hola ${supplier.contact_name || supplier.name}, necesitamos realizar un pedido para ${businessProfile.name}...\n`);
+      rawMsg = `Hola ${supplier.contact_name || supplier.name}, necesitamos realizar un pedido para ${businessProfile.name}...\n`;
     } else if (template === 'Cotización') {
-      msg = encodeURIComponent(`Hola ${supplier.contact_name || supplier.name}, ¿podrías apoyarnos con la cotización de los siguientes materiales para ${businessProfile.name}?...\n`);
+      rawMsg = `Hola ${supplier.contact_name || supplier.name}, ¿podrías apoyarnos con la cotización de los siguientes materiales para ${businessProfile.name}?...\n`;
     } else {
-      msg = encodeURIComponent(`Hola ${supplier.contact_name || supplier.name}, tenemos un tema de garantía con un producto de ${businessProfile.name}...\n`);
+      rawMsg = `Hola ${supplier.contact_name || supplier.name}, tenemos un tema de garantía con un producto de ${businessProfile.name}...\n`;
     }
 
     // Registrar historial
@@ -174,7 +175,7 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
     });
 
     setWaMenuOpen(null);
-    window.open(`https://wa.me/${cleanPhone}?text=${msg}`, "_blank");
+    openWhatsAppChat(cleanPhone, rawMsg);
   };
 
   const handleCall = async (supplier: Supplier) => {
