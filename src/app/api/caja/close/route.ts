@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getSessionUserId } from "@/lib/session";
 import { verifyAdminPin } from "@/lib/verifyAdminPin";
 import { getCashAmount, getCardAmount, getTransferAmount } from "@/lib/cashSessionMath";
+import { getClientKey, getLockRemainingMs, recordFailedAttempt, clearAttempts } from "@/lib/rateLimit";
 
 // Cierra el turno de caja (Corte de Caja Ciego). Antes el UPDATE en
 // cash_sessions (incluyendo expected_balance/discrepancy, los campos que
@@ -24,9 +25,20 @@ export async function POST(request: Request) {
     if (!sessionId || typeof countedTotal !== "number" || isNaN(countedTotal)) {
       return NextResponse.json({ error: "Datos de cierre inválidos." }, { status: 400 });
     }
+
+    const rateLimitKey = getClientKey(request, "caja-close");
+    const lockRemainingMs = getLockRemainingMs(rateLimitKey);
+    if (lockRemainingMs > 0) {
+      return NextResponse.json(
+        { error: `Demasiados intentos fallidos. Intenta de nuevo en ${Math.ceil(lockRemainingMs / 60000)} minuto(s).` },
+        { status: 429 },
+      );
+    }
     if (!adminPin || !(await verifyAdminPin(adminPin))) {
+      recordFailedAttempt(rateLimitKey);
       return NextResponse.json({ error: "Acceso Denegado. PIN inválido o sin privilegios de administrador." }, { status: 403 });
     }
+    clearAttempts(rateLimitKey);
 
     const { data: session, error: sessionError } = await supabaseAdmin
       .from("cash_sessions")

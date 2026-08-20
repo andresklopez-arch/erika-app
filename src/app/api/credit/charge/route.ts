@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getSessionUserId } from "@/lib/session";
 import { verifyAdminPin } from "@/lib/verifyAdminPin";
+import { getClientKey, getLockRemainingMs, recordFailedAttempt, clearAttempts } from "@/lib/rateLimit";
 
 // Registra un cargo a crédito (venta a cuenta de un cliente). Antes el
 // INSERT en credit_transactions y el ajuste de customers.balance se hacían
@@ -32,12 +33,22 @@ export async function POST(request: Request) {
     }
 
     if (Number(customer.balance || 0) + amount > Number(customer.credit_limit || 0)) {
+      const rateLimitKey = getClientKey(request, "credit-charge-overdraft");
+      const lockRemainingMs = getLockRemainingMs(rateLimitKey);
+      if (lockRemainingMs > 0) {
+        return NextResponse.json(
+          { error: `Demasiados intentos fallidos. Intenta de nuevo en ${Math.ceil(lockRemainingMs / 60000)} minuto(s).` },
+          { status: 429 },
+        );
+      }
       if (!adminPin || !(await verifyAdminPin(adminPin))) {
+        recordFailedAttempt(rateLimitKey);
         return NextResponse.json(
           { error: "Límite de crédito excedido. Se requiere PIN de Administrador para autorizar el sobregiro." },
           { status: 403 },
         );
       }
+      clearAttempts(rateLimitKey);
     }
 
     const { error: txError } = await supabaseAdmin.from("credit_transactions").insert({
