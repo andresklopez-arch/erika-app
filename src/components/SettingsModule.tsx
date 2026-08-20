@@ -157,12 +157,60 @@ export default function SettingsModule() {
   const [showTestInstructions, setShowTestInstructions] = useState(false);
   const [copiedSqlTable, setCopiedSqlTable] = useState<string | null>(null);
 
+  interface CheckpointRow {
+    id: string;
+    tag_name: string;
+    commit_hash: string;
+    message: string | null;
+    created_at: string;
+  }
+  const [checkpoints, setCheckpoints] = useState<CheckpointRow[] | null>(null);
+
+  useEffect(() => {
+    // Lectura pública (solo tags/fechas de respaldo, sin datos sensibles
+    // de negocio) — igual que el resto de metadatos de solo-lectura de la
+    // app, no necesita PIN de administrador.
+    supabase
+      .from("deploy_checkpoints")
+      .select("id, tag_name, commit_hash, message, created_at")
+      .order("created_at", { ascending: false })
+      .limit(8)
+      .then(({ data, error }: any) => {
+        if (!error && data) setCheckpoints(data);
+      });
+  }, []);
+
   // Genera el SQL listo para pegar en Supabase para cerrar una tabla
   // abierta, siguiendo el mismo patrón de admin_reset_table_to_select_only
   // documentado en AGENTS.md — para no tener que pedirlo a mano cada vez
   // que el panel detecta una tabla nueva con escritura abierta.
   const copyCloseTableSql = async (table: string) => {
-    const sql = `SELECT admin_reset_table_to_select_only('${table}');\n\nSELECT policyname, cmd, roles, tablename FROM pg_policies\nWHERE schemaname = 'public' AND tablename = '${table}';`;
+    // Incluye la definición de la función (CREATE OR REPLACE = seguro de
+    // re-correr aunque ya exista) en vez de solo llamarla — así el bloque
+    // copiado funciona por sí solo sin depender de que una migración
+    // anterior ya la haya creado en esta base de datos.
+    const sql = `-- admin_reset_table_to_select_only: borra TODAS las políticas de la
+-- tabla (sin depender de adivinar su nombre exacto) y deja solo lectura
+-- pública. Seguro de re-correr: CREATE OR REPLACE no falla si ya existe.
+CREATE OR REPLACE FUNCTION admin_reset_table_to_select_only(target_table text)
+RETURNS void AS $$
+DECLARE pol RECORD;
+BEGIN
+  FOR pol IN SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = target_table LOOP
+    EXECUTE format('DROP POLICY %I ON %I', pol.policyname, target_table);
+  END LOOP;
+  EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', target_table);
+  EXECUTE format('CREATE POLICY %I ON %I FOR SELECT USING (true)', target_table || '_select_publico', target_table);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+REVOKE EXECUTE ON FUNCTION admin_reset_table_to_select_only(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION admin_reset_table_to_select_only(text) TO service_role;
+
+SELECT admin_reset_table_to_select_only('${table}');
+
+SELECT policyname, cmd, roles, tablename FROM pg_policies
+WHERE schemaname = 'public' AND tablename = '${table}';`;
     try {
       await navigator.clipboard.writeText(sql);
       setCopiedSqlTable(table);
@@ -2161,6 +2209,26 @@ export default function SettingsModule() {
                 </div>
               );
             })()}
+
+            {checkpoints && checkpoints.length > 0 && (
+              <div style={{ marginTop: "15px", paddingTop: "15px", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+                <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.8)", fontWeight: "bold", marginBottom: "8px" }}>
+                  🗂️ Últimos puntos de restauración ({"npm run checkpoint"})
+                </p>
+                <div style={{ maxHeight: "150px", overflowY: "auto" }}>
+                  {checkpoints.map((c) => (
+                    <div key={c.id} style={{ fontSize: "0.78rem", padding: "6px 8px", marginBottom: "4px", background: "rgba(255,255,255,0.04)", borderRadius: "4px" }}>
+                      <span style={{ color: "rgba(255,255,255,0.6)" }}>{new Date(c.created_at).toLocaleString()}</span>
+                      {" — "}
+                      <span style={{ fontFamily: "monospace", color: "#10b981" }}>{c.tag_name}</span>
+                      {" ("}
+                      <span style={{ fontFamily: "monospace", color: "rgba(255,255,255,0.5)" }}>{c.commit_hash}</span>
+                      {")"}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="glass-panel" style={{ border: "1px solid var(--color-primary)" }}>
