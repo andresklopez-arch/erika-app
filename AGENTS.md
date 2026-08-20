@@ -88,3 +88,19 @@ migración antes del `CREATE TABLE`.
   políticas RLS con estas llaves se quedaron como scripts manuales
   (`npm run check-rls` usa solo la llave pública y sí corre en CI).
 
+# Escrituras directas en `quotes` pendientes de mover cuando se cierre esa tabla
+
+`quotes` sigue en `knownOpenPending` (ver arriba), así que estos 2 sitios
+todavía escriben directo desde el navegador con la llave pública y
+**dejarán de funcionar en cuanto se corra el lockdown de `quotes`** (paso 3
+del patrón de arriba). Cuando le toque el turno a esta tabla, mover ambos
+a una ruta de servidor (`/api/quotes/save` con lista blanca de columnas,
+siguiendo el mismo patrón que `inventoryFields.ts`) antes de correr el
+`admin_reset_table_to_select_only('quotes')`:
+
+- `POSModule.tsx` — el insert de una cotización nueva (botón "Guardar
+  cotización" en el ticket activo) y el insert de status `"ticket"` al
+  cobrar una venta.
+- `QuotesModule.tsx` — `sendWhatsApp` actualiza `whatsapp_sent_at` con un
+  `.update()` directo después de abrir el chat.
+

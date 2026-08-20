@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { supabase } from "../lib/supabaseClient";
 import { useBusinessProfile, useAuth } from "./AuthProvider";
-import { cleanMexicanPhone, openWhatsAppChat } from "../lib/whatsapp";
+import { cleanMexicanPhone, openWhatsAppChat, formatMexicanPhoneDisplay } from "../lib/whatsapp";
 import { fetchActiveCustomers } from "../lib/customersClient";
 
 export default function QuotesModule() {
@@ -42,6 +42,17 @@ export default function QuotesModule() {
     if (byId?.phone) return byId.phone;
     const byName = customers.find((c) => c.name === quote.customer_name);
     return byName?.phone || null;
+  };
+
+  // Un presupuesto enviado que sigue "Pendiente" pasados unos dias
+  // probablemente necesita seguimiento manual. Compartido por la lista y
+  // el panel de detalle para no calcular esto dos veces con logica distinta.
+  const getFollowUpInfo = (quote: any) => {
+    const daysSinceSent = quote.whatsapp_sent_at
+      ? Math.floor((Date.now() - new Date(quote.whatsapp_sent_at).getTime()) / 86400000)
+      : null;
+    const needsFollowUp = quote.status === "pending" && daysSinceSent !== null && daysSinceSent >= 2;
+    return { daysSinceSent, needsFollowUp };
   };
 
   // Verifica el PIN capturado contra el usuario actual o la tabla de
@@ -306,13 +317,18 @@ export default function QuotesModule() {
             </button>
           )}
           <ul style={{ listStyle: "none", padding: 0, marginTop: "10px" }}>
-            {quotes.map((q) => {
-              const daysSinceSent = q.whatsapp_sent_at
-                ? Math.floor((Date.now() - new Date(q.whatsapp_sent_at).getTime()) / 86400000)
-                : null;
-              // Un presupuesto enviado que sigue "Pendiente" pasados unos
-              // dias probablemente necesita seguimiento manual.
-              const needsFollowUp = q.status === "pending" && daysSinceSent !== null && daysSinceSent >= 2;
+            {[...quotes]
+              .sort((a, b) => {
+                // Los que necesitan seguimiento van primero; dentro de cada
+                // grupo se conserva el orden original (mas reciente primero),
+                // ya que Array.sort es estable.
+                const aFollowUp = getFollowUpInfo(a).needsFollowUp;
+                const bFollowUp = getFollowUpInfo(b).needsFollowUp;
+                if (aFollowUp === bFollowUp) return 0;
+                return aFollowUp ? -1 : 1;
+              })
+              .map((q) => {
+              const { daysSinceSent, needsFollowUp } = getFollowUpInfo(q);
               return (
               <li
                 key={q.id}
@@ -434,7 +450,7 @@ export default function QuotesModule() {
                                 gap: "8px",
                               }}
                             >
-                              Tel: {resolveQuotePhone(q)}
+                              Tel: {formatMexicanPhoneDisplay(resolveQuotePhone(q)!)}
                               <button
                                 onClick={() => {
                                   const phone = resolveQuotePhone(q);
@@ -465,6 +481,15 @@ export default function QuotesModule() {
                           >
                             Fecha: {new Date(q.created_at).toLocaleString()}
                           </p>
+                          {(() => {
+                            const { daysSinceSent, needsFollowUp } = getFollowUpInfo(q);
+                            if (!needsFollowUp) return null;
+                            return (
+                              <p style={{ color: "#f97316", fontSize: "0.85rem", fontWeight: "bold" }}>
+                                ⏰ Enviado por WhatsApp hace {daysSinceSent}d y sigue sin convertirse en venta.
+                              </p>
+                            );
+                          })()}
                         </div>
                         <div style={{ textAlign: "right" }}>
                           <div

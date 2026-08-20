@@ -10,19 +10,33 @@ interface Result {
   error: { message: string } | null;
 }
 
+// Por encima de este umbral se avisa en consola que conviene implementar
+// paginacion/busqueda de verdad en vez de traer todos los clientes de un
+// jalon (el limite explicito de abajo evita que se trunquen en silencio
+// antes de llegar ahi, pero el limite real tambien depende del "Max Rows"
+// configurado en Supabase > API Settings).
+const CUSTOMER_LIST_WARN_THRESHOLD = 2000;
+const CUSTOMER_LIST_HARD_LIMIT = 5000;
+
 // Lectura de `customers` sigue permitida directo desde el navegador (RLS
 // solo bloquea escrituras en esta tabla). Centraliza el patrón de filtro
 // "no borrados" + fallback que antes estaba duplicado en POSModule (dos
 // veces) y QuotesModule.
 export async function fetchActiveCustomers(): Promise<Result> {
-  const { data, error } = await supabase
+  const { data, error, count } = await supabase
     .from("customers")
-    .select("*")
-    .or("deleted.is.null,deleted.eq.false");
-  if (!error) return { data, error: null };
+    .select("*", { count: "exact" })
+    .or("deleted.is.null,deleted.eq.false")
+    .limit(CUSTOMER_LIST_HARD_LIMIT);
+  if (!error) {
+    if (count !== null && count > CUSTOMER_LIST_WARN_THRESHOLD) {
+      console.warn(`fetchActiveCustomers: ${count} clientes activos — considerar paginar antes de llegar al limite de ${CUSTOMER_LIST_HARD_LIMIT}.`);
+    }
+    return { data, error: null };
+  }
 
   console.warn("Fallo el filtro de base de datos 'deleted' en clientes, usando fallback local:", error.message);
-  const fallback = await supabase.from("customers").select("*");
+  const fallback = await supabase.from("customers").select("*").limit(CUSTOMER_LIST_HARD_LIMIT);
   if (fallback.error) return { data: null, error: { message: fallback.error.message } };
   return { data: (fallback.data || []).filter((c: any) => c.deleted !== true), error: null };
 }

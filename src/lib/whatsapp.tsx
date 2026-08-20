@@ -11,6 +11,16 @@ export function cleanMexicanPhone(rawPhone: string): string | null {
   return null;
 }
 
+// Formatea un telefono para mostrarlo legible ("55 1234 5678") en vez del
+// string de digitos crudo. Si no calza con el formato mexicano de 10
+// digitos (con o sin el prefijo 52), lo devuelve tal cual llego.
+export function formatMexicanPhoneDisplay(rawPhone: string): string {
+  const digits = rawPhone.replace(/\D/g, "");
+  const local = digits.length === 12 && digits.startsWith("52") ? digits.slice(2) : digits;
+  if (local.length !== 10) return rawPhone;
+  return `${local.slice(0, 2)} ${local.slice(2, 6)} ${local.slice(6)}`;
+}
+
 // Abre WhatsApp Web/App con un texto precargado. Si el navegador bloquea la
 // ventana emergente, avisa con un toast con boton de reintentar en vez de
 // fallar en silencio (antes ningun envio de WhatsApp revisaba el resultado
