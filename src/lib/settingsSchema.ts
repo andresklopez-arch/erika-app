@@ -38,6 +38,7 @@ export const BusinessConfigSchema = z.object({
   low_stock_threshold: z.number().default(5),
   max_cajero_discount_pct: z.number().default(5),
   iva_rate: z.number().min(0).max(0.5).default(0.16),
+  quote_followup_days: z.number().default(2),
 });
 
 export const BusinessSettingsSchema = z.object({
@@ -81,6 +82,7 @@ export const BusinessSettingsSchema = z.object({
     low_stock_threshold: 5,
     max_cajero_discount_pct: 5,
     iva_rate: 0.16,
+    quote_followup_days: 2,
   }),
 });
 

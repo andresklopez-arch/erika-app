@@ -42,6 +42,7 @@ export default function SettingsModule() {
   const [theme, setTheme] = useState("dark");
   const [wholesaleMinQty, setWholesaleMinQty] = useState("10");
   const [wholesaleDiscount, setWholesaleDiscount] = useState("10");
+  const [quoteFollowupDays, setQuoteFollowupDays] = useState("2");
   const [lowStockThreshold, setLowStockThreshold] = useState("5");
   const [maxCajeroDiscountPct, setMaxCajeroDiscountPct] = useState("5");
   const [ivaRatePct, setIvaRatePct] = useState("16");
@@ -475,6 +476,7 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
       setTheme(businessSettings.config.theme);
       setWholesaleMinQty(String(businessSettings.config.wholesale_min_qty));
       setWholesaleDiscount(String(businessSettings.config.wholesale_discount));
+      setQuoteFollowupDays(String(businessSettings.config.quote_followup_days || 2));
       setTargetUtility(String(businessSettings.target_utility));
       setMonthlyGoals(String(businessSettings.monthly_goals));
       setBusinessName(businessSettings.config.business_name);
@@ -577,6 +579,18 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
     });
     if (success) {
       alert("✅ Configuración de Mayoreo Automático guardada.");
+    }
+  };
+
+  const saveQuoteFollowupConfig = async () => {
+    if (!checkAdmin()) return;
+    const success = await updateBusinessSettings({
+      config: {
+        quote_followup_days: parseNumOr(quoteFollowupDays, 2),
+      }
+    });
+    if (success) {
+      alert("✅ Umbral de seguimiento de presupuestos guardado.");
     }
   };
 
@@ -1461,6 +1475,21 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
             </div>
             <button className="btn-primary" onClick={saveWholesaleConfig} style={{ width: "100%", background: "transparent", border: "1px solid #3b82f6", color: "#3b82f6" }}>
               💾 Guardar Reglas de Mayoreo
+            </button>
+          </div>
+
+          <div className="glass-panel" style={{ border: "1px solid #f97316" }}>
+            <h3 style={{ margin: "0 0 20px 0", color: "#f97316", display: "flex", alignItems: "center", gap: "10px" }}>
+              📄 Seguimiento de Presupuestos
+            </h3>
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>
+                Días sin respuesta antes de marcar un presupuesto enviado para seguimiento:
+              </label>
+              <input type="number" min="1" value={quoteFollowupDays} onChange={e => setQuoteFollowupDays(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
+            </div>
+            <button className="btn-primary" onClick={saveQuoteFollowupConfig} style={{ width: "100%", background: "transparent", border: "1px solid #f97316", color: "#f97316" }}>
+              💾 Guardar Umbral de Seguimiento
             </button>
           </div>
 

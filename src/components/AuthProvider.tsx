@@ -68,6 +68,7 @@ const AuthContext = createContext<AuthContextType>({
       low_stock_threshold: 5,
       max_cajero_discount_pct: 5,
       iva_rate: 0.16,
+      quote_followup_days: 2,
     },
   },
   updateBusinessSettings: async () => false,
@@ -175,6 +176,7 @@ export default function AuthProvider({
         low_stock_threshold: localStorage.getItem("ERIKA_LOW_STOCK_THRESHOLD") !== null ? Number(localStorage.getItem("ERIKA_LOW_STOCK_THRESHOLD")) : 5,
         max_cajero_discount_pct: localStorage.getItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT") !== null ? Number(localStorage.getItem("ERIKA_MAX_CAJERO_DISCOUNT_PCT")) : 5,
         iva_rate: localStorage.getItem("ERIKA_IVA_RATE") !== null ? Number(localStorage.getItem("ERIKA_IVA_RATE")) : 0.16,
+        quote_followup_days: 2,
       };
 
       return {
@@ -224,6 +226,7 @@ export default function AuthProvider({
         low_stock_threshold: 5,
         max_cajero_discount_pct: 5,
         iva_rate: 0.16,
+        quote_followup_days: 2,
       },
     };
   });
@@ -313,7 +316,7 @@ export default function AuthProvider({
       }
 
       // Cast strings to numbers where required
-      const numKeys = ["earn_rate", "earn_points", "redeem_rate", "wholesale_min_qty", "wholesale_discount"];
+      const numKeys = ["earn_rate", "earn_points", "redeem_rate", "wholesale_min_qty", "wholesale_discount", "quote_followup_days"];
       numKeys.forEach((key) => {
         if (key in updatedConfig) {
           (updatedConfig as any)[key] = Number((updatedConfig as any)[key]);

@@ -4,19 +4,37 @@
 // línea, sin tocar el resto de su lógica (duplicados, confirmaciones, etc).
 
 import { supabase } from "./supabaseClient";
+import { LoggerService } from "../services/loggerService";
 
 interface Result {
   data: any | null;
   error: { message: string } | null;
 }
 
-// Por encima de este umbral se avisa en consola que conviene implementar
+// Por encima de este umbral se avisa que conviene implementar
 // paginacion/busqueda de verdad en vez de traer todos los clientes de un
 // jalon (el limite explicito de abajo evita que se trunquen en silencio
 // antes de llegar ahi, pero el limite real tambien depende del "Max Rows"
 // configurado en Supabase > API Settings).
 const CUSTOMER_LIST_WARN_THRESHOLD = 2000;
 const CUSTOMER_LIST_HARD_LIMIT = 5000;
+
+// Un console.warn no lo ve nadie en producción. Se registra tambien en
+// error_logs (una vez por sesion de pestaña, para no llenar la tabla en
+// cada carga del POS) para que quede visible de verdad.
+function warnAboutCustomerListSize(count: number) {
+  console.warn(`fetchActiveCustomers: ${count} clientes activos — considerar paginar antes de llegar al limite de ${CUSTOMER_LIST_HARD_LIMIT}.`);
+  try {
+    if (typeof window === "undefined" || sessionStorage.getItem("ERIKA_CUSTOMER_COUNT_WARNED")) return;
+    sessionStorage.setItem("ERIKA_CUSTOMER_COUNT_WARNED", "1");
+  } catch (e) {
+    return;
+  }
+  LoggerService.logError(
+    "fetchActiveCustomers_size_warning",
+    `${count} clientes activos, por encima del umbral de ${CUSTOMER_LIST_WARN_THRESHOLD}. Considerar paginar antes de llegar al limite de ${CUSTOMER_LIST_HARD_LIMIT}.`,
+  );
+}
 
 // Lectura de `customers` sigue permitida directo desde el navegador (RLS
 // solo bloquea escrituras en esta tabla). Centraliza el patrón de filtro
@@ -30,7 +48,7 @@ export async function fetchActiveCustomers(): Promise<Result> {
     .limit(CUSTOMER_LIST_HARD_LIMIT);
   if (!error) {
     if (count !== null && count > CUSTOMER_LIST_WARN_THRESHOLD) {
-      console.warn(`fetchActiveCustomers: ${count} clientes activos — considerar paginar antes de llegar al limite de ${CUSTOMER_LIST_HARD_LIMIT}.`);
+      warnAboutCustomerListSize(count);
     }
     return { data, error: null };
   }

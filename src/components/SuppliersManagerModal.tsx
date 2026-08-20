@@ -7,7 +7,7 @@ import { LoggerService } from "../services/loggerService";
 import { bulkUpdateInventory } from "../lib/inventoryClient";
 import { saveSupplier, deleteSupplier } from "../lib/suppliersClient";
 import { useBusinessProfile } from "./AuthProvider";
-import { cleanMexicanPhone, openWhatsAppChat } from "../lib/whatsapp";
+import { cleanMexicanPhone, openWhatsAppChat, formatMexicanPhoneDisplay } from "../lib/whatsapp";
 
 interface Supplier {
   id: string;
@@ -334,7 +334,7 @@ export default function SuppliersManagerModal({ onClose }: SuppliersManagerModal
                         </td>
                         <td style={{ padding: "15px" }}>
                           <div>{s.contact_name}</div>
-                          <div style={{ fontSize: "0.8rem", color: "var(--color-secondary)" }}>{s.phone} | {s.email}</div>
+                          <div style={{ fontSize: "0.8rem", color: "var(--color-secondary)" }}>{s.phone ? formatMexicanPhoneDisplay(s.phone) : ""} | {s.email}</div>
                         </td>
                         <td style={{ padding: "15px", display: "flex", gap: "10px", justifyContent: "center", position: "relative" }}>
                           

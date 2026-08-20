@@ -65,6 +65,11 @@ export default function ReportsModule() {
   const [searchAuditProduct, setSearchAuditProduct] = useState("");
   const [searchAuditUser, setSearchAuditUser] = useState("");
 
+  const [quoteStats, setQuoteStats] = useState({ sentThisWeek: 0, needingFollowUp: 0 });
+  // Solo se muestra el panel si la consulta funcionó (la columna
+  // whatsapp_sent_at puede no existir todavía si no se corrió la migración).
+  const [quoteStatsAvailable, setQuoteStatsAvailable] = useState(false);
+
   const fetchData = async () => {
     const today = new Date();
         const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
@@ -253,6 +258,32 @@ export default function ReportsModule() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    const fetchQuoteStats = async () => {
+      const { data, error } = await supabase
+        .from("quotes")
+        .select("status, whatsapp_sent_at")
+        .neq("status", "ticket")
+        .not("whatsapp_sent_at", "is", null);
+      if (error || !data) return;
+
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const followUpThresholdMs = (businessSettings?.config?.quote_followup_days || 2) * 24 * 60 * 60 * 1000;
+      const now = Date.now();
+
+      let sentThisWeek = 0;
+      let needingFollowUp = 0;
+      for (const q of data) {
+        const sentAt = new Date(q.whatsapp_sent_at).getTime();
+        if (sentAt >= sevenDaysAgo) sentThisWeek++;
+        if (q.status === "pending" && now - sentAt >= followUpThresholdMs) needingFollowUp++;
+      }
+      setQuoteStats({ sentThisWeek, needingFollowUp });
+      setQuoteStatsAvailable(true);
+    };
+    fetchQuoteStats();
+  }, [businessSettings]);
 
   useEffect(() => {
     const fetchRadar = async () => {
@@ -490,6 +521,38 @@ export default function ReportsModule() {
       )}
 
       <UnitSalesSummary />
+
+      {quoteStatsAvailable && (
+        <div
+          className="glass-panel"
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "15px",
+            border: "1px solid rgba(249, 115, 22, 0.3)",
+          }}
+        >
+          <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+            📄 Presupuestos por WhatsApp
+          </h3>
+          <div style={{ display: "flex", gap: "25px" }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#22c55e" }}>
+                {quoteStats.sentThisWeek}
+              </div>
+              <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>enviados esta semana</div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#f97316" }}>
+                {quoteStats.needingFollowUp}
+              </div>
+              <div style={{ fontSize: "0.75rem", opacity: 0.7 }}>sin respuesta</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Resumen de Inteligencia */}
       <div className="grid-cols-2">

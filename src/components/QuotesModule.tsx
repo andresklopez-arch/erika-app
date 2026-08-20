@@ -8,10 +8,12 @@ import { fetchActiveCustomers } from "../lib/customersClient";
 
 export default function QuotesModule() {
   const businessProfile = useBusinessProfile();
-  const { currentUser } = useAuth();
+  const { currentUser, businessSettings } = useAuth();
+  const followUpThresholdDays = businessSettings?.config?.quote_followup_days || 2;
   const [quotes, setQuotes] = useState<any[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
   const [customers, setCustomers] = useState<any[]>([]);
+  const [showOnlyFollowUp, setShowOnlyFollowUp] = useState(false);
 
   const fetchQuotes = async () => {
     const { data } = await supabase
@@ -51,7 +53,7 @@ export default function QuotesModule() {
     const daysSinceSent = quote.whatsapp_sent_at
       ? Math.floor((Date.now() - new Date(quote.whatsapp_sent_at).getTime()) / 86400000)
       : null;
-    const needsFollowUp = quote.status === "pending" && daysSinceSent !== null && daysSinceSent >= 2;
+    const needsFollowUp = quote.status === "pending" && daysSinceSent !== null && daysSinceSent >= followUpThresholdDays;
     return { daysSinceSent, needsFollowUp };
   };
 
@@ -289,14 +291,34 @@ export default function QuotesModule() {
       >
         {/* Left Side: Quotes List */}
         <div className="glass-panel" style={{ flex: 1, overflowY: "auto" }}>
-          <h3
+          <div
             style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
               borderBottom: "1px solid rgba(255,255,255,0.1)",
               paddingBottom: "10px",
             }}
           >
-            Presupuestos Guardados
-          </h3>
+            <h3 style={{ margin: 0 }}>Presupuestos Guardados</h3>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                fontSize: "0.8rem",
+                color: "rgba(255,255,255,0.7)",
+                cursor: "pointer",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showOnlyFollowUp}
+                onChange={(e) => setShowOnlyFollowUp(e.target.checked)}
+              />
+              ⏰ solo seguimiento
+            </label>
+          </div>
           {lastSentQuote && (
             <button
               onClick={() => sendWhatsApp(lastSentQuote)}
@@ -318,6 +340,7 @@ export default function QuotesModule() {
           )}
           <ul style={{ listStyle: "none", padding: 0, marginTop: "10px" }}>
             {[...quotes]
+              .filter((q) => !showOnlyFollowUp || getFollowUpInfo(q).needsFollowUp)
               .sort((a, b) => {
                 // Los que necesitan seguimiento van primero; dentro de cada
                 // grupo se conserva el orden original (mas reciente primero),
