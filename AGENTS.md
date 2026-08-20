@@ -41,3 +41,21 @@ patrón (no crear políticas nuevas a mano ni copiar el bloque completo):
 5. Agregar la tabla/RPC a `mustBeBlocked` en `scripts/check-rls-lockdown.js`
    y correr `npm run check-rls` para confirmar.
 
+# Qué llaves pueden ir en un workflow de GitHub Actions
+
+- **Seguras de escribir directo en el YAML** (`.github/workflows/*.yml`),
+  sin usar GitHub Secrets: `NEXT_PUBLIC_SUPABASE_URL` y
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Son públicas por diseño — el navegador
+  de cualquier cliente ya las expone, y su único poder es lo que las
+  políticas RLS le permitan a `anon` (que, después de este lockdown, es
+  solo lectura en las tablas de negocio).
+- **Nunca deben ir en un workflow** (ni siquiera como GitHub Secret, salvo
+  decisión explícita del dueño del proyecto): `SUPABASE_SERVICE_ROLE_KEY`
+  (ignora RLS por completo — acceso total de lectura/escritura a toda la
+  base) y `SESSION_SECRET` (firma las cookies de sesión; con ella se puede
+  forjar una sesión válida de cualquier usuario, como hace
+  `scripts/test-caja-checkout-flow.js` a propósito solo contra
+  `localhost`). Por esto `npm run test-caja` y el chequeo genérico de
+  políticas RLS con estas llaves se quedaron como scripts manuales
+  (`npm run check-rls` usa solo la llave pública y sí corre en CI).
+

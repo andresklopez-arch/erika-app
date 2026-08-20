@@ -67,13 +67,26 @@ export async function POST(request: Request) {
     // foránea y la venta quedaba atorada reintentando para siempre.
     const { data: session } = await supabaseAdmin
       .from("cash_sessions")
-      .select("id")
+      .select("id, opened_at")
       .eq("status", "open")
       .order("opened_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (!session) {
       return NextResponse.json({ error: "La caja está cerrada." }, { status: 409 });
+    }
+
+    // Una caja abierta por más de 48h casi seguro es una sesión olvidada
+    // (ver alerta "Caja Olvidada" en IntelligenceNotifications.tsx), no un
+    // turno real. Se bloquean nuevos movimientos para forzar su cierre —
+    // así los datos del corte no se siguen mezclando con turnos de días
+    // distintos — sin importar si el cierre real terminará descuadrado.
+    const hoursOpen = (Date.now() - new Date(session.opened_at).getTime()) / 3_600_000;
+    if (hoursOpen >= 48) {
+      return NextResponse.json(
+        { error: `La caja lleva abierta más de 48 horas sin cerrarse (desde hace ${Math.floor(hoursOpen / 24)} día(s)). Un administrador debe cerrarla antes de registrar más movimientos.` },
+        { status: 409 },
+      );
     }
 
     const insertPayload: Record<string, any> = {

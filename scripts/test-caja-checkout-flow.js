@@ -58,6 +58,7 @@ async function apiCall(cookie, urlPath, body) {
 }
 
 let createdSessionId = null;
+let createdCustomerId = null;
 let testsPassed = 0;
 let testsFailed = 0;
 
@@ -72,10 +73,15 @@ function check(label, condition, detail) {
 }
 
 async function cleanup() {
-  if (!createdSessionId) return;
   console.log("\n🧹 Limpiando datos de prueba...");
-  await admin.from("cash_transactions").delete().eq("session_id", createdSessionId);
-  await admin.from("cash_sessions").delete().eq("id", createdSessionId);
+  if (createdCustomerId) {
+    await admin.from("credit_transactions").delete().eq("customer_id", createdCustomerId);
+    await admin.from("customers").delete().eq("id", createdCustomerId);
+  }
+  if (createdSessionId) {
+    await admin.from("cash_transactions").delete().eq("session_id", createdSessionId);
+    await admin.from("cash_sessions").delete().eq("id", createdSessionId);
+  }
   console.log("🧹 Listo.");
 }
 
@@ -132,7 +138,28 @@ async function main() {
     });
     check("POST /api/caja/transaction (ingreso) responde 200", deposit.ok, JSON.stringify(deposit.json));
 
-    // 4. Cerrar caja con el PIN del admin de prueba (buscar su PIN real)
+    // 4. Flujo de crédito: crear cliente de prueba, cargarle una venta a
+    //    crédito y luego abonarle, verificando que el saldo se actualice
+    //    igual que lo haría un cajero real desde PosCreditModal/CustomersModule.
+    const { data: testCustomer, error: customerErr } = await admin
+      .from("customers")
+      .insert({ name: "[TEST AUTOMATIZADO] Cliente de prueba", credit_limit: 1000, balance: 0 })
+      .select("id, balance")
+      .single();
+    check("Se creó el cliente de prueba para crédito", !customerErr && !!testCustomer, customerErr?.message);
+    createdCustomerId = testCustomer?.id || null;
+
+    if (createdCustomerId) {
+      const charge = await apiCall(cookie, "/api/credit/charge", { customerId: createdCustomerId, amount: 200, ticketId: "TEST" });
+      check("POST /api/credit/charge responde 200", charge.ok, JSON.stringify(charge.json));
+      check("El cargo a crédito subió el saldo a 200", charge.json?.newBalance === 200, `newBalance: ${charge.json?.newBalance}`);
+
+      const payment = await apiCall(cookie, "/api/credit/payment", { customerId: createdCustomerId, amount: 80, notes: "[TEST AUTOMATIZADO] Abono de prueba" });
+      check("POST /api/credit/payment responde 200", payment.ok, JSON.stringify(payment.json));
+      check("El abono bajó el saldo a 120", payment.json?.newBalance === 120, `newBalance: ${payment.json?.newBalance}`);
+    }
+
+    // 5. Cerrar caja con el PIN del admin de prueba (buscar su PIN real)
     const { data: cred } = await admin.from("user_credentials").select("pin").eq("user_id", adminUser.id).maybeSingle();
     if (!cred?.pin) {
       console.warn("⚠️ El usuario admin de prueba no tiene PIN en user_credentials — se omite el cierre de caja.");

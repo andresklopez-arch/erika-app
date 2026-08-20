@@ -154,6 +154,7 @@ export default function SettingsModule() {
   }
   const [rlsTables, setRlsTables] = useState<RlsTableStatus[] | null>(null);
   const [isCheckingRls, setIsCheckingRls] = useState(false);
+  const [showTestInstructions, setShowTestInstructions] = useState(false);
 
   const checkRlsStatus = async () => {
     const pin = window.prompt("🔑 Ingresa el PIN de Administrador para ver la auditoría de seguridad:");
@@ -2054,17 +2055,38 @@ export default function SettingsModule() {
               <h3 style={{ margin: 0, color: "#f59e0b", display: "flex", alignItems: "center", gap: "10px" }}>
                 🔒 Auditoría de Seguridad (RLS)
               </h3>
-              <button
-                onClick={checkRlsStatus}
-                disabled={isCheckingRls}
-                style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b", border: "1px solid #f59e0b", padding: "5px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "0.8rem" }}
-              >
-                {isCheckingRls ? "Verificando..." : "🔍 Verificar Ahora"}
-              </button>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  onClick={() => setShowTestInstructions((v) => !v)}
+                  style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.8)", border: "1px solid rgba(255,255,255,0.2)", padding: "5px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "0.8rem" }}
+                >
+                  🧪 Correr prueba completa
+                </button>
+                <button
+                  onClick={checkRlsStatus}
+                  disabled={isCheckingRls}
+                  style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b", border: "1px solid #f59e0b", padding: "5px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "0.8rem" }}
+                >
+                  {isCheckingRls ? "Verificando..." : "🔍 Verificar Ahora"}
+                </button>
+              </div>
             </div>
             <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", marginBottom: "15px" }}>
               Revisa qué tablas de la base de datos siguen permitiendo escritura directa desde cualquier navegador, sin pasar por el sistema. Requiere PIN de Administrador.
             </p>
+            {showTestInstructions && (
+              <div style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "6px", padding: "12px", marginBottom: "15px", fontSize: "0.8rem", color: "rgba(255,255,255,0.75)" }}>
+                <p style={{ margin: "0 0 8px 0" }}>
+                  "🔍 Verificar Ahora" solo revisa que las escrituras estén bloqueadas. Para probar que el flujo completo (abrir caja, vender, cobrar crédito, cerrar caja) sigue funcionando de principio a fin, corre esto en tu computadora — nunca en producción, por eso no se automatizó en la nube:
+                </p>
+                <pre style={{ background: "rgba(0,0,0,0.35)", padding: "10px", borderRadius: "4px", overflowX: "auto", margin: "0 0 8px 0", fontFamily: "monospace", fontSize: "0.78rem" }}>
+                  {"1) npm run dev\n2) (en otra terminal) npm run test-caja"}
+                </pre>
+                <p style={{ margin: 0, opacity: 0.7 }}>
+                  El script se niega a correr si no es contra localhost, y si ya hay una caja real abierta se detiene sin tocar nada.
+                </p>
+              </div>
+            )}
             {rlsTables && (
               <div style={{ maxHeight: "220px", overflowY: "auto" }}>
                 {rlsTables.map((t) => (
