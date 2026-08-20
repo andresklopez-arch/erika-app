@@ -20,6 +20,12 @@ import { saveCustomer, adjustCustomerPoints } from "../lib/customersClient";
 import { createLayaway } from "../lib/layawaysClient";
 import { reduceInventoryStock } from "../lib/inventoryClient";
 
+// Único valor de método de pago que dispara lógica especial de crédito
+// (segunda copia, etiqueta "VENTA A CRÉDITO", validaciones). Se compara
+// contra `job.data?.paymentMethod` que llega tipado como `any`, así que
+// TypeScript no detectaría un typo si se repitiera el literal a mano.
+const PAYMENT_METHOD_CREDITO = "credito" as const;
+
 interface POSItem {
   id: string;
   code?: string;
@@ -219,6 +225,13 @@ export default function POSModule() {
     if (savedPending) {
       try {
         setPendingPrintJob(JSON.parse(savedPending));
+      } catch (e) {}
+    }
+
+    const savedLast = localStorage.getItem("ERIKA_LAST_PRINT_JOB");
+    if (savedLast) {
+      try {
+        setLastPrintJob(JSON.parse(savedLast));
       } catch (e) {}
     }
   }, []);
@@ -578,6 +591,7 @@ export default function POSModule() {
     return false;
   });
   const [pendingPrintJob, setPendingPrintJob] = useState<any>(null);
+  const [lastPrintJob, setLastPrintJob] = useState<any>(null);
   const [showPrinterModal, setShowPrinterModal] = useState<boolean>(false);
   const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -1881,31 +1895,31 @@ export default function POSModule() {
     
     const fields = config.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"];
     const showName = fields.includes("name");
-    const showRfc = fields.includes("rfc") && (businessProfile.rfc || config.business_rfc);
-    const showPhone = fields.includes("phone") && (businessProfile.phone || config.business_phone);
-    const showAddress = fields.includes("address") && (businessProfile.address || config.business_address);
+    const showRfc = fields.includes("rfc") && businessProfile.rfc;
+    const showPhone = fields.includes("phone") && businessProfile.phone;
+    const showAddress = fields.includes("address") && businessProfile.address;
     const showBilling = fields.includes("billing");
     const showFooter = fields.includes("footer");
-    const showEmail = fields.includes("email") && (businessProfile.email || config.business_email);
+    const showEmail = fields.includes("email") && businessProfile.email;
     const showPaymentMethod = fields.includes("payment_method");
     const showSeller = fields.includes("seller");
     const showCustomer = fields.includes("customer");
     const showNotes = fields.includes("notes");
     const showWarranty = fields.includes("warranty");
-    
+
     setAlign(1);
     if (showName) {
       setDoubleSize(true);
       setBold(true);
-      writeText((businessProfile.name || config.business_name || "FERRETERIA ERIKA") + "\n");
+      writeText(businessProfile.name + "\n");
       setDoubleSize(false);
     }
-    
+
     setBold(false);
-    if (showRfc) writeText(`RFC: ${businessProfile.rfc || config.business_rfc}\n`);
-    if (showPhone) writeText(`Tel: ${businessProfile.phone || config.business_phone}\n`);
-    if (showAddress) writeText(`${businessProfile.address || config.business_address}\n`);
-    if (showEmail) writeText(`Email: ${businessProfile.email || config.business_email}\n`);
+    if (showRfc) writeText(`RFC: ${businessProfile.rfc}\n`);
+    if (showPhone) writeText(`Tel: ${businessProfile.phone}\n`);
+    if (showAddress) writeText(`${businessProfile.address}\n`);
+    if (showEmail) writeText(`Email: ${businessProfile.email}\n`);
     
     writeText(divider);
     
@@ -1918,7 +1932,7 @@ export default function POSModule() {
       setBold(true);
       writeText(`Ticket: #${realTicketId}\n`);
       setBold(false);
-      if (paymentMethod === "credito") {
+      if (paymentMethod === PAYMENT_METHOD_CREDITO) {
         writeText("*** VENTA A CREDITO ***\n");
       }
 
@@ -2299,14 +2313,14 @@ export default function POSModule() {
     if (fontFamily === "sans-serif") fontFamilyCss = "sans-serif";
     else if (fontFamily === "serif") fontFamilyCss = "serif";
 
-    const showLogo = fields.includes("logo") && (businessProfile.logo || config.business_logo);
+    const showLogo = fields.includes("logo") && businessProfile.logo;
     const showName = fields.includes("name");
-    const showRfc = fields.includes("rfc") && (businessProfile.rfc || config.business_rfc);
-    const showPhone = fields.includes("phone") && (businessProfile.phone || config.business_phone);
-    const showAddress = fields.includes("address") && (businessProfile.address || config.business_address);
+    const showRfc = fields.includes("rfc") && businessProfile.rfc;
+    const showPhone = fields.includes("phone") && businessProfile.phone;
+    const showAddress = fields.includes("address") && businessProfile.address;
     const showBilling = fields.includes("billing");
     const showFooter = fields.includes("footer");
-    const showEmail = fields.includes("email") && (businessProfile.email || config.business_email);
+    const showEmail = fields.includes("email") && businessProfile.email;
     const showPaymentMethod = fields.includes("payment_method");
     const showSeller = fields.includes("seller");
     const showCustomer = fields.includes("customer");
@@ -2323,9 +2337,33 @@ export default function POSModule() {
       // abre en el mismo instante del clic) pasa sin problema. Esto
       // explica por qué solo llegaba a imprimirse 1 de los 2 tickets.
       toast.error(
-        job.isCopy
-          ? "⚠️ El navegador bloqueó la ventana de la copia extra. Permite las ventanas emergentes para este sitio en la configuración de Chrome."
-          : "⚠️ El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para este sitio en la configuración de Chrome.",
+        (t) => (
+          <span style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span>
+              {job.isCopy
+                ? "⚠️ El navegador bloqueó la ventana de la copia extra. Permite las ventanas emergentes para este sitio."
+                : "⚠️ El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para este sitio."}
+            </span>
+            <button
+              onClick={() => {
+                toast.dismiss(t.id);
+                executePrintWindow(job);
+              }}
+              style={{
+                background: "#fff",
+                color: "#b91c1c",
+                border: "none",
+                borderRadius: "6px",
+                padding: "4px 10px",
+                fontWeight: "bold",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Reintentar
+            </button>
+          </span>
+        ),
         { duration: 10000 },
       );
       return;
@@ -2339,7 +2377,7 @@ export default function POSModule() {
       const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = job.data;
       const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
       const printDiscountPct = discountPct < 0 ? 0 : discountPct;
-      const creditLabelHtml = paymentMethod === "credito"
+      const creditLabelHtml = paymentMethod === PAYMENT_METHOD_CREDITO
         ? `<div style="text-align:center; font-weight:bold; border: 2px solid #b91c1c; color: #b91c1c; padding: 6px; margin-bottom: 12px; font-size: 0.9em;">*** VENTA A CRÉDITO ***</div>`
         : "";
 
@@ -2384,12 +2422,12 @@ export default function POSModule() {
             <div style="text-align: ${marginAlign}; width: 100%;">
               ${copyLabelHtml}
               ${creditLabelHtml}
-              ${showLogo ? `<div class="center"><img src="${businessProfile.logo || config.business_logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
-              ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name || config.business_name || "FERRETERÍA ERIKA"}</div>` : ""}
-              ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc || config.business_rfc}</div>` : ""}
-              ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessProfile.phone || config.business_phone}</div>` : ""}
-              ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address || config.business_address}</div>` : ""}
-              ${showEmail ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Email: ${businessProfile.email || config.business_email}</div>` : ""}
+              ${showLogo ? `<div class="center"><img src="${businessProfile.logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
+              ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name}</div>` : ""}
+              ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc}</div>` : ""}
+              ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessProfile.phone}</div>` : ""}
+              ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address}</div>` : ""}
+              ${showEmail ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Email: ${businessProfile.email}</div>` : ""}
 
               <div class="divider"></div>
               <div class="center bold" style="margin-bottom: 5px;">Ticket: #${realTicketId}</div>
@@ -2501,12 +2539,12 @@ export default function POSModule() {
           <body>
             <div style="text-align: ${marginAlign}; width: 100%;">
               ${copyLabelHtml}
-              ${showLogo ? `<div class="center"><img src="${businessProfile.logo || config.business_logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
-              ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name || config.business_name || "FERRETERÍA ERIKA"}</div>` : ""}
-              ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc || config.business_rfc}</div>` : ""}
-              ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address || config.business_address}</div>` : ""}
-              ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessProfile.phone || config.business_phone}</div>` : ""}
-              ${showEmail ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Email: ${businessProfile.email || config.business_email}</div>` : ""}
+              ${showLogo ? `<div class="center"><img src="${businessProfile.logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
+              ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name}</div>` : ""}
+              ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc}</div>` : ""}
+              ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address}</div>` : ""}
+              ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessProfile.phone}</div>` : ""}
+              ${showEmail ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Email: ${businessProfile.email}</div>` : ""}
               
               <div class="divider"></div>
               <div class="center bold" style="font-size: 1.1em;">Comprobante de Apartado</div>
@@ -2562,6 +2600,9 @@ export default function POSModule() {
   };
 
   const triggerPrint = (job: any) => {
+    setLastPrintJob(job);
+    try { localStorage.setItem("ERIKA_LAST_PRINT_JOB", JSON.stringify(job)); } catch (e) {}
+
     if (!isPrinterConnected) {
       setPendingPrintJob(job);
       try { localStorage.setItem("ERIKA_PENDING_PRINT_JOB", JSON.stringify(job)); } catch(e){}
@@ -2574,7 +2615,7 @@ export default function POSModule() {
     const doubleCopyEnabled = config.printer_double_copy_layaway_credit || false;
     
     const isLayaway = job.type === "layaway";
-    const isCredit = job.type === "ticket" && job.data?.paymentMethod === "credito";
+    const isCredit = job.type === "ticket" && job.data?.paymentMethod === PAYMENT_METHOD_CREDITO;
     const isWholesaleSale = job.type === "ticket" && job.data?.items?.some((i: any) => i.qty >= (wholesaleRules.minQty || 10));
 
     if (doubleCopyEnabled && (isLayaway || isCredit || isWholesaleSale)) {
@@ -2647,7 +2688,7 @@ export default function POSModule() {
       return alert("❌ Número inválido. Por favor ingresa un número de 10 dígitos (ej: 5512345678).");
     }
     
-    const bizUpper = (businessProfile.name || "FERRETERÍA ERIKA").toUpperCase();
+    const bizUpper = businessProfile.name.toUpperCase();
     const title = type === "quote" ? `*COTIZACIÓN - ${bizUpper}*` : `*RECIBO DE COMPRA - ${bizUpper}*`;
     const discountPct = activeTicket.discountPct || 0;
     const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
@@ -3182,6 +3223,30 @@ export default function POSModule() {
               Reconectar
             </span>
           </div>
+        )}
+
+        {!pendingPrintJob && lastPrintJob && (
+          <button
+            onClick={() => {
+              toast.success("Reimprimiendo el último ticket...");
+              executePrintWindow({ ...lastPrintJob, isCopy: false });
+            }}
+            style={{
+              background: "rgba(255,255,255,0.05)",
+              border: "1px dashed rgba(255,255,255,0.3)",
+              borderRadius: "8px",
+              padding: "6px 12px",
+              marginBottom: "15px",
+              cursor: "pointer",
+              fontSize: "0.75rem",
+              color: "inherit",
+              opacity: 0.8,
+              width: "100%",
+              textAlign: "left",
+            }}
+          >
+            🖨️ Reimprimir última venta
+          </button>
         )}
 
         <div
@@ -4086,7 +4151,7 @@ export default function POSModule() {
       >
         <div style={{ display: "flex", flexDirection: "column", alignItems: marginAlign === "center" ? "center" : "flex-start", borderBottom: "1px dashed #000", paddingBottom: "10px", marginBottom: "15px", textAlign: marginAlign as any }}>
           {showPreviewLogo && <img src={businessProfile.logo} alt="Logo" style={{ maxHeight: "60px", marginBottom: "10px" }} />}
-          {showPreviewName && <h2 style={{ margin: "5px 0", fontSize: "18px", fontWeight: "bold" }}>{businessProfile.name || "FERRETERÍA ERIKA"}</h2>}
+          {showPreviewName && <h2 style={{ margin: "5px 0", fontSize: "18px", fontWeight: "bold" }}>{businessProfile.name}</h2>}
           {showPreviewRfc && <p style={{ margin: "2px 0", fontSize: "12px" }}>RFC: {businessProfile.rfc}</p>}
           {showPreviewPhone && <p style={{ margin: "2px 0", fontSize: "12px" }}>Tel: {businessProfile.phone}</p>}
           {showPreviewAddress && <p style={{ margin: "2px 0", fontSize: "12px", whiteSpace: "pre-line" }}>{businessProfile.address}</p>}
@@ -4097,7 +4162,7 @@ export default function POSModule() {
           <div>
             <h3 style={{ margin: 0, fontWeight: "bold", fontSize: "16px" }}>{printTitle}</h3>
             {printTicketId && <p style={{ margin: "2px 0", fontWeight: "bold" }}>Ticket: #{printTicketId}</p>}
-            {printPaymentMethod === "credito" && (
+            {printPaymentMethod === PAYMENT_METHOD_CREDITO && (
               <p style={{ margin: "2px 0", fontWeight: "bold", color: "#b91c1c" }}>*** VENTA A CRÉDITO ***</p>
             )}
           </div>
@@ -4267,7 +4332,7 @@ export default function POSModule() {
                 realTicketId: activeTicketId,
                 items: [...activeTicket.items],
                 finalTotal,
-                paymentMethod: "credito",
+                paymentMethod: PAYMENT_METHOD_CREDITO,
                 discountPct: activeTicket.discountPct || 0,
                 applyIva: applyIva,
                 customerName: customer?.name || "",
