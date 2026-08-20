@@ -183,13 +183,56 @@ export default function QuotesModule() {
     }, 500);
   };
 
-  const sendWhatsApp = (quote: any) => {
+  const sendWhatsApp = async (quote: any) => {
+    // Antes esto abría `wa.me/?text=...` SIN número de teléfono, lo cual en
+    // WhatsApp Web/Desktop suele mostrar un error de "número inválido" en
+    // vez de abrir el chat del cliente. Buscamos el teléfono igual que
+    // handleDirectCharge: primero por customer_id, luego por nombre.
+    let phone = "";
+    if (quote.customer_id) {
+      const { data: customer } = await supabase
+        .from("customers")
+        .select("phone")
+        .eq("id", quote.customer_id)
+        .single();
+      if (customer?.phone) phone = customer.phone;
+    }
+    if (!phone) {
+      try {
+        const { data: customer } = await supabase
+          .from("customers")
+          .select("phone")
+          .eq("name", quote.customer_name)
+          .eq("deleted", false)
+          .single();
+        if (customer?.phone) phone = customer.phone;
+      } catch (e) {
+        console.error("Error al buscar telefono del cliente por nombre:", e);
+      }
+    }
+    if (!phone) {
+      phone =
+        window.prompt(
+          `No se encontró un teléfono guardado para ${quote.customer_name}. Ingresa el número de WhatsApp a 10 dígitos:`,
+        ) || "";
+    }
+    if (!phone) return;
+
+    let cleanPhone = phone.replace(/\D/g, "");
+    if (cleanPhone.length === 10) {
+      cleanPhone = "52" + cleanPhone;
+    } else if (cleanPhone.length === 12 && cleanPhone.startsWith("52")) {
+      // ya tiene prefijo 52 y los 10 digitos
+    } else {
+      return alert("❌ Número inválido. Por favor ingresa un número de 10 dígitos (ej: 5512345678).");
+    }
+
     const text =
       `Hola ${quote.customer_name}, te enviamos tu cotización de *${businessProfile.name}* por un total de *$${quote.total.toFixed(2)}*.\n\n` +
       quote.items.map((i: any) => `- ${i.qty} ${i.unit} ${i.name}`).join("\n") +
       `\n\nVálida por 7 días. ¡Quedamos a tus órdenes!`;
     const encodedText = encodeURIComponent(text);
-    window.open(`https://wa.me/?text=${encodedText}`, "_blank");
+    window.open(`https://wa.me/${cleanPhone}?text=${encodedText}`, "_blank");
   };
 
   // La conexión real con el proveedor de timbrado (Facturama) aún no está
