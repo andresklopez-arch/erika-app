@@ -155,6 +155,22 @@ export default function SettingsModule() {
   const [rlsTables, setRlsTables] = useState<RlsTableStatus[] | null>(null);
   const [isCheckingRls, setIsCheckingRls] = useState(false);
   const [showTestInstructions, setShowTestInstructions] = useState(false);
+  const [copiedSqlTable, setCopiedSqlTable] = useState<string | null>(null);
+
+  // Genera el SQL listo para pegar en Supabase para cerrar una tabla
+  // abierta, siguiendo el mismo patrón de admin_reset_table_to_select_only
+  // documentado en AGENTS.md — para no tener que pedirlo a mano cada vez
+  // que el panel detecta una tabla nueva con escritura abierta.
+  const copyCloseTableSql = async (table: string) => {
+    const sql = `SELECT admin_reset_table_to_select_only('${table}');\n\nSELECT policyname, cmd, roles, tablename FROM pg_policies\nWHERE schemaname = 'public' AND tablename = '${table}';`;
+    try {
+      await navigator.clipboard.writeText(sql);
+      setCopiedSqlTable(table);
+      setTimeout(() => setCopiedSqlTable((t) => (t === table ? null : t)), 2000);
+    } catch {
+      alert("No se pudo copiar automáticamente. Aquí está el SQL:\n\n" + sql);
+    }
+  };
 
   const checkRlsStatus = async () => {
     const pin = window.prompt("🔑 Ingresa el PIN de Administrador para ver la auditoría de seguridad:");
@@ -2104,9 +2120,20 @@ export default function SettingsModule() {
                     }}
                   >
                     <span style={{ fontFamily: "monospace", fontSize: "0.85rem" }}>{t.table}</span>
-                    <span style={{ fontSize: "0.75rem", fontWeight: "bold", color: t.openToWrite ? "#f87171" : "#10b981" }}>
-                      {t.openToWrite ? "🔓 ESCRITURA ABIERTA" : "🔒 Cerrada"}
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{ fontSize: "0.75rem", fontWeight: "bold", color: t.openToWrite ? "#f87171" : "#10b981" }}>
+                        {t.openToWrite ? "🔓 ESCRITURA ABIERTA" : "🔒 Cerrada"}
+                      </span>
+                      {t.openToWrite && (
+                        <button
+                          onClick={() => copyCloseTableSql(t.table)}
+                          title="Copiar el SQL para cerrar esta tabla y pegarlo en Supabase"
+                          style={{ background: "rgba(239,68,68,0.15)", color: "#f87171", border: "1px solid rgba(239,68,68,0.4)", padding: "3px 8px", borderRadius: "4px", cursor: "pointer", fontSize: "0.72rem", whiteSpace: "nowrap" }}
+                        >
+                          {copiedSqlTable === t.table ? "✅ Copiado" : "📋 Copiar SQL"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

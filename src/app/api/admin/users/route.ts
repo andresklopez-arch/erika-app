@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { verifyAdminPin } from "@/lib/verifyAdminPin";
+import { verifyAdminPin, getUserByPin } from "@/lib/verifyAdminPin";
 import { z } from "zod";
 import { getClientKey, getLockRemainingMs, recordFailedAttempt, clearAttempts } from "@/lib/rateLimit";
 
@@ -103,7 +103,8 @@ export async function PUT(request: Request) {
       );
     }
 
-    if (!(await verifyAdminPin(adminPin))) {
+    const requestingAdmin = await getUserByPin(adminPin);
+    if (requestingAdmin?.role !== "admin") {
       recordFailedAttempt(rateLimitKey);
       return NextResponse.json({ error: "Acceso Denegado. Solo administradores pueden gestionar usuarios." }, { status: 403 });
     }
@@ -115,6 +116,14 @@ export async function PUT(request: Request) {
     }
 
     const { name, pin, role, permissions } = validationResult.data;
+
+    // Un admin no puede quitarse a sí mismo el rol de administrador —
+    // podría dejar la cuenta que está usando ahora mismo sin acceso a
+    // Gestión de Personal, sin ningún otro admin de por medio para
+    // revertirlo.
+    if (requestingAdmin.id === userId && role !== "admin") {
+      return NextResponse.json({ error: "No puedes quitarte a ti mismo el rol de administrador." }, { status: 400 });
+    }
 
     const { data: updatedUser, error: dbError } = await supabaseAdmin
       .from("users")
@@ -155,11 +164,19 @@ export async function DELETE(request: Request) {
       );
     }
 
-    if (!(await verifyAdminPin(adminPin))) {
+    const requestingAdmin = await getUserByPin(adminPin);
+    if (requestingAdmin?.role !== "admin") {
       recordFailedAttempt(rateLimitKey);
       return NextResponse.json({ error: "Acceso Denegado. Solo administradores pueden gestionar usuarios." }, { status: 403 });
     }
     clearAttempts(rateLimitKey);
+
+    // Un admin no puede eliminar su propia cuenta desde aquí — evita que
+    // se quede sin acceso a mitad de una sesión, o que borre por error la
+    // única cuenta de administrador que existe.
+    if (requestingAdmin.id === userId) {
+      return NextResponse.json({ error: "No puedes eliminar tu propia cuenta." }, { status: 400 });
+    }
 
     const { error: dbError } = await supabaseAdmin
       .from("users")

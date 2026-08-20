@@ -17,6 +17,14 @@ export async function verifyStaffPin(pin: string): Promise<boolean> {
   return !!user;
 }
 
+// Igual que verifyAdminPin, pero devuelve el id del usuario dueño del PIN
+// en vez de solo true/false — para rutas que necesitan saber QUIÉN está
+// autorizando la acción (p. ej. para impedir que un admin se edite o se
+// borre a sí mismo), no solo que el PIN pertenezca a algún admin.
+export async function getUserByPin(pin: string): Promise<{ id: string; role: string } | null> {
+  return findUserByPin(pin);
+}
+
 async function findUserByPin(pin: string): Promise<{ id: string; role: string } | null> {
   if (!pin) return null;
 

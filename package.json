@@ -10,6 +10,7 @@
     "smoke-check": "node scripts/smoke-check.js",
     "check-rls": "node scripts/check-rls-lockdown.js",
     "test-caja": "node scripts/test-caja-checkout-flow.js",
+    "checkpoint": "node scripts/create-checkpoint.js",
     "prepare": "husky"
   },
   "dependencies": {

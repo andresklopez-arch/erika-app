@@ -40,6 +40,15 @@ async function main() {
 
   const anon = createClient(url, anonKey);
 
+  // supplier_orders/inventory_audit_logs/inventory_movements tienen una
+  // llave foránea NOT NULL a suppliers/inventory que Postgres valida antes
+  // de evaluar RLS — un id inventado siempre falla por "foreign key
+  // constraint" sin importar si la política está bloqueando o no. La
+  // lectura (SELECT) sigue siendo pública en esas tablas, así que se puede
+  // tomar un id real existente sin necesitar ningún permiso especial.
+  const { data: realSupplier } = await anon.from("suppliers").select("id").limit(1).maybeSingle();
+  const { data: realInventoryItem } = await anon.from("inventory").select("id").limit(1).maybeSingle();
+
   // Cada check limpia lo que inserta (con la MISMA llave anon) si la
   // escritura llega a colarse — así nunca deja basura en producción sin
   // importar si RLS ya está bloqueando o no. (Si el INSERT se permitió, el
@@ -95,15 +104,21 @@ async function main() {
   // autolimpiarse a su valor original — su estado se puede ver sin tocar datos
   // reales desde el panel "Auditoría de Seguridad (RLS)" en Configuración.
   const knownOpenPending = [
-    ["inventory (INSERT)", "inventory", () => anon.from("inventory").insert({ name: "RLS-CHECK" }).select("id").single()],
-    ["services (INSERT)", "services", () => anon.from("services").insert({ customer_name: "RLS-CHECK" }).select("id").single()],
+    ["inventory (INSERT)", "inventory", () => anon.from("inventory").insert({ name: "RLS-CHECK", price: 1, cost: 1, stock: 0 }).select("id").single()],
+    ["services (INSERT)", "services", () => anon.from("services").insert({ customer_name: "RLS-CHECK", technician_name: "RLS-CHECK", service_type: "RLS-CHECK", scheduled_at: new Date().toISOString(), cost: 1, status: "pending" }).select("id").single()],
     ["suppliers (INSERT)", "suppliers", () => anon.from("suppliers").insert({ name: "RLS-CHECK" }).select("id").single()],
-    ["supplier_orders (INSERT)", "supplier_orders", () => anon.from("supplier_orders").insert({ description: "RLS-CHECK" }).select("id").single()],
-    ["quotes (INSERT)", "quotes", () => anon.from("quotes").insert({ customer_name: "RLS-CHECK" }).select("id").single()],
+    ["supplier_orders (INSERT)", "supplier_orders", realSupplier
+      ? () => anon.from("supplier_orders").insert({ supplier_id: realSupplier.id, action_type: "RLS-CHECK", notes: "RLS-CHECK" }).select("id").single()
+      : () => Promise.resolve({ data: null, error: { message: "No hay ningún proveedor real para probar la llave foránea." } })],
+    ["quotes (INSERT)", "quotes", () => anon.from("quotes").insert({ customer_name: "RLS-CHECK", items: [], total: 1, status: "pending" }).select("id").single()],
     ["error_logs (INSERT)", "error_logs", () => anon.from("error_logs").insert({ module: "RLS-CHECK" }).select("id").single()],
-    ["internal_tasks (INSERT)", "internal_tasks", () => anon.from("internal_tasks").insert({ title: "RLS-CHECK" }).select("id").single()],
-    ["inventory_audit_logs (INSERT)", "inventory_audit_logs", () => anon.from("inventory_audit_logs").insert({ description: "RLS-CHECK" }).select("id").single()],
-    ["inventory_movements (INSERT)", "inventory_movements", () => anon.from("inventory_movements").insert({ description: "RLS-CHECK" }).select("id").single()],
+    ["internal_tasks (INSERT)", "internal_tasks", () => anon.from("internal_tasks").insert({ title: "RLS-CHECK", assigned_to: "RLS-CHECK", status: "pending", created_by: "RLS-CHECK" }).select("id").single()],
+    ["inventory_audit_logs (INSERT)", "inventory_audit_logs", realInventoryItem
+      ? () => anon.from("inventory_audit_logs").insert({ inventory_id: realInventoryItem.id, field: "RLS-CHECK", old_value: "0", new_value: "0", changed_by: "RLS-CHECK" }).select("id").single()
+      : () => Promise.resolve({ data: null, error: { message: "No hay ningún producto real para probar la llave foránea." } })],
+    ["inventory_movements (INSERT)", "inventory_movements", realInventoryItem
+      ? () => anon.from("inventory_movements").insert({ inventory_id: realInventoryItem.id, movement_type: "sale", quantity: 1 }).select("id").single()
+      : () => Promise.resolve({ data: null, error: { message: "No hay ningún producto real para probar la llave foránea." } })],
   ];
 
   console.log("== Tablas que DEBEN estar cerradas ==");
