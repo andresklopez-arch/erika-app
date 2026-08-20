@@ -44,7 +44,32 @@ export default function IntelligenceNotifications() {
         }
       }
 
-      // 2. Descuadre en Caja (Última sesión cerrada)
+      // 2. Caja Abierta Olvidada (más de 24h sin cerrarse). Se detectó un
+      // caso real de una caja abierta desde hace más de dos semanas —
+      // como nadie la había cerrado, sus ventas nunca aparecían en ningún
+      // corte ni reporte hasta que se cerró manualmente.
+      const { data: openSessionData } = await supabase
+        .from("cash_sessions")
+        .select("id, opened_at, opened_by")
+        .eq("status", "open")
+        .order("opened_at", { ascending: true })
+        .limit(1);
+
+      if (openSessionData && openSessionData.length > 0) {
+        const openSession = openSessionData[0];
+        const hoursOpen = (Date.now() - new Date(openSession.opened_at).getTime()) / (1000 * 60 * 60);
+        if (hoursOpen >= 24) {
+          const days = Math.floor(hoursOpen / 24);
+          activeAlerts.push({
+            id: "stale-open-session",
+            type: "critical",
+            message: `⏰ Caja Olvidada: Abierta por ${openSession.opened_by || "alguien"} hace ${days} día(s) sin cerrarse. Sus ventas no aparecerán en ningún corte hasta que se cierre.`,
+            targetPath: "/caja",
+          });
+        }
+      }
+
+      // 3. Descuadre en Caja (Última sesión cerrada)
       const { data: sessionData } = await supabase
         .from("cash_sessions")
         .select("id, discrepancy, closed_at")
@@ -65,7 +90,7 @@ export default function IntelligenceNotifications() {
         }
       }
 
-      // 3. Fugas / Robo Hormiga (Simulado en base a cancelaciones/mermas en BD)
+      // 4. Fugas / Robo Hormiga (Simulado en base a cancelaciones/mermas en BD)
       // Buscamos si hay mermas en business_losses en las últimas 24 horas
       const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { data: lossData } = await supabase
