@@ -3135,14 +3135,14 @@ export default function POSModule() {
           flex: 1,
           display: "flex",
           flexDirection: "column",
-          gap: "20px",
+          gap: "8px",
         }}
       >
         <div
           className="glass-panel"
           style={{
-            flex: 1,
             position: "relative",
+            padding: "10px 14px",
             border: isOffline
               ? "2px solid #ef4444"
               : "1px solid rgba(255,255,255,0.1)",
@@ -3153,7 +3153,7 @@ export default function POSModule() {
               e.preventDefault();
               handleSearchSubmit(e as any);
             }}
-            style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "20px" }}
+            style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px" }}
           >
             <div style={{ flex: 1, position: "relative" }}>
                     <input
@@ -3170,11 +3170,13 @@ export default function POSModule() {
                       placeholder="Buscar por Nombre, Código o Pistola Láser..."
                       style={{
                         width: "100%",
-                        padding: "12px",
+                        padding: "6px 12px",
+                        height: "36px",
                         borderRadius: "8px",
                         background: "rgba(0,0,0,0.3)",
                         color: "white",
                         border: "1px solid var(--color-primary)",
+                        fontSize: "0.85rem"
                       }}
                     />
                     {showAutocomplete && (
@@ -3198,25 +3200,20 @@ export default function POSModule() {
                           zIndex: 100,
                           maxHeight: "350px",
                           overflowY: "auto",
-                          boxShadow: "0 10px 25px rgba(0,0,0,0.8)"
+                          boxShadow: "0 10px 25px rgba(0,0,0,0.5)"
                         }}>
                           {filteredCatalog.map((c, idx) => (
                             <div 
                               key={c.id} 
                               onMouseDown={async (e) => {
-                                e.preventDefault(); // Prevents input onBlur
+                                e.preventDefault();
                                 if (c.stock <= 0) {
                                   if (window.confirm(`El producto "${c.name}" está AGOTADO. ¿Deseas registrarlo en el Radar de Demanda (Ventas Perdidas)?`)) {
-                                    await supabase.from("lost_sales_requests").insert({ term: c.name, type: "AGOTADO" });
-                                    await supabase.from("internal_tasks").insert({
-                                      title: `Reabastecer urgencia: ${c.name}`,
-                                      assigned_to: "Administrador",
-                                      status: "pending",
-                                      created_by: "Caja"
-                                    });
-                                    const today = new Date();
-                                    today.setHours(0,0,0,0);
-                                    const { data: panicData } = await supabase.from("lost_sales_requests").select("id").eq("term", c.name).eq("type", "AGOTADO").gte("created_at", today.toISOString());
+                                    const panicData = JSON.parse(localStorage.getItem("PANIC_DEMAND_RADAR") || "[]");
+                                    panicData.push({ term: c.name, date: new Date().toISOString() });
+                                    localStorage.setItem("PANIC_DEMAND_RADAR", JSON.stringify(panicData));
+                                    await supabase.from("lost_sales_requests").insert({ term: c.name, type: "STOCK_AGOTADO" });
+                                    
                                     if (panicData && panicData.length >= 5) {
                                       alert(`🚨 ¡ALERTA DE PÁNICO! 🚨\nEl producto "${c.name}" se ha negado por falta de stock ${panicData.length} veces solo el día de HOY. ¡Sugiero hacer un pedido de emergencia al proveedor YA!`);
                                     } else {
@@ -3246,7 +3243,7 @@ export default function POSModule() {
                                 <div style={{ fontWeight: "bold", color: c.stock <= 0 ? "#ef4444" : "white", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                                   {renderHighlightedName(c.name, searchInput)} {c.stock <= 0 ? "(AGOTADO)" : ""}
                                   {c.cost > 0 && ((c.price - c.cost) / c.cost) >= 0.4 && (
-                                    <span title="Producto de Alta Rentabilidad" style={{ fontSize: "0.7rem", background: "rgba(234, 179, 8, 0.15)", border: "1px solid rgba(234, 179, 8, 0.3)", color: "#eab308", padding: "2px 6px", borderRadius: "10px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                    <span title="Producto de Alta Rentabilidad" style={{ fontSize: "0.7rem", background: "rgba(234, 179, 8, 0.15)", border: "1px solid rgba(234, 179, 8, 3)", color: "#eab308", padding: "2px 6px", borderRadius: "10px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
                                       ⭐ TOP Ganancia
                                     </span>
                                   )}
@@ -3263,7 +3260,7 @@ export default function POSModule() {
                               No se encontraron productos en el inventario.
                               <button 
                                 onMouseDown={async (e) => {
-                                  e.preventDefault(); // Prevents input onBlur
+                                  e.preventDefault(); 
                                   if (searchInput.trim() !== "") {
                                     await supabase.from("lost_sales_requests").insert({ term: searchInput, type: "NUEVO_PRODUCTO" });
                                     alert(`✅ "${searchInput}" registrado en el reporte de productos solicitados.`);
@@ -3290,13 +3287,13 @@ export default function POSModule() {
                 background: isListening ? "#ef4444" : "rgba(255,255,255,0.06)",
                 border: isListening ? "1px solid #ef4444" : "1px solid var(--color-primary)",
                 color: "white",
-                width: "44px",
-                height: "44px",
+                width: "36px",
+                height: "36px",
                 borderRadius: "8px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: "1.1rem",
+                fontSize: "0.95rem",
                 cursor: "pointer",
                 flexShrink: 0,
                 transition: "all 0.2s ease"
@@ -3307,24 +3304,24 @@ export default function POSModule() {
             <button
               type="submit"
               className="btn-primary"
-              style={{ background: "var(--color-secondary)", color: "black", height: "44px", padding: "0 18px" }}
+              style={{ background: "var(--color-secondary)", color: "black", height: "36px", padding: "0 14px", fontSize: "0.85rem" }}
             >
               Agregar
             </button>
           </form>
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-            <h3 style={{ color: "var(--color-secondary)", margin: 0, fontSize: "0.85rem", fontWeight: "bold" }}>
+            <h3 style={{ color: "var(--color-secondary)", margin: 0, fontSize: "0.82rem", fontWeight: "bold" }}>
               ⚡ Atajos Rápidos (24 Más Vendidos)
             </h3>
-            <span style={{ fontSize: "0.68rem", opacity: 0.6 }}>3 por fila • 24 productos</span>
+            <span style={{ fontSize: "0.65rem", opacity: 0.6 }}>3 por fila • 24 productos</span>
           </div>
           <div
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(3, 1fr)",
-              gap: "4px",
-              maxHeight: "140px",
+              gap: "3px",
+              maxHeight: "115px",
               overflowY: "auto",
               paddingRight: "3px",
             }}
@@ -3337,25 +3334,25 @@ export default function POSModule() {
                 style={{
                   background: "rgba(255,255,255,0.05)",
                   border: "1px solid rgba(255,255,255,0.08)",
-                  padding: "3px 5px",
-                  borderRadius: "5px",
-                  fontSize: "0.68rem",
+                  padding: "2px 4px",
+                  borderRadius: "4px",
+                  fontSize: "0.64rem",
                   textAlign: "left",
                   display: "flex",
                   flexDirection: "column",
                   justifyContent: "space-between",
-                  minHeight: "34px",
-                  lineHeight: "1.1",
+                  minHeight: "28px",
+                  lineHeight: "1.05",
                   cursor: "pointer"
                 }}
                 onClick={() => addProductToCart(c)}
                 title={`${c.name} • Precio: $${c.price} • Stock: ${c.stock ?? 0}`}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", width: "100%", gap: "3px" }}>
-                  <span style={{ color: "var(--color-primary)", fontWeight: "bold", fontSize: "0.65rem" }}>
+                  <span style={{ color: "var(--color-primary)", fontWeight: "bold", fontSize: "0.62rem" }}>
                     [{i + 1}]
                   </span>
-                  <strong style={{ color: "var(--color-secondary)", fontSize: "0.68rem" }}>
+                  <strong style={{ color: "var(--color-secondary)", fontSize: "0.64rem" }}>
                     ${c.price}
                   </strong>
                 </div>
@@ -3365,8 +3362,7 @@ export default function POSModule() {
                   whiteSpace: "nowrap",
                   width: "100%",
                   display: "block",
-                  opacity: 0.9,
-                  marginTop: "1px"
+                  opacity: 0.9
                 }}>
                   {c.name}
                 </span>
@@ -3380,16 +3376,16 @@ export default function POSModule() {
           style={{
             background: "linear-gradient(135deg, rgba(16, 185, 129, 0.08), transparent)",
             border: "1px solid var(--color-secondary)",
-            padding: "6px 10px",
+            padding: "5px 8px",
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-            <h3 style={{ color: "var(--color-secondary)", margin: 0, fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "5px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "3px" }}>
+            <h3 style={{ color: "var(--color-secondary)", margin: 0, fontSize: "0.82rem", display: "flex", alignItems: "center", gap: "5px" }}>
               <span>🧠</span>
               <span>ERIKA Sugiere Ofrecer (8 Artículos):</span>
             </h3>
             {activeTicket.items.length > 0 && (
-              <span style={{ fontSize: "0.65rem", color: "#10b981", fontWeight: "bold" }}>
+              <span style={{ fontSize: "0.62rem", color: "#10b981", fontWeight: "bold" }}>
                 ✨ Asociados a esta venta
               </span>
             )}
@@ -3398,7 +3394,7 @@ export default function POSModule() {
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(4, 1fr)",
-              gap: "4px",
+              gap: "3px",
             }}
           >
             {getCrossSellSuggestions().map((sug, idx) => (
@@ -3408,15 +3404,15 @@ export default function POSModule() {
                 style={{
                   background: "rgba(0,0,0,0.35)",
                   border: "1px solid rgba(255,255,255,0.06)",
-                  padding: "3px 5px",
-                  borderRadius: "5px",
+                  padding: "2px 4px",
+                  borderRadius: "4px",
                   display: "flex",
                   flexDirection: "column",
                   justifyContent: "space-between",
-                  minHeight: "34px",
+                  minHeight: "28px",
                   cursor: "pointer",
                   transition: "all 0.15s ease",
-                  lineHeight: "1.1",
+                  lineHeight: "1.05",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = "var(--color-secondary)";
@@ -3429,27 +3425,26 @@ export default function POSModule() {
                 title={`${sug.name} • Precio: $${sug.price} (Clic para añadir a la nota)`}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-                  <strong style={{ color: "var(--color-primary)", fontSize: "0.68rem" }}>
+                  <strong style={{ color: "var(--color-primary)", fontSize: "0.64rem" }}>
                     ${sug.price}
                   </strong>
                   <span style={{
-                    fontSize: "0.6rem",
+                    fontSize: "0.58rem",
                     background: "var(--color-secondary)",
                     color: "black",
                     fontWeight: "bold",
                     borderRadius: "2px",
-                    padding: "0px 3px"
+                    padding: "0px 2px"
                   }}>
                     +
                   </span>
                 </div>
                 <span style={{
-                  fontSize: "0.66rem",
+                  fontSize: "0.62rem",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
                   width: "100%",
-                  marginTop: "1px",
                   color: "#fff"
                 }}>
                   {sug.name}
@@ -3463,7 +3458,7 @@ export default function POSModule() {
         <div
           className="glass-panel"
           style={{
-            padding: "8px 14px",
+            padding: "4px 10px",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -3472,7 +3467,7 @@ export default function POSModule() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{ fontSize: "0.8rem", fontWeight: "bold", color: isOffline ? "#ef4444" : "var(--color-primary)" }}>
+            <span style={{ fontSize: "0.78rem", fontWeight: "bold", color: isOffline ? "#ef4444" : "var(--color-primary)" }}>
               {isOffline ? "⚠️ Terminal Offline" : "☁️ Terminal Nube"}
             </span>
           </div>

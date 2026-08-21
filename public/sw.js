@@ -1,4 +1,4 @@
-const CACHE_NAME = 'erika-pos-cache-v3';
+const CACHE_NAME = 'erika-pos-cache-v4';
 const OFFLINE_URLS = [
   '/',
   '/caja',
