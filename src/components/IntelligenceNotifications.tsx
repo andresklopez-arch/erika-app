@@ -107,6 +107,22 @@ export default function IntelligenceNotifications() {
         });
       }
 
+      // 5. Auditoría de Reimpresiones de Tickets (Últimos 7 días) - Siempre reportado
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: reprintData } = await supabase
+        .from("error_logs")
+        .select("id")
+        .eq("module", "Ticket_Reimpresion")
+        .gte("created_at", sevenDaysAgo);
+
+      const reprintCount = reprintData ? reprintData.length : 0;
+      activeAlerts.push({
+        id: "reprints-report-7d",
+        type: reprintCount >= 15 ? "warning" : "info",
+        message: `🖨️ Auditoría: ${reprintCount} ticket(s) reimpreso(s) en los últimos 7 días.`,
+        targetPath: "/"
+      });
+
       setAlerts(activeAlerts);
     } catch (e) {
       console.error("Error al cargar alertas de inteligencia:", e);
@@ -132,6 +148,9 @@ export default function IntelligenceNotifications() {
          fetchAlerts();
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "business_losses" }, () => {
+         fetchAlerts();
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "error_logs" }, () => {
          fetchAlerts();
       })
       .subscribe();

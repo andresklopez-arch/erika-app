@@ -505,17 +505,32 @@ export default function POSModule() {
      
      triggerPrint({
         type: "ticket",
+        isReprint: true,
         data: {
            realTicketId: ticket.id,
            items: ticketItems,
-           finalTotal: ticket.total,
+           finalTotal: Number(ticket.total) || 0,
            discountPct: ticket.discount_pct || 0,
            applyIva: ticket.apply_iva || false,
            paymentMethod: ticket.notes ? (ticket.notes.toLowerCase().includes("efectivo") ? "efectivo" : ticket.notes.toLowerCase().includes("tarjeta") ? "tarjeta" : ticket.notes.toLowerCase().includes("transferencia") ? "transferencia" : "mixto") : "efectivo",
            customerName: ticket.customer_name && ticket.customer_name !== "Venta Mostrador" ? ticket.customer_name : ""
         }
      });
-     toast.success(`🖨️ Reenviando Ticket #${ticket.id} a la cola de impresión.`);
+
+     // Registrar log silencioso de auditoría para trazabilidad de reimpresiones
+     LoggerService.logError(
+       "Ticket_Reimpresion",
+       JSON.stringify({
+         ticket_id: ticket.id,
+         total: ticket.total,
+         items_count: ticketItems.length,
+         cliente: ticket.customer_name || "Mostrador",
+         reimpreso_en: new Date().toISOString()
+       }),
+       currentUser?.name || currentUser?.role || "Cajero"
+     );
+
+     toast.success(`🖨️ Reenviando Copia Reimpresa Ticket #${ticket.id}`);
   };
 
   const handleSaveTicketNote = async (ticketId: number, currentNotes: string) => {
@@ -1926,7 +1941,14 @@ export default function POSModule() {
     const maxCols = paperSize === "58mm" ? 30 : 42;
     const divider = "-".repeat(maxCols) + "\n";
     
-    if (job.isCopy) {
+    if (job.isReprint) {
+      const nowStr = new Date().toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" });
+      setAlign(1);
+      setBold(true);
+      writeText(`*** COPIA REIMPRESA - ${nowStr} ***\n`);
+      setBold(false);
+      writeText(divider);
+    } else if (job.isCopy) {
       setAlign(1);
       setBold(true);
       writeText("*** COPIA PARA EL NEGOCIO ***\n");
@@ -2410,7 +2432,10 @@ export default function POSModule() {
       return;
     }
 
-    const copyLabelHtml = job.isCopy 
+    const nowStr = new Date().toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" });
+    const copyLabelHtml = job.isReprint
+      ? `<div style="text-align:center; font-weight:bold; border: 2px dashed #000; padding: 6px; margin-bottom: 12px; font-size: 0.85em; background: #eee;">*** COPIA REIMPRESA - ${nowStr} ***</div>`
+      : job.isCopy 
       ? `<div style="text-align:center; font-weight:bold; border: 2px dashed #000; padding: 6px; margin-bottom: 12px; font-size: 0.9em; background: #eee;">*** COPIA PARA EL NEGOCIO ***</div>`
       : "";
 
