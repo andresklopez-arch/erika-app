@@ -3313,20 +3313,20 @@ export default function POSModule() {
             </button>
           </form>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-            <h3 style={{ color: "var(--color-secondary)", margin: 0, fontSize: "0.92rem", fontWeight: "bold" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+            <h3 style={{ color: "var(--color-secondary)", margin: 0, fontSize: "0.85rem", fontWeight: "bold" }}>
               ⚡ Atajos Rápidos (24 Más Vendidos)
             </h3>
-            <span style={{ fontSize: "0.7rem", opacity: 0.6 }}>3 por fila • 24 productos</span>
+            <span style={{ fontSize: "0.68rem", opacity: 0.6 }}>3 por fila • 24 productos</span>
           </div>
           <div
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(3, 1fr)",
-              gap: "6px",
-              maxHeight: "180px",
+              gap: "4px",
+              maxHeight: "140px",
               overflowY: "auto",
-              paddingRight: "4px",
+              paddingRight: "3px",
             }}
           >
             {(topSellingProducts.length > 0 ? topSellingProducts.slice(0, 24) : globalCatalog.slice(0, 24)).map((c, i) => (
@@ -3337,24 +3337,25 @@ export default function POSModule() {
                 style={{
                   background: "rgba(255,255,255,0.05)",
                   border: "1px solid rgba(255,255,255,0.08)",
-                  padding: "5px 6px",
-                  borderRadius: "6px",
-                  fontSize: "0.72rem",
+                  padding: "3px 5px",
+                  borderRadius: "5px",
+                  fontSize: "0.68rem",
                   textAlign: "left",
                   display: "flex",
                   flexDirection: "column",
                   justifyContent: "space-between",
-                  minHeight: "44px",
-                  lineHeight: "1.15",
+                  minHeight: "34px",
+                  lineHeight: "1.1",
+                  cursor: "pointer"
                 }}
                 onClick={() => addProductToCart(c)}
-                title={`${c.name} - $${c.price}`}
+                title={`${c.name} • Precio: $${c.price} • Stock: ${c.stock ?? 0}`}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", width: "100%", gap: "4px" }}>
-                  <span style={{ color: "var(--color-primary)", fontWeight: "bold", fontSize: "0.68rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", width: "100%", gap: "3px" }}>
+                  <span style={{ color: "var(--color-primary)", fontWeight: "bold", fontSize: "0.65rem" }}>
                     [{i + 1}]
                   </span>
-                  <strong style={{ color: "var(--color-secondary)", fontSize: "0.72rem" }}>
+                  <strong style={{ color: "var(--color-secondary)", fontSize: "0.68rem" }}>
                     ${c.price}
                   </strong>
                 </div>
@@ -3365,7 +3366,7 @@ export default function POSModule() {
                   width: "100%",
                   display: "block",
                   opacity: 0.9,
-                  marginTop: "2px"
+                  marginTop: "1px"
                 }}>
                   {c.name}
                 </span>
@@ -3379,16 +3380,16 @@ export default function POSModule() {
           style={{
             background: "linear-gradient(135deg, rgba(16, 185, 129, 0.08), transparent)",
             border: "1px solid var(--color-secondary)",
-            padding: "10px 14px",
+            padding: "6px 10px",
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-            <h3 style={{ color: "var(--color-secondary)", margin: 0, fontSize: "0.92rem", display: "flex", alignItems: "center", gap: "6px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+            <h3 style={{ color: "var(--color-secondary)", margin: 0, fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "5px" }}>
               <span>🧠</span>
               <span>ERIKA Sugiere Ofrecer (8 Artículos):</span>
             </h3>
             {activeTicket.items.length > 0 && (
-              <span style={{ fontSize: "0.68rem", color: "#10b981", fontWeight: "bold" }}>
+              <span style={{ fontSize: "0.65rem", color: "#10b981", fontWeight: "bold" }}>
                 ✨ Asociados a esta venta
               </span>
             )}
@@ -3397,7 +3398,7 @@ export default function POSModule() {
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(4, 1fr)",
-              gap: "6px",
+              gap: "4px",
             }}
           >
             {getCrossSellSuggestions().map((sug, idx) => (
@@ -3407,15 +3408,15 @@ export default function POSModule() {
                 style={{
                   background: "rgba(0,0,0,0.35)",
                   border: "1px solid rgba(255,255,255,0.06)",
-                  padding: "5px 6px",
-                  borderRadius: "6px",
+                  padding: "3px 5px",
+                  borderRadius: "5px",
                   display: "flex",
                   flexDirection: "column",
                   justifyContent: "space-between",
-                  minHeight: "46px",
+                  minHeight: "34px",
                   cursor: "pointer",
                   transition: "all 0.15s ease",
-                  lineHeight: "1.15",
+                  lineHeight: "1.1",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = "var(--color-secondary)";
@@ -3425,30 +3426,30 @@ export default function POSModule() {
                   e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
                   e.currentTarget.style.background = "rgba(0,0,0,0.35)";
                 }}
-                title={`Clic para agregar ${sug.name} ($${sug.price})`}
+                title={`${sug.name} • Precio: $${sug.price} (Clic para añadir a la nota)`}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-                  <strong style={{ color: "var(--color-primary)", fontSize: "0.72rem" }}>
+                  <strong style={{ color: "var(--color-primary)", fontSize: "0.68rem" }}>
                     ${sug.price}
                   </strong>
                   <span style={{
-                    fontSize: "0.65rem",
+                    fontSize: "0.6rem",
                     background: "var(--color-secondary)",
                     color: "black",
                     fontWeight: "bold",
-                    borderRadius: "3px",
-                    padding: "1px 4px"
+                    borderRadius: "2px",
+                    padding: "0px 3px"
                   }}>
-                    + Añadir
+                    +
                   </span>
                 </div>
                 <span style={{
-                  fontSize: "0.7rem",
+                  fontSize: "0.66rem",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
                   width: "100%",
-                  marginTop: "2px",
+                  marginTop: "1px",
                   color: "#fff"
                 }}>
                   {sug.name}
