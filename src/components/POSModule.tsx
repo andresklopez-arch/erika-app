@@ -3300,10 +3300,10 @@ export default function POSModule() {
         <div
           style={{
             display: "flex",
-            gap: "5px",
-            marginBottom: "12px",
+            gap: "4px",
+            marginBottom: "4px",
             overflowX: "auto",
-            paddingBottom: "6px",
+            paddingBottom: "2px",
           }}
         >
           {tickets.map((t) => (
@@ -3312,10 +3312,13 @@ export default function POSModule() {
               onClick={() => setActiveTicketId(t.id)}
               className={`btn-primary ${activeTicketId !== t.id ? "inactive" : ""}`}
               style={{
-                padding: "6px 14px",
-                borderRadius: "16px",
-                fontSize: "0.85rem",
-                opacity: activeTicketId === t.id ? 1 : 0.5,
+                padding: "3px 8px",
+                borderRadius: "8px",
+                fontSize: "0.72rem",
+                fontWeight: "600",
+                opacity: activeTicketId === t.id ? 1 : 0.45,
+                lineHeight: "1.2",
+                whiteSpace: "nowrap",
               }}
             >
               Cliente {t.id}
@@ -3376,8 +3379,8 @@ export default function POSModule() {
             overflowY: "auto",
             background: "rgba(0,0,0,0.2)",
             borderRadius: "8px",
-            padding: "10px",
-            marginBottom: "20px",
+            padding: "8px",
+            marginBottom: "8px",
           }}
         >
           <ul style={{ listStyle: "none" }}>
@@ -3535,7 +3538,7 @@ export default function POSModule() {
         <div
           style={{
             background: "rgba(255,255,255,0.05)",
-            padding: "20px",
+            padding: "12px 16px",
             borderRadius: "12px",
           }}
         >
@@ -3575,14 +3578,6 @@ export default function POSModule() {
                 {activeTicket.discountPct > 0 ? `-${activeTicket.discountPct.toFixed(1)}%` : `+${Math.abs(activeTicket.discountPct).toFixed(1)}%`}
               </span>
             )}
-          </div>
-
-          <div
-            className="flex-between"
-            style={{ marginBottom: "10px", color: "rgba(255,255,255,0.6)" }}
-          >
-            <span>Subtotal</span>
-            <span>${formatPrice(subtotal)}</span>
           </div>
           
           {itemDiscountsSavings > 0 && (
