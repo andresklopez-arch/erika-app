@@ -3321,9 +3321,6 @@ export default function POSModule() {
               display: "grid",
               gridTemplateColumns: "repeat(3, 1fr)",
               gap: "3px",
-              maxHeight: "115px",
-              overflowY: "auto",
-              paddingRight: "3px",
             }}
           >
             {(topSellingProducts.length > 0 ? topSellingProducts.slice(0, 24) : globalCatalog.slice(0, 24)).map((c, i) => (
