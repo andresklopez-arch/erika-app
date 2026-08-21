@@ -1,4 +1,4 @@
-const CACHE_NAME = 'erika-pos-cache-v1';
+const CACHE_NAME = 'erika-pos-cache-v2';
 const OFFLINE_URLS = [
   '/',
   '/caja',
@@ -28,19 +28,35 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Solo aplicamos caché para requests GET y no para la API de Supabase
-  if (event.request.method !== 'GET' || event.request.url.includes('supabase.co')) {
+  // Solo aplicamos caché para requests GET y no para la API de Supabase ni APIs internas
+  if (event.request.method !== 'GET' || event.request.url.includes('supabase.co') || event.request.url.includes('/api/')) {
     return;
   }
 
+  // Para navegaciones (HTML): Network First para ver cambios desplegados al instante sin quedar atrapado en caché
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.status === 200) {
+            const responseClone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+          }
+          return response;
+        })
+        .catch(() => {
+          return caches.match(event.request).then((cachedResponse) => {
+            return cachedResponse || caches.match('/caja');
+          });
+        })
+    );
+    return;
+  }
+
+  // Para otros assets estáticos: Cache First con fallback a fetch
   event.respondWith(
     caches.match(event.request).then((response) => {
-      return response || fetch(event.request).catch(() => {
-        // Fallback for offline if page requested
-        if (event.request.mode === 'navigate') {
-          return caches.match('/caja');
-        }
-      });
+      return response || fetch(event.request);
     })
   );
 });
@@ -49,11 +65,7 @@ self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-offline-sales') {
     event.waitUntil(
       (async () => {
-        // En un SW real, usaríamos IndexedDB aquí para enviar las ventas
-        // Para Next.js PWA, solemos disparar la lógica al recargar la app en línea,
-        // pero registramos el evento exitoso de Background Sync:
         console.log("Background Sync activado: Sincronizando ventas pendientes...");
-        // Notificamos a las ventanas abiertas que pueden hacer fetch
         const clients = await self.clients.matchAll();
         for (const client of clients) {
           client.postMessage({ type: 'SYNC_SALES' });
