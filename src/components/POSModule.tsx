@@ -168,10 +168,54 @@ const renderHighlightedName = (name: string, query: string) => {
   });
 };
 
+const COMPANION_RULES: { keywords: string[]; complements: string[] }[] = [
+  {
+    keywords: ["pintura", "esmalte", "vinilica", "aerosol", "impermeabilizante", "barniz", "sellador", "tinte", "laca", "thinner", "aguarras", "esmalack", "comex", "sayer"],
+    complements: ["brocha", "rodillo", "charola", "thinner", "cinta masking", "masking", "lija", "espatula", "plastico"]
+  },
+  {
+    keywords: ["repisa", "madera", "tabla", "triplay", "soporte", "mensula", "escuadra", "mueble", "closet"],
+    complements: ["pija", "taquete", "tornillo", "broca", "mensula", "desarmador", "nivel", "pegamento", "lija"]
+  },
+  {
+    keywords: ["silicon", "silicona", "sellador", "no mas clavos", "adhesivo", "cemento de contacto", "resistol"],
+    complements: ["pistola", "espatula", "cinta", "cutter", "exacto", "estopa", "alcohol"]
+  },
+  {
+    keywords: ["tubo", "tuberia", "pvc", "cpvc", "cobre", "manguera", "llave", "mezcladora", "regadera", "cespol", "flotador", "tinaco", "valvula", "codo", "cople", "conector", "sanitario", "wc", "tarja"],
+    complements: ["teflon", "cinta teflon", "pegamento", "soldadura", "pasta", "perico", "stilson", "abrazadera", "empaque"]
+  },
+  {
+    keywords: ["cable", "alambre", "foco", "lampara", "led", "apagador", "contacto", "clavija", "socket", "breaker", "canaleta", "conduit", "placa"],
+    complements: ["cinta de aislar", "aislar", "guia", "pinza", "desarmador", "probador", "taquetes", "pijas"]
+  },
+  {
+    keywords: ["tornillo", "pija", "perno", "tuerca", "arandela", "clavo", "taquete", "remache"],
+    complements: ["desarmador", "broca", "taquete", "pinzas", "martillo", "rondana", "taladro"]
+  },
+  {
+    keywords: ["cerradura", "chapa", "candado", "bisagra", "cerrojo", "manija", "pomo"],
+    complements: ["tornillos", "pijas", "wd40", "lubricante", "broca", "desarmador"]
+  },
+  {
+    keywords: ["cemento", "yeso", "pegalulejo", "mortero", "cal", "arena"],
+    complements: ["cuchara", "llana", "espatula", "boti", "nivel", "guantes"]
+  },
+  {
+    keywords: ["disco", "corte", "sierra", "segueta", "arco", "esmeriladora", "pulidora"],
+    complements: ["lentes", "careta", "guantes", "disco", "desbaste"]
+  },
+  {
+    keywords: ["manguera", "aspersor", "pistola", "pala", "rastrillo", "tijera"],
+    complements: ["abrazadera", "conexion", "copla", "teflon", "guantes"]
+  }
+];
+
 export default function POSModule() {
   const { currentUser, businessSettings, bleCharacteristic, setBleCharacteristic } = useAuth();
   const businessProfile = useBusinessProfile();
   const [globalCatalog, setGlobalCatalog] = useState<any[]>([]);
+  const [topSellingProducts, setTopSellingProducts] = useState<any[]>([]);
   const [offlinePendingCount, setOfflinePendingCount] = useState(0);
   const [bleStatus, setBleStatus] = useState<BleStatusType>("disconnected");
 
@@ -895,6 +939,7 @@ export default function POSModule() {
         toast.error(`Error al cargar catálogo de inventario: ${lastError.message}`);
       } else if (allData.length > 0) {
         setGlobalCatalog(allData);
+        fetchTopSellingProducts(allData);
       }
 
       const { data: custData, error: custError } = await fetchActiveCustomers({
@@ -1894,16 +1939,100 @@ export default function POSModule() {
     }
   };
 
+  const fetchTopSellingProducts = async (catalog: any[]) => {
+    if (!catalog || catalog.length === 0) return;
+    try {
+      const { data: quotesData } = await supabase
+        .from("quotes")
+        .select("items")
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+      const salesTally: Record<string, number> = {};
+      if (quotesData && quotesData.length > 0) {
+        quotesData.forEach((q: any) => {
+          let items: any[] = [];
+          if (typeof q.items === "string") {
+            try { items = JSON.parse(q.items); } catch {}
+          } else if (Array.isArray(q.items)) {
+            items = q.items;
+          }
+          items.forEach((it: any) => {
+            const name = (it.name || "").trim().toLowerCase();
+            if (name) {
+              salesTally[name] = (salesTally[name] || 0) + (Number(it.qty) || 1);
+            }
+          });
+        });
+      }
+
+      const sorted = [...catalog].sort((a, b) => {
+        const countA = salesTally[a.name.trim().toLowerCase()] || 0;
+        const countB = salesTally[b.name.trim().toLowerCase()] || 0;
+        if (countB !== countA) return countB - countA;
+        return (b.stock || 0) - (a.stock || 0);
+      });
+
+      setTopSellingProducts(sorted.slice(0, 24));
+    } catch (e) {
+      console.warn("Falla al calcular top 24 productos más vendidos:", e);
+      setTopSellingProducts(catalog.slice(0, 24));
+    }
+  };
+
   const getCrossSellSuggestions = () => {
     if (globalCatalog.length === 0) return [];
-    return globalCatalog
-      .slice(0, 3)
-      .map((p) => ({
-        name: p.name,
-        price: p.price,
-        cost: p.cost,
-        image_url: p.image_url,
-      }));
+    
+    // Nombres de artículos en el carrito actual para no sugerir lo que ya se agregó
+    const cartItemNames = new Set(activeTicket.items.map((i) => i.name.trim().toLowerCase()));
+    
+    const suggestedProducts: any[] = [];
+    const addedIds = new Set<string>();
+
+    // 1. Si hay productos en la venta actual, buscar artículos que acompañan lógicamente
+    if (activeTicket.items.length > 0) {
+      const activeTicketWords = activeTicket.items.map((i) => i.name.toLowerCase()).join(" ");
+
+      const complementKeywords = new Set<string>();
+      COMPANION_RULES.forEach((rule) => {
+        const matchesKeyword = rule.keywords.some((kw) => activeTicketWords.includes(kw));
+        if (matchesKeyword) {
+          rule.complements.forEach((comp) => complementKeywords.add(comp));
+        }
+      });
+
+      if (complementKeywords.size > 0) {
+        for (const prod of globalCatalog) {
+          if (suggestedProducts.length >= 8) break;
+          const prodNameLower = prod.name.toLowerCase();
+          if (cartItemNames.has(prodNameLower)) continue;
+          if (addedIds.has(prod.id)) continue;
+
+          for (const compKw of complementKeywords) {
+            if (prodNameLower.includes(compKw)) {
+              suggestedProducts.push(prod);
+              addedIds.add(prod.id);
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Si aún faltan para completar los 8 artículos, rellenar con productos de alta rotación del catálogo
+    if (suggestedProducts.length < 8) {
+      for (const prod of globalCatalog) {
+        if (suggestedProducts.length >= 8) break;
+        const prodNameLower = prod.name.toLowerCase();
+        if (cartItemNames.has(prodNameLower)) continue;
+        if (addedIds.has(prod.id)) continue;
+
+        suggestedProducts.push(prod);
+        addedIds.add(prod.id);
+      }
+    }
+
+    return suggestedProducts.slice(0, 8);
   };
 
   const increaseFactor = activeTicket.discountPct < 0 ? (1 + Math.abs(activeTicket.discountPct) / 100) : 1;
@@ -3095,18 +3224,62 @@ export default function POSModule() {
             </button>
           </form>
 
-          <h3 style={{ color: "var(--color-secondary)", marginBottom: "10px" }}>
-            Atajos Rápidos (Teclado Numérico)
-          </h3>
-          <div className="grid-cols-2" style={{ gap: "10px" }}>
-            {globalCatalog.slice(0, 4).map((c, i) => (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <h3 style={{ color: "var(--color-secondary)", margin: 0, fontSize: "0.92rem", fontWeight: "bold" }}>
+              ⚡ Atajos Rápidos (24 Más Vendidos)
+            </h3>
+            <span style={{ fontSize: "0.7rem", opacity: 0.6 }}>3 por fila • 24 productos</span>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: "6px",
+              maxHeight: "180px",
+              overflowY: "auto",
+              paddingRight: "4px",
+            }}
+          >
+            {(topSellingProducts.length > 0 ? topSellingProducts.slice(0, 24) : globalCatalog.slice(0, 24)).map((c, i) => (
               <button
                 key={c.id}
+                type="button"
                 className="btn-primary"
-                style={{ background: "rgba(255,255,255,0.05)" }}
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  padding: "5px 6px",
+                  borderRadius: "6px",
+                  fontSize: "0.72rem",
+                  textAlign: "left",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  minHeight: "44px",
+                  lineHeight: "1.15",
+                }}
                 onClick={() => addProductToCart(c)}
+                title={`${c.name} - $${c.price}`}
               >
-                [{i + 1}] {c.name.substring(0, 15)}...
+                <div style={{ display: "flex", justifyContent: "space-between", width: "100%", gap: "4px" }}>
+                  <span style={{ color: "var(--color-primary)", fontWeight: "bold", fontSize: "0.68rem" }}>
+                    [{i + 1}]
+                  </span>
+                  <strong style={{ color: "var(--color-secondary)", fontSize: "0.72rem" }}>
+                    ${c.price}
+                  </strong>
+                </div>
+                <span style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  width: "100%",
+                  display: "block",
+                  opacity: 0.9,
+                  marginTop: "2px"
+                }}>
+                  {c.name}
+                </span>
               </button>
             ))}
           </div>
@@ -3115,40 +3288,82 @@ export default function POSModule() {
         <div
           className="glass-panel"
           style={{
-            background:
-              "linear-gradient(135deg, rgba(16, 185, 129, 0.1), transparent)",
+            background: "linear-gradient(135deg, rgba(16, 185, 129, 0.08), transparent)",
             border: "1px solid var(--color-secondary)",
+            padding: "10px 14px",
           }}
         >
-          <h3 style={{ color: "var(--color-secondary)", marginBottom: "10px" }}>
-            🧠 ERIKA Sugiere Ofrecer:
-          </h3>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <h3 style={{ color: "var(--color-secondary)", margin: 0, fontSize: "0.92rem", display: "flex", alignItems: "center", gap: "6px" }}>
+              <span>🧠</span>
+              <span>ERIKA Sugiere Ofrecer (8 Artículos):</span>
+            </h3>
+            {activeTicket.items.length > 0 && (
+              <span style={{ fontSize: "0.68rem", color: "#10b981", fontWeight: "bold" }}>
+                ✨ Asociados a esta venta
+              </span>
+            )}
+          </div>
           <div
-            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
+              gap: "6px",
+            }}
           >
             {getCrossSellSuggestions().map((sug, idx) => (
               <div
                 key={idx}
-                className="flex-between"
+                onClick={() => addProductToCart(sug)}
                 style={{
-                  background: "rgba(0,0,0,0.3)",
-                  padding: "10px",
-                  borderRadius: "8px",
+                  background: "rgba(0,0,0,0.35)",
+                  border: "1px solid rgba(255,255,255,0.06)",
+                  padding: "5px 6px",
+                  borderRadius: "6px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  minHeight: "46px",
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                  lineHeight: "1.15",
                 }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "var(--color-secondary)";
+                  e.currentTarget.style.background = "rgba(16, 185, 129, 0.15)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
+                  e.currentTarget.style.background = "rgba(0,0,0,0.35)";
+                }}
+                title={`Clic para agregar ${sug.name} ($${sug.price})`}
               >
-                <span>
-                  {sug.name}{" "}
-                  <strong style={{ color: "var(--color-primary)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                  <strong style={{ color: "var(--color-primary)", fontSize: "0.72rem" }}>
                     ${sug.price}
                   </strong>
+                  <span style={{
+                    fontSize: "0.65rem",
+                    background: "var(--color-secondary)",
+                    color: "black",
+                    fontWeight: "bold",
+                    borderRadius: "3px",
+                    padding: "1px 4px"
+                  }}>
+                    + Añadir
+                  </span>
+                </div>
+                <span style={{
+                  fontSize: "0.7rem",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  width: "100%",
+                  marginTop: "2px",
+                  color: "#fff"
+                }}>
+                  {sug.name}
                 </span>
-                <button
-                  className="btn-primary"
-                  style={{ padding: "4px 8px", fontSize: "0.8rem" }}
-                  onClick={() => addProductToCart(sug)}
-                >
-                  + Añadir
-                </button>
               </div>
             ))}
           </div>
