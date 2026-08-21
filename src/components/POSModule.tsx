@@ -4302,6 +4302,7 @@ export default function POSModule() {
           </button>
         </div>
       </div>
+    </div>
       
       {/* Printable Receipt Area */}
       <div 
