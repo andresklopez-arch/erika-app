@@ -163,7 +163,7 @@ export default function IntelligenceNotifications() {
       ref={dropdownRef}
       style={{
         position: "fixed",
-        top: "15px",
+        top: "8px",
         left: "50%",
         transform: "translateX(-50%)",
         zIndex: 9999,
@@ -178,7 +178,7 @@ export default function IntelligenceNotifications() {
         style={{ 
           display: "flex", 
           alignItems: "center", 
-          gap: "10px",
+          gap: "8px",
           cursor: "pointer",
           transition: "transform 0.2s ease"
         }}
@@ -194,35 +194,35 @@ export default function IntelligenceNotifications() {
           style={{
             display: "flex",
             alignItems: "center",
-            gap: "8px",
+            gap: "6px",
             background: "rgba(22, 22, 34, 0.75)",
             backdropFilter: "blur(10px)",
             border: "1px solid var(--glass-border)",
-            padding: "6px 14px 6px 8px",
-            borderRadius: "20px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
+            padding: "3px 8px 3px 6px",
+            borderRadius: "16px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.3)"
           }}
         >
           <Image
             src="/erika_avatar.png"
             alt="ERIKA"
-            width={24}
-            height={24}
+            width={18}
+            height={18}
             style={{
               borderRadius: "50%",
               border: "1.5px solid var(--color-primary)",
               objectFit: "cover"
             }}
           />
-          <span style={{ fontSize: "0.85rem", fontWeight: "bold", color: "white" }}>
+          <span style={{ fontSize: "0.75rem", fontWeight: "bold", color: "white" }}>
             {currentUser?.name || "ERIKA"}
           </span>
           <span style={{ 
-            fontSize: "0.7rem", 
+            fontSize: "0.65rem", 
             background: currentUser?.role === "admin" ? "rgba(244, 63, 94, 0.15)" : "rgba(16, 185, 129, 0.15)",
             color: currentUser?.role === "admin" ? "var(--color-primary)" : "var(--color-secondary)",
-            padding: "2px 6px",
-            borderRadius: "10px",
+            padding: "1px 5px",
+            borderRadius: "8px",
             fontWeight: "600"
           }}>
             {currentUser?.role?.toUpperCase() || "OFFLINE"}
@@ -238,29 +238,29 @@ export default function IntelligenceNotifications() {
             backdropFilter: "blur(10px)",
             border: "1px solid rgba(255,255,255,0.1)",
             color: "white",
-            padding: "8px 16px",
-            borderRadius: "20px",
-            fontSize: "0.85rem",
+            padding: "3px 10px",
+            borderRadius: "16px",
+            fontSize: "0.75rem",
             fontWeight: "bold",
             display: "flex",
             alignItems: "center",
-            gap: "8px",
+            gap: "6px",
             boxShadow: hasUrgentAlerts 
-              ? "0 4px 15px rgba(239, 68, 68, 0.4), 0 0 0 1px rgba(239,68,68,0.2)"
-              : "0 4px 12px rgba(0,0,0,0.3)",
+              ? "0 3px 10px rgba(239, 68, 68, 0.4), 0 0 0 1px rgba(239,68,68,0.2)"
+              : "0 2px 8px rgba(0,0,0,0.3)",
             animation: hasUrgentAlerts ? "pulse-alert 2s infinite" : "none"
           }}
         >
-          <span>{hasUrgentAlerts ? "🚨" : "🧠"}</span>
+          <span style={{ fontSize: "0.75rem" }}>{hasUrgentAlerts ? "🚨" : "🧠"}</span>
           <span>{hasUrgentAlerts ? `${alerts.length} Alertas` : "Erika Inteligencia"}</span>
           {alerts.length > 0 && alerts[0].id !== "erika-ok" && (
             <span style={{
               background: "white",
               color: "#ef4444",
               borderRadius: "50%",
-              width: "18px",
-              height: "18px",
-              fontSize: "0.75rem",
+              width: "15px",
+              height: "15px",
+              fontSize: "0.65rem",
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
@@ -279,7 +279,7 @@ export default function IntelligenceNotifications() {
           onClick={(e) => e.stopPropagation()}
           style={{
             position: "absolute",
-            top: "50px",
+            top: "38px",
             width: "360px",
             background: "rgba(22, 22, 34, 0.96)",
             border: "1px solid var(--glass-border)",
