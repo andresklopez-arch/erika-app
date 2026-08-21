@@ -272,7 +272,18 @@ body {
   opacity: 1;
 }
 
-/* Responsividad para pantallas pequeñas */
+.main-content {
+  padding: 12px 16px;
+  transition: padding 0.2s ease;
+}
+
+/* Responsividad para pantallas pequeñas y medianas */
+@media (max-width: 1024px) {
+  .main-content {
+    padding: 8px 10px !important;
+  }
+}
+
 @media (max-width: 768px) {
   .sidebar-container {
     width: 60px !important;
@@ -301,7 +312,7 @@ body {
     margin-right: 0 !important;
   }
   .main-content {
-    padding: 10px !important;
+    padding: 6px 8px !important;
   }
 }
 

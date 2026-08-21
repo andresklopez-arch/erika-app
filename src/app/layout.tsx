@@ -5,6 +5,7 @@ import Sidebar from "../components/Sidebar";
 import HomeButton from "../components/HomeButton";
 import IntelligenceNotifications from "../components/IntelligenceNotifications";
 import TasksWidget from "../components/TasksWidget";
+import VersionUpdateNotifier from "../components/VersionUpdateNotifier";
 import { Toaster } from "react-hot-toast";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -38,12 +39,13 @@ export default function RootLayout({
             style={{ display: "flex", minHeight: "100vh" }}
           >
             <Sidebar />
-            <main className="main-content" style={{ flex: 1, padding: "20px", display: "flex", flexDirection: "column", minWidth: 0 }}>
+            <main className="main-content" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
               <IntelligenceNotifications />
               <HomeButton />
               {children}
             </main>
             <TasksWidget />
+            <VersionUpdateNotifier />
           </div>
         </AuthProvider>
         <Toaster position="top-right" containerStyle={{ zIndex: 999999 }} />
