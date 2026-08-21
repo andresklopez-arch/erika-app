@@ -3675,15 +3675,20 @@ export default function POSModule() {
           <div
             className="flex-between"
             style={{
-              marginBottom: "20px",
-              fontSize: "1.5rem",
-              fontWeight: "bold",
+              marginBottom: "12px",
               borderTop: "1px solid rgba(255,255,255,0.2)",
-              paddingTop: "15px",
+              paddingTop: "10px",
+              alignItems: "center"
             }}
           >
-            <span>TOTAL</span>
-            <span style={{ color: "var(--color-secondary)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "1.4rem", fontWeight: "bold" }}>TOTAL</span>
+              <label style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer", fontSize: "0.76rem", color: applyIva ? "#3b82f6" : "var(--color-secondary)", opacity: 0.9 }}>
+                <input type="checkbox" checked={applyIva} onChange={(e) => setApplyIva(e.target.checked)} style={{ width: "13px", height: "13px", accentColor: "#3b82f6", cursor: "pointer" }} />
+                <span>Cobrar IVA (16%)</span>
+              </label>
+            </div>
+            <span style={{ color: "var(--color-secondary)", fontSize: "1.5rem", fontWeight: "bold" }}>
               ${formatPrice(finalTotal)}
             </span>
           </div>
@@ -3884,13 +3889,6 @@ export default function POSModule() {
               )}
             </div>
           )}
-
-          <div style={{ marginBottom: "15px", display: "flex", justifyContent: "flex-end" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.9rem", color: applyIva ? "#3b82f6" : "var(--color-secondary)" }}>
-              <input type="checkbox" checked={applyIva} onChange={(e) => setApplyIva(e.target.checked)} style={{ width: "16px", height: "16px", accentColor: "#3b82f6" }} />
-              Cobrar IVA (16%)
-            </label>
-          </div>
 
           <div>
             {selectedCustomerId && customers.find(c => c.id === selectedCustomerId)?.points > 0 && (
