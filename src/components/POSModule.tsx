@@ -563,26 +563,51 @@ export default function POSModule() {
   const fetchTicketsHistory = async () => {
     setIsLoadingTicketsHistory(true);
     try {
-      const { data, error } = await supabase
-        .from("quotes")
-        .select("id, created_at, total, items, discount_pct, apply_iva, notes, customer_name, customer_id, status")
-        .order("created_at", { ascending: false })
-        .limit(100);
+      // 1. Cargar transacciones offline locales primero si existen
+      let localOfflineList: any[] = [];
+      try {
+        const off = await getOfflineTransactions();
+        if (off && off.length > 0) {
+          localOfflineList = off.map((tx: any) => ({
+            id: tx.id || `OFF-${tx.offlineId || 1}`,
+            created_at: tx.timestamp || new Date().toISOString(),
+            total: Number(tx.data?.finalTotal || tx.total || 0),
+            items: tx.data?.items || tx.items || [],
+            notes: tx.data?.paymentMethod ? `Pago: ${String(tx.data.paymentMethod).toUpperCase()}` : "Offline",
+            customer_name: tx.data?.customerName || tx.customer_name || "Venta Mostrador",
+            status: "offline"
+          }));
+        }
+      } catch (e) {
+        console.warn("No se pudieron leer ventas offline:", e);
+      }
 
-      if (error) {
-        const fallback = await supabase
-          .from("quotes")
-          .select("id, created_at, total, items")
-          .order("created_at", { ascending: false })
-          .limit(100);
-        if (fallback.error) throw fallback.error;
-        setTicketsHistoryList(fallback.data || []);
+      // 2. Consulta a Supabase con protección de timeout de 6 segundos
+      const fetchPromise = supabase
+        .from("quotes")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      const timeoutPromise = new Promise<{ data: null; error: any }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: new Error("Tiempo de espera agotado") }), 6000)
+      );
+
+      const res = await Promise.race([fetchPromise, timeoutPromise]);
+      const data = res?.data;
+
+      if (data && Array.isArray(data)) {
+        // Unir datos de la nube con transacciones offline locales si las hay
+        setTicketsHistoryList([...localOfflineList, ...data]);
+      } else if (localOfflineList.length > 0) {
+        setTicketsHistoryList(localOfflineList);
       } else {
-        setTicketsHistoryList(data || []);
+        setTicketsHistoryList([]);
       }
     } catch (err: any) {
       console.error("Error fetching tickets history:", err);
-      toast.error("Error al cargar tickets anteriores: " + err.message);
+      toast.error("Error al cargar historial: " + (err.message || err));
+      setTicketsHistoryList([]);
     } finally {
       setIsLoadingTicketsHistory(false);
     }
