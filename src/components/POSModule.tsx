@@ -621,6 +621,26 @@ export default function POSModule() {
     fetchTicketsHistory();
   };
 
+  const handleCloseTicket = (e: React.MouseEvent, ticketId: number) => {
+    e.stopPropagation();
+    if (tickets.length <= 1) {
+      toast("Debe haber al menos 1 nota abierta.");
+      return;
+    }
+    const ticketToClose = tickets.find((t) => t.id === ticketId);
+    if (ticketToClose && ticketToClose.items.length > 0) {
+      if (!confirm(`El Cliente ${ticketId} tiene ${ticketToClose.items.length} producto(s) en su nota. ¿Deseas descartar y cerrar esta nota?`)) {
+        return;
+      }
+    }
+    const newTickets = tickets.filter((t) => t.id !== ticketId);
+    setTickets(newTickets);
+    if (activeTicketId === ticketId) {
+      setActiveTicketId(newTickets[0].id);
+    }
+    toast.success(`Nota Cliente ${ticketId} cerrada.`);
+  };
+
   const requestPin = (title: string, message: string, callback: (pin: string) => void) => {
     setPinModalTitle(title);
     setPinModalMessage(message);
@@ -3306,24 +3326,69 @@ export default function POSModule() {
             paddingBottom: "2px",
           }}
         >
-          {tickets.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setActiveTicketId(t.id)}
-              className={`btn-primary ${activeTicketId !== t.id ? "inactive" : ""}`}
-              style={{
-                padding: "3px 8px",
-                borderRadius: "8px",
-                fontSize: "0.72rem",
-                fontWeight: "600",
-                opacity: activeTicketId === t.id ? 1 : 0.45,
-                lineHeight: "1.2",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Cliente {t.id}
-            </button>
-          ))}
+          {tickets.map((t) => {
+            const hasItems = t.items && t.items.length > 0;
+            const isActive = activeTicketId === t.id;
+            return (
+              <div
+                key={t.id}
+                onClick={() => setActiveTicketId(t.id)}
+                className={`btn-primary ${!isActive ? "inactive" : ""}`}
+                style={{
+                  padding: "3px 6px 3px 7px",
+                  borderRadius: "8px",
+                  fontSize: "0.72rem",
+                  fontWeight: "600",
+                  opacity: isActive ? 1 : 0.5,
+                  lineHeight: "1.2",
+                  whiteSpace: "nowrap",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  cursor: "pointer",
+                  border: hasItems ? "1px solid #10b981" : "1px solid transparent",
+                }}
+              >
+                {hasItems && (
+                  <span
+                    style={{
+                      width: "6px",
+                      height: "6px",
+                      borderRadius: "50%",
+                      background: "#10b981",
+                      boxShadow: "0 0 5px #10b981",
+                      display: "inline-block",
+                    }}
+                    title={`${t.items.length} producto(s) en nota`}
+                  />
+                )}
+                <span>Cliente {t.id}</span>
+                {hasItems && (
+                  <span style={{ fontSize: "0.65rem", opacity: 0.85, color: "#10b981" }}>
+                    ({t.items.length})
+                  </span>
+                )}
+                {tickets.length > 1 && (
+                  <span
+                    onClick={(e) => handleCloseTicket(e, t.id)}
+                    style={{
+                      marginLeft: "2px",
+                      padding: "0 2px",
+                      fontSize: "0.7rem",
+                      color: "rgba(255,255,255,0.6)",
+                      cursor: "pointer",
+                      borderRadius: "3px",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.6)")}
+                    title="Cerrar esta nota"
+                  >
+                    ✕
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {pendingPrintJob && (
