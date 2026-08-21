@@ -3917,7 +3917,7 @@ export default function POSModule() {
                   fontSize: "0.9rem",
                 }}
               >
-                % Descuento [F4]
+                % Desc/Aumen [F4]
               </button>
               <button
                 onClick={() => applyDiscount("fixed")}
