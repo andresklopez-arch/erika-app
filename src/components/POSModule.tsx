@@ -322,6 +322,14 @@ export default function POSModule() {
   const [isLoadingCustomerHistory, setIsLoadingCustomerHistory] = useState(false);
   const [historySearchTerm, setHistorySearchTerm] = useState("");
 
+  // Estados para Modal de Consulta y Reimpresión de Tickets Anteriores (Buscar Tickets)
+  const [showTicketsHistoryModal, setShowTicketsHistoryModal] = useState(false);
+  const [ticketsHistoryList, setTicketsHistoryList] = useState<any[]>([]);
+  const [isLoadingTicketsHistory, setIsLoadingTicketsHistory] = useState(false);
+  const [ticketSearchQuery, setTicketSearchQuery] = useState("");
+  const [ticketDateFilter, setTicketDateFilter] = useState("");
+  const [selectedHistoryTicket, setSelectedHistoryTicket] = useState<any | null>(null);
+
   useEffect(() => {
     if (selectedCustomerId) {
        const c = customers.find(cust => cust.id === selectedCustomerId);
@@ -535,6 +543,42 @@ export default function POSModule() {
        prev.map(t => t.id === ticketId ? { ...t, notes: newNotes.trim() } : t)
      );
      toast.success("✅ Nota de ticket actualizada.");
+  };
+
+  const fetchTicketsHistory = async () => {
+    setIsLoadingTicketsHistory(true);
+    try {
+      const { data, error } = await supabase
+        .from("quotes")
+        .select("id, created_at, total, items, discount_pct, apply_iva, notes, customer_name, customer_id, status")
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      if (error) {
+        const fallback = await supabase
+          .from("quotes")
+          .select("id, created_at, total, items")
+          .order("created_at", { ascending: false })
+          .limit(100);
+        if (fallback.error) throw fallback.error;
+        setTicketsHistoryList(fallback.data || []);
+      } else {
+        setTicketsHistoryList(data || []);
+      }
+    } catch (err: any) {
+      console.error("Error fetching tickets history:", err);
+      toast.error("Error al cargar tickets anteriores: " + err.message);
+    } finally {
+      setIsLoadingTicketsHistory(false);
+    }
+  };
+
+  const openTicketsHistoryModal = () => {
+    setTicketSearchQuery("");
+    setTicketDateFilter("");
+    setSelectedHistoryTicket(null);
+    setShowTicketsHistoryModal(true);
+    fetchTicketsHistory();
   };
 
   const requestPin = (title: string, message: string, callback: (pin: string) => void) => {
@@ -3139,17 +3183,36 @@ export default function POSModule() {
         className="glass-panel no-print"
         style={{ width: "450px", display: "flex", flexDirection: "column" }}
       >
-        <div className="flex-between" style={{ marginBottom: "15px" }}>
-          <h2 style={{ margin: 0 }}>🧾 Nota Virtual</h2>
-          <div style={{ display: "flex", gap: "10px" }}>
+        <div className="flex-between" style={{ marginBottom: "10px", alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={openTicketsHistoryModal}
+            className="btn-primary"
+            style={{
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid var(--glass-border)",
+              color: "white",
+              padding: "6px 12px",
+              fontSize: "0.8rem",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+            title="Consultar últimas ventas y buscar tickets para reimprimir"
+          >
+            <span>🎟️</span>
+            <span>Buscar Tickets / Ant.</span>
+          </button>
+
+          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
             {cancellations.length > 0 && (
               <button
                 className="btn-primary"
                 style={{
                   background: "transparent",
                   border: "1px solid var(--color-primary)",
-                  padding: "6px 12px",
-                  fontSize: "0.8rem",
+                  padding: "5px 10px",
+                  fontSize: "0.75rem",
                 }}
                 onClick={() =>
                   alert(
@@ -3164,7 +3227,12 @@ export default function POSModule() {
             )}
             <button
               className="btn-primary"
-              style={{ padding: "6px 12px", fontSize: "0.8rem" }}
+              style={{
+                background: "var(--color-primary)",
+                padding: "6px 12px",
+                fontSize: "0.8rem",
+                fontWeight: "bold"
+              }}
               onClick={() => {
                 setTickets([
                   ...tickets,
@@ -3183,9 +3251,9 @@ export default function POSModule() {
           style={{
             display: "flex",
             gap: "5px",
-            marginBottom: "20px",
+            marginBottom: "12px",
             overflowX: "auto",
-            paddingBottom: "10px",
+            paddingBottom: "6px",
           }}
         >
           {tickets.map((t) => (
@@ -3194,8 +3262,9 @@ export default function POSModule() {
               onClick={() => setActiveTicketId(t.id)}
               className={`btn-primary ${activeTicketId !== t.id ? "inactive" : ""}`}
               style={{
-                padding: "8px 15px",
-                borderRadius: "20px",
+                padding: "6px 14px",
+                borderRadius: "16px",
+                fontSize: "0.85rem",
                 opacity: activeTicketId === t.id ? 1 : 0.5,
               }}
             >
@@ -3213,8 +3282,8 @@ export default function POSModule() {
               backdropFilter: "blur(8px)",
               border: "1px solid var(--color-primary)",
               borderRadius: "12px",
-              padding: "12px 16px",
-              marginBottom: "15px",
+              padding: "10px 14px",
+              marginBottom: "12px",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
@@ -3226,13 +3295,13 @@ export default function POSModule() {
             onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span style={{ fontSize: "1.3rem" }}>⚠️</span>
+              <span style={{ fontSize: "1.2rem" }}>⚠️</span>
               <div>
-                <strong style={{ color: "var(--color-primary)", fontSize: "0.9rem", display: "block" }}>
+                <strong style={{ color: "var(--color-primary)", fontSize: "0.85rem", display: "block" }}>
                   Impresora Desconectada
                 </strong>
                 <span style={{ fontSize: "0.75rem", opacity: 0.8 }}>
-                  Hay un ticket en espera. Haz clic aquí para reconectar y auto-imprimir.
+                  Hay un ticket en espera. Haz clic para reconectar y auto-imprimir.
                 </span>
               </div>
             </div>
@@ -3240,7 +3309,7 @@ export default function POSModule() {
               style={{
                 background: "var(--color-primary)",
                 color: "white",
-                padding: "4px 10px",
+                padding: "4px 8px",
                 borderRadius: "6px",
                 fontSize: "0.75rem",
                 fontWeight: "bold",
@@ -3251,29 +3320,31 @@ export default function POSModule() {
           </div>
         )}
 
-        {!pendingPrintJob && lastPrintJob && (
-          <button
-            onClick={() => {
-              toast.success("Reimprimiendo el último ticket...");
-              executePrintWindow({ ...lastPrintJob, isCopy: false });
-            }}
-            style={{
-              background: "rgba(255,255,255,0.05)",
-              border: "1px dashed rgba(255,255,255,0.3)",
-              borderRadius: "8px",
-              padding: "6px 12px",
-              marginBottom: "15px",
-              cursor: "pointer",
-              fontSize: "0.75rem",
-              color: "inherit",
-              opacity: 0.8,
-              width: "100%",
-              textAlign: "left",
-            }}
-          >
-            🖨️ Reimprimir última venta
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={openTicketsHistoryModal}
+          style={{
+            background: "rgba(255,255,255,0.04)",
+            border: "1px dashed rgba(255,255,255,0.25)",
+            borderRadius: "8px",
+            padding: "6px 12px",
+            marginBottom: "12px",
+            cursor: "pointer",
+            fontSize: "0.75rem",
+            color: "inherit",
+            opacity: 0.85,
+            width: "100%",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            transition: "all 0.2s ease"
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = "1"}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = "0.85"}
+        >
+          <span>🎟️ Tickets Anteriores (Últimas 5 ventas / Buscar)</span>
+          <span style={{ color: "var(--color-secondary)", fontWeight: "bold" }}>🔍 Buscar / Reimprimir</span>
+        </button>
 
         <div
           style={{
@@ -5186,6 +5257,400 @@ export default function POSModule() {
             >
               Cerrar Historial
             </button>
+          </div>
+        </div>
+      )}
+
+      {showTicketsHistoryModal && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0,0,0,0.8)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 99999,
+          backdropFilter: "blur(6px)"
+        }}>
+          <div className="glass-panel animate-fade-in" style={{
+            padding: "24px",
+            width: "950px",
+            maxWidth: "96%",
+            maxHeight: "90vh",
+            display: "flex",
+            flexDirection: "column",
+            gap: "16px",
+            background: "rgba(20, 20, 32, 0.97)",
+            border: "1px solid var(--glass-border)",
+            boxShadow: "0 25px 60px rgba(0,0,0,0.7)",
+            borderRadius: "16px"
+          }}>
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: "12px" }}>
+              <div>
+                <h3 style={{ color: "var(--color-primary)", margin: 0, fontSize: "1.25rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                  🎟️ Consulta de Tickets Anteriores
+                </h3>
+                <span style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.5)" }}>
+                  Historial de ventas realizadas (Modo consulta / reimpresión)
+                </span>
+              </div>
+              <button
+                onClick={() => setShowTicketsHistoryModal(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#ef4444",
+                  fontSize: "1.3rem",
+                  cursor: "pointer"
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Buscador y Filtros */}
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+              <div style={{ flex: 1, minWidth: "220px", position: "relative" }}>
+                <input
+                  type="text"
+                  value={ticketSearchQuery}
+                  onChange={(e) => setTicketSearchQuery(e.target.value)}
+                  placeholder="🔍 Buscar por Nº Ticket, Artículo, Producto o Cliente..."
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    background: "rgba(0,0,0,0.35)",
+                    border: "1px solid var(--color-primary)",
+                    color: "white",
+                    fontSize: "0.85rem"
+                  }}
+                />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.7)" }}>📅 Fecha:</span>
+                <input
+                  type="date"
+                  value={ticketDateFilter}
+                  onChange={(e) => setTicketDateFilter(e.target.value)}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    background: "rgba(0,0,0,0.35)",
+                    border: "1px solid var(--glass-border)",
+                    color: "white",
+                    fontSize: "0.85rem"
+                  }}
+                />
+              </div>
+
+              {(ticketSearchQuery || ticketDateFilter) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTicketSearchQuery("");
+                    setTicketDateFilter("");
+                  }}
+                  className="btn-primary"
+                  style={{
+                    background: "rgba(255,255,255,0.08)",
+                    border: "1px solid rgba(255,255,255,0.15)",
+                    padding: "8px 12px",
+                    fontSize: "0.8rem"
+                  }}
+                >
+                  🔄 Ver Últimas 5
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={fetchTicketsHistory}
+                className="btn-primary"
+                style={{
+                  background: "transparent",
+                  border: "1px solid var(--color-secondary)",
+                  color: "var(--color-secondary)",
+                  padding: "8px 12px",
+                  fontSize: "0.8rem"
+                }}
+              >
+                {isLoadingTicketsHistory ? "⏳ Cargando..." : "🔄 Actualizar"}
+              </button>
+            </div>
+
+            {/* Contenido en dos columnas: Lista izquierda | Detalle derecha */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1.2fr",
+              gap: "16px",
+              flex: 1,
+              minHeight: 0,
+              maxHeight: "55vh",
+              overflow: "hidden"
+            }}>
+              {/* Columna Izquierda: Lista de Tickets */}
+              <div style={{
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+                paddingRight: "6px"
+              }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--color-secondary)", fontWeight: "bold" }}>
+                  {ticketSearchQuery === "" && ticketDateFilter === "" 
+                    ? "🕒 Últimas 5 Ventas Realizadas:" 
+                    : "📋 Resultados de la Búsqueda:"}
+                </div>
+
+                {isLoadingTicketsHistory ? (
+                  <div style={{ textAlign: "center", padding: "30px", opacity: 0.6 }}>
+                    Cargando ventas...
+                  </div>
+                ) : (() => {
+                  const filtered = ticketsHistoryList.filter((ticket) => {
+                    let itemsArr: any[] = [];
+                    if (typeof ticket.items === "string") {
+                      try { itemsArr = JSON.parse(ticket.items); } catch { itemsArr = []; }
+                    } else if (Array.isArray(ticket.items)) {
+                      itemsArr = ticket.items;
+                    }
+
+                    if (ticketDateFilter) {
+                      const ticketDate = ticket.created_at ? new Date(ticket.created_at).toISOString().split("T")[0] : "";
+                      if (ticketDate !== ticketDateFilter) return false;
+                    }
+
+                    if (ticketSearchQuery.trim()) {
+                      const q = ticketSearchQuery.trim().toLowerCase();
+                      const matchId = ticket.id ? ticket.id.toString().includes(q) : false;
+                      const matchCustomer = ticket.customer_name ? ticket.customer_name.toLowerCase().includes(q) : false;
+                      const matchNotes = ticket.notes ? ticket.notes.toLowerCase().includes(q) : false;
+                      const matchArticle = itemsArr.some((it: any) => 
+                        (it.name && it.name.toLowerCase().includes(q)) || 
+                        (it.code && it.code.toLowerCase().includes(q))
+                      );
+                      return matchId || matchCustomer || matchNotes || matchArticle;
+                    }
+
+                    return true;
+                  });
+
+                  const displayed = (ticketSearchQuery.trim() === "" && ticketDateFilter === "")
+                    ? filtered.slice(0, 5)
+                    : filtered;
+
+                  if (displayed.length === 0) {
+                    return (
+                      <div style={{ textAlign: "center", padding: "30px", opacity: 0.6, border: "1px dashed rgba(255,255,255,0.1)", borderRadius: "8px" }}>
+                        No se encontraron tickets con los filtros seleccionados.
+                      </div>
+                    );
+                  }
+
+                  return displayed.map((ticket) => {
+                    const isSelected = selectedHistoryTicket?.id === ticket.id;
+                    let itemsArr: any[] = [];
+                    if (typeof ticket.items === "string") {
+                      try { itemsArr = JSON.parse(ticket.items); } catch { itemsArr = []; }
+                    } else if (Array.isArray(ticket.items)) {
+                      itemsArr = ticket.items;
+                    }
+
+                    return (
+                      <div
+                        key={ticket.id}
+                        onClick={() => setSelectedHistoryTicket(ticket)}
+                        style={{
+                          padding: "12px",
+                          borderRadius: "10px",
+                          background: isSelected ? "rgba(244, 63, 94, 0.12)" : "rgba(255,255,255,0.03)",
+                          border: isSelected ? "1.5px solid var(--color-primary)" : "1px solid rgba(255,255,255,0.08)",
+                          cursor: "pointer",
+                          transition: "all 0.2s ease",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "6px"
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontWeight: "bold", color: "white", fontSize: "0.9rem" }}>
+                            Ticket #{ticket.id}
+                          </span>
+                          <span style={{ fontWeight: "bold", color: "var(--color-secondary)", fontSize: "0.95rem" }}>
+                            ${Number(ticket.total || 0).toFixed(2)}
+                          </span>
+                        </div>
+
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "rgba(255,255,255,0.6)" }}>
+                          <span>📅 {new Date(ticket.created_at).toLocaleDateString()} {new Date(ticket.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>📦 {itemsArr.length} artículo(s)</span>
+                        </div>
+
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.75rem" }}>
+                          <span style={{ color: "rgba(255,255,255,0.7)" }}>
+                            👤 {ticket.customer_name || "Venta Mostrador"}
+                          </span>
+                          <span style={{ color: "var(--color-primary)", fontWeight: "600" }}>
+                            {isSelected ? "▶ Seleccionado" : "Ver detalle"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+
+              {/* Columna Derecha: Detalle del Ticket & Botón Reimprimir */}
+              <div style={{
+                background: "rgba(0,0,0,0.25)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: "12px",
+                padding: "16px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                overflowY: "auto"
+              }}>
+                {selectedHistoryTicket ? (() => {
+                  let ticketItems: any[] = [];
+                  if (typeof selectedHistoryTicket.items === "string") {
+                    try { ticketItems = JSON.parse(selectedHistoryTicket.items); } catch { ticketItems = []; }
+                  } else if (Array.isArray(selectedHistoryTicket.items)) {
+                    ticketItems = selectedHistoryTicket.items;
+                  }
+
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "14px", height: "100%" }}>
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                          <h4 style={{ margin: 0, color: "white", fontSize: "1.1rem" }}>
+                            Ticket #{selectedHistoryTicket.id}
+                          </h4>
+                          <span style={{
+                            background: "rgba(16, 185, 129, 0.15)",
+                            color: "var(--color-secondary)",
+                            padding: "2px 8px",
+                            borderRadius: "6px",
+                            fontSize: "0.75rem",
+                            fontWeight: "bold"
+                          }}>
+                            {selectedHistoryTicket.status || "Venta"}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.6)", display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                          <span>📅 {new Date(selectedHistoryTicket.created_at).toLocaleString()}</span>
+                          <span>👤 {selectedHistoryTicket.customer_name || "Venta Mostrador"}</span>
+                          {selectedHistoryTicket.notes && <span>💳 {selectedHistoryTicket.notes}</span>}
+                        </div>
+                      </div>
+
+                      {/* Tabla de Artículos (Solo Lectura) */}
+                      <div style={{ flex: 1, overflowY: "auto", maxHeight: "220px", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "8px" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
+                          <thead>
+                            <tr style={{ background: "rgba(255,255,255,0.06)", textAlign: "left", color: "rgba(255,255,255,0.7)" }}>
+                              <th style={{ padding: "6px 8px" }}>Cant</th>
+                              <th style={{ padding: "6px 8px" }}>Artículo</th>
+                              <th style={{ padding: "6px 8px", textAlign: "right" }}>P. Unit</th>
+                              <th style={{ padding: "6px 8px", textAlign: "right" }}>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ticketItems.map((item: any, idx: number) => {
+                              const qty = Number(item.qty || 1);
+                              const price = Number(item.price || 0);
+                              return (
+                                <tr key={idx} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                                  <td style={{ padding: "6px 8px", color: "var(--color-secondary)", fontWeight: "bold" }}>{qty}</td>
+                                  <td style={{ padding: "6px 8px" }}>{item.name}</td>
+                                  <td style={{ padding: "6px 8px", textAlign: "right" }}>${price.toFixed(2)}</td>
+                                  <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: "bold" }}>${(qty * price).toFixed(2)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Resumen Total */}
+                      <div style={{
+                        background: "rgba(255,255,255,0.03)",
+                        padding: "10px 14px",
+                        borderRadius: "8px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center"
+                      }}>
+                        <span style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.8)" }}>Total Cobrado:</span>
+                        <span style={{ fontSize: "1.3rem", fontWeight: "bold", color: "var(--color-secondary)" }}>
+                          ${Number(selectedHistoryTicket.total || 0).toFixed(2)}
+                        </span>
+                      </div>
+
+                      {/* Botón Reimprimir Destacado */}
+                      <button
+                        type="button"
+                        onClick={() => handleReprintHistoryTicket(selectedHistoryTicket)}
+                        className="btn-primary"
+                        style={{
+                          width: "100%",
+                          padding: "12px",
+                          fontSize: "0.95rem",
+                          fontWeight: "bold",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "8px",
+                          boxShadow: "0 4px 15px rgba(244, 63, 94, 0.3)"
+                        }}
+                      >
+                        🖨️ Reimprimir Ticket #{selectedHistoryTicket.id}
+                      </button>
+                    </div>
+                  );
+                })() : (
+                  <div style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    height: "100%",
+                    color: "rgba(255,255,255,0.4)",
+                    textAlign: "center",
+                    gap: "10px",
+                    padding: "30px"
+                  }}>
+                    <span style={{ fontSize: "2.5rem" }}>🎟️</span>
+                    <p style={{ fontSize: "0.85rem", margin: 0 }}>
+                      Selecciona un ticket de la lista para ver su desglose de artículos y reimprimirlo.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "12px" }}>
+              <button
+                type="button"
+                className="btn-primary"
+                style={{
+                  background: "rgba(255,255,255,0.08)",
+                  border: "1px solid var(--glass-border)",
+                  padding: "8px 18px",
+                  fontSize: "0.85rem"
+                }}
+                onClick={() => setShowTicketsHistoryModal(false)}
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}
