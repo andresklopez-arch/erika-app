@@ -216,6 +216,14 @@ export default function POSModule() {
   const businessProfile = useBusinessProfile();
   const [globalCatalog, setGlobalCatalog] = useState<any[]>([]);
   const [topSellingProducts, setTopSellingProducts] = useState<any[]>([]);
+  const [learnedPairsMap, setLearnedPairsMap] = useState<Record<string, Record<string, number>>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      return JSON.parse(localStorage.getItem("ERIKA_LEARNED_PAIRS") || "{}");
+    } catch {
+      return {};
+    }
+  });
   const [offlinePendingCount, setOfflinePendingCount] = useState(0);
   const [bleStatus, setBleStatus] = useState<BleStatusType>("disconnected");
 
@@ -1920,6 +1928,26 @@ export default function POSModule() {
           });
       }
 
+      // Aprendizaje dinámico en tiempo real: Registrar combinaciones vendidas en este ticket
+      if (activeTicket.items.length >= 2) {
+        setLearnedPairsMap((prev) => {
+          const updated = { ...prev };
+          for (let i = 0; i < activeTicket.items.length; i++) {
+            const nameA = (activeTicket.items[i].name || "").trim().toLowerCase();
+            if (!nameA) continue;
+            if (!updated[nameA]) updated[nameA] = {};
+            for (let j = 0; j < activeTicket.items.length; j++) {
+              if (i === j) continue;
+              const nameB = (activeTicket.items[j].name || "").trim().toLowerCase();
+              if (!nameB) continue;
+              updated[nameA][nameB] = (updated[nameA][nameB] || 0) + 1;
+            }
+          }
+          try { localStorage.setItem("ERIKA_LEARNED_PAIRS", JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+      }
+
       // Proceso de éxito: limpiar tickets y cerrar modal
       checkoutTokenRef.current = null;
       setTickets(
@@ -1946,9 +1974,11 @@ export default function POSModule() {
         .from("quotes")
         .select("items")
         .order("created_at", { ascending: false })
-        .limit(200);
+        .limit(300);
 
       const salesTally: Record<string, number> = {};
+      const newPairsMap: Record<string, Record<string, number>> = {};
+
       if (quotesData && quotesData.length > 0) {
         quotesData.forEach((q: any) => {
           let items: any[] = [];
@@ -1957,14 +1987,37 @@ export default function POSModule() {
           } else if (Array.isArray(q.items)) {
             items = q.items;
           }
+
+          // Conteo de frecuencia
           items.forEach((it: any) => {
             const name = (it.name || "").trim().toLowerCase();
             if (name) {
               salesTally[name] = (salesTally[name] || 0) + (Number(it.qty) || 1);
             }
           });
+
+          // Aprendizaje de pares de productos comprados juntos
+          if (items.length >= 2) {
+            for (let i = 0; i < items.length; i++) {
+              const nameA = (items[i].name || "").trim().toLowerCase();
+              if (!nameA) continue;
+              if (!newPairsMap[nameA]) newPairsMap[nameA] = {};
+
+              for (let j = 0; j < items.length; j++) {
+                if (i === j) continue;
+                const nameB = (items[j].name || "").trim().toLowerCase();
+                if (!nameB) continue;
+                newPairsMap[nameA][nameB] = (newPairsMap[nameA][nameB] || 0) + 1;
+              }
+            }
+          }
         });
       }
+
+      setLearnedPairsMap(newPairsMap);
+      try {
+        localStorage.setItem("ERIKA_LEARNED_PAIRS", JSON.stringify(newPairsMap));
+      } catch {}
 
       const sorted = [...catalog].sort((a, b) => {
         const countA = salesTally[a.name.trim().toLowerCase()] || 0;
@@ -1975,7 +2028,7 @@ export default function POSModule() {
 
       setTopSellingProducts(sorted.slice(0, 24));
     } catch (e) {
-      console.warn("Falla al calcular top 24 productos más vendidos:", e);
+      console.warn("Falla al calcular top 24 productos y pares aprendidos:", e);
       setTopSellingProducts(catalog.slice(0, 24));
     }
   };
@@ -1989,8 +2042,43 @@ export default function POSModule() {
     const suggestedProducts: any[] = [];
     const addedIds = new Set<string>();
 
-    // 1. Si hay productos en la venta actual, buscar artículos que acompañan lógicamente
+    // 1. NIVEL 1: Productos aprendidos por Inteligencia (comprados juntos con artículos de la nota)
     if (activeTicket.items.length > 0) {
+      const companionScores: Record<string, number> = {};
+
+      activeTicket.items.forEach((item) => {
+        const itemNameLower = item.name.trim().toLowerCase();
+        const paired = learnedPairsMap[itemNameLower];
+        if (paired) {
+          Object.entries(paired).forEach(([companionName, score]) => {
+            if (!cartItemNames.has(companionName)) {
+              companionScores[companionName] = (companionScores[companionName] || 0) + score;
+            }
+          });
+        }
+      });
+
+      const learnedMatches = globalCatalog
+        .filter((p) => {
+          const pNameLower = p.name.trim().toLowerCase();
+          return !cartItemNames.has(pNameLower) && companionScores[pNameLower] > 0;
+        })
+        .sort((a, b) => {
+          const scoreA = companionScores[a.name.trim().toLowerCase()] || 0;
+          const scoreB = companionScores[b.name.trim().toLowerCase()] || 0;
+          return scoreB - scoreA;
+        });
+
+      learnedMatches.forEach((prod) => {
+        if (suggestedProducts.length < 8 && !addedIds.has(prod.id)) {
+          suggestedProducts.push(prod);
+          addedIds.add(prod.id);
+        }
+      });
+    }
+
+    // 2. NIVEL 2: Reglas de asociación por palabras clave de ferretería (COMPANION_RULES)
+    if (activeTicket.items.length > 0 && suggestedProducts.length < 8) {
       const activeTicketWords = activeTicket.items.map((i) => i.name.toLowerCase()).join(" ");
 
       const complementKeywords = new Set<string>();
@@ -2019,9 +2107,10 @@ export default function POSModule() {
       }
     }
 
-    // 2. Si aún faltan para completar los 8 artículos, rellenar con productos de alta rotación del catálogo
+    // 3. NIVEL 3: Rellenar con productos de alta rotación (Top ventas / rotación)
     if (suggestedProducts.length < 8) {
-      for (const prod of globalCatalog) {
+      const fallbackList = topSellingProducts.length > 0 ? topSellingProducts : globalCatalog;
+      for (const prod of fallbackList) {
         if (suggestedProducts.length >= 8) break;
         const prodNameLower = prod.name.toLowerCase();
         if (cartItemNames.has(prodNameLower)) continue;
