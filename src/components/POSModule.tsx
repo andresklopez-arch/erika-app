@@ -3963,16 +3963,19 @@ export default function POSModule() {
             )}
           </div>
 
-          <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+          {/* Fila 1: Cobrar, Crédito y acciones rápidas de Cotización */}
+          <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
             <button
               className="btn-primary"
               style={{
-                flex: 1,
-                padding: "15px",
+                flex: 1.5,
+                padding: "8px 12px",
                 background: "linear-gradient(135deg, var(--color-primary), #059669)",
                 border: "none",
                 fontWeight: "bold",
-                color: "white"
+                color: "white",
+                fontSize: "0.85rem",
+                borderRadius: "8px",
               }}
               onClick={() => {
                 if (activeTicket.items.length === 0) return alert("El ticket está vacío.");
@@ -3994,16 +3997,18 @@ export default function POSModule() {
                 setShowCheckoutModal(true);
               }}
             >
-              💰 Cobrar / Pagar
+              💰 Cobrar
             </button>
             <button
               className="btn-primary"
               style={{
-                flex: 1,
-                padding: "15px",
+                flex: 1.2,
+                padding: "8px 10px",
                 background: "transparent",
                 border: "1px solid #eab308",
                 color: "#eab308",
+                fontSize: "0.8rem",
+                borderRadius: "8px",
               }}
               onClick={() => {
                 if (activeTicket.items.length === 0)
@@ -4017,105 +4022,17 @@ export default function POSModule() {
             >
               💳 Crédito
             </button>
-          </div>
-          <button
-            className="btn-primary"
-            style={{
-              width: "100%",
-              marginTop: "10px",
-              padding: "10px",
-              background: "transparent",
-              border: "1px solid #ef4444",
-              color: "#ef4444",
-            }}
-            onClick={async () => {
-              if (currentUser?.role !== "admin") {
-                 const pass = window.prompt("🔒 DEVOLUCIÓN - Requiere contraseña de Administrador:");
-                 if (!pass || !(await verifyAdminPinRemote(pass))) return alert("❌ Contraseña incorrecta o sin privilegios.");
-              }
-
-              const amountStr = window.prompt("¿Monto a reembolsar/devolver de la Caja? (Ej: 150.00)");
-              const amount = parseFloat(amountStr || "");
-              if (isNaN(amount) || amount <= 0) return alert("Monto inválido.");
-
-              const reason = window.prompt("Motivo de la devolución:");
-              if (!reason) return alert("Debe especificar un motivo.");
-
-              if (!isOffline) {
-                 const { data: rawSession } = await supabase
-                    .from("cash_sessions")
-                    .select("*")
-                    .eq("status", "open")
-                    .order("opened_at", { ascending: false })
-                    .limit(1)
-                    .single();
-                 
-                 let session = null;
-                 if (rawSession) {
-                    const result = CashSessionSchema.safeParse(rawSession);
-                    if (!result.success) {
-                       console.error("Error validando sesion de caja con Zod en devolucion:", result.error);
-                       session = rawSession;
-                    } else {
-                       session = result.data;
-                    }
-                 }
-                 if (!session) return alert("La caja está cerrada.");
-                 
-                 const { error } = await insertCashTransaction({
-                    type: "withdrawal",
-                    amount: -amount,
-                    description: `Devolución: ${reason}`
-                 });
-                 if (error) return alert("Error al registrar devolución: " + error.message);
-
-                 // Antes esta devolución solo movía dinero de caja: el
-                 // producto físico regresado nunca se sumaba de vuelta al
-                 // inventario, dejando el conteo de stock permanentemente
-                 // bajo respecto a la realidad. Se ofrece restaurar el
-                 // stock del producto devuelto de forma opcional.
-                 if (window.confirm("¿La devolución incluye mercancía física que debe regresar al inventario?")) {
-                    const searchTerm = window.prompt("Nombre o código del producto devuelto:");
-                    if (searchTerm) {
-                       const termLower = searchTerm.trim().toLowerCase();
-                       const matches = globalCatalog.filter(i =>
-                          i.name.toLowerCase().includes(termLower) || (i.code && i.code.toLowerCase() === termLower)
-                       );
-                       if (matches.length === 0) {
-                          alert(`❌ No se encontró ningún producto que coincida con "${searchTerm}". Ajusta el stock manualmente desde Inventario.`);
-                       } else if (matches.length > 1) {
-                          alert(`⚠️ Coinciden ${matches.length} productos con "${searchTerm}" (${matches.map(m => m.name).join(", ")}). Sé más específico o ajusta el stock manualmente desde Inventario.`);
-                       } else {
-                          const product = matches[0];
-                          const qtyStr = window.prompt(`¿Cuántas unidades de "${product.name}" regresan al inventario?`, "1");
-                          const qty = parseFloat((qtyStr || "").replace(",", "."));
-                          if (!isNaN(qty) && qty > 0) {
-                             const { error: invErr } = await reduceInventoryStock([{ id: product.id, qty: -qty }], "adjustment", `RET-${Date.now()}`);
-                             if (invErr) console.warn("Falla al ajustar inventario en devolución:", invErr.message);
-                             setGlobalCatalog(prev => prev.map(i => i.id === product.id ? { ...i, stock: i.stock + qty } : i));
-                          }
-                       }
-                    }
-                 }
-
-                 alert(`✅ Devolución exitosa. Se retiraron $${amount.toFixed(2)} de la caja.`);
-              } else {
-                 alert("❌ Las devoluciones solo se pueden hacer en modo en línea.");
-              }
-            }}
-          >
-            ↩️ Devolución / Reembolso
-          </button>
-          <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
             <button
               className="btn-primary"
               style={{
-                flex: 1,
-                padding: "10px",
+                padding: "8px 12px",
                 background: "transparent",
                 border: "1px solid #3b82f6",
                 color: "#3b82f6",
+                fontSize: "0.95rem",
+                borderRadius: "8px",
               }}
+              title="Guardar Cotización"
               onClick={async () => {
                 if (activeTicket.items.length === 0)
                   return alert("El ticket está vacío.");
@@ -4139,8 +4056,6 @@ export default function POSModule() {
                 };
                 let { error } = await supabase.from("quotes").insert(quoteInsertObj);
                 if (error) {
-                  // La columna customer_phone puede no existir aun si la
-                  // migracion correspondiente no se ha corrido en Supabase.
                   console.warn("Falla al insertar quotes con customer_phone, reintentando sin ella...");
                   delete quoteInsertObj.customer_phone;
                   ({ error } = await supabase.from("quotes").insert(quoteInsertObj));
@@ -4158,70 +4073,141 @@ export default function POSModule() {
                 );
               }}
             >
-              📄 Guardar Cotización
+              📄
             </button>
             <button
               className="btn-primary"
               style={{
-                flex: 1,
-                padding: "10px",
+                padding: "8px 12px",
                 background: "transparent",
                 border: "1px solid #22c55e",
                 color: "#22c55e",
+                fontSize: "0.95rem",
+                borderRadius: "8px",
               }}
+              title="Enviar Cotización por WhatsApp"
               onClick={() => sendWhatsApp("quote")}
             >
-              💬 Enviar Cotización por WhatsApp
+              💬
             </button>
+          </div>
+
+          {/* Fila 2: Devolución y Apartado (50% de tamaño) */}
+          <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
             <button
               className="btn-primary"
               style={{
                 flex: 1,
-                padding: "10px",
+                padding: "5px 8px",
                 background: "transparent",
-                border: "1px solid #6b7280",
-                color: "white",
+                border: "1px solid #ef4444",
+                color: "#ef4444",
+                fontSize: "0.72rem",
+                borderRadius: "6px",
               }}
-              onClick={() => {
-                if (activeTicket.items.length === 0) return alert("El ticket está vacío.");
-                window.print();
+              onClick={async () => {
+                if (currentUser?.role !== "admin") {
+                   const pass = window.prompt("🔒 DEVOLUCIÓN - Requiere contraseña de Administrador:");
+                   if (!pass || !(await verifyAdminPinRemote(pass))) return alert("❌ Contraseña incorrecta o sin privilegios.");
+                }
+
+                const amountStr = window.prompt("¿Monto a reembolsar/devolver de la Caja? (Ej: 150.00)");
+                const amount = parseFloat(amountStr || "");
+                if (isNaN(amount) || amount <= 0) return alert("Monto inválido.");
+
+                const reason = window.prompt("Motivo de la devolución:");
+                if (!reason) return alert("Debe especificar un motivo.");
+
+                if (!isOffline) {
+                   const { data: rawSession } = await supabase
+                      .from("cash_sessions")
+                      .select("*")
+                      .eq("status", "open")
+                      .order("opened_at", { ascending: false })
+                      .limit(1)
+                      .single();
+                   
+                   let session = null;
+                   if (rawSession) {
+                      const result = CashSessionSchema.safeParse(rawSession);
+                      if (!result.success) {
+                         console.error("Error validando sesion de caja con Zod en devolucion:", result.error);
+                         session = rawSession;
+                      } else {
+                         session = result.data;
+                      }
+                   }
+                   if (!session) return alert("La caja está cerrada.");
+                   
+                   const { error } = await insertCashTransaction({
+                      type: "withdrawal",
+                      amount: -amount,
+                      description: `Devolución: ${reason}`
+                   });
+                   if (error) return alert("Error al registrar devolución: " + error.message);
+
+                   // Restaurar inventario devuelto si aplica
+                   if (window.confirm("¿La devolución incluye mercancía física que debe regresar al inventario?")) {
+                      const searchTerm = window.prompt("Nombre o código del producto devuelto:");
+                      if (searchTerm) {
+                         const termLower = searchTerm.trim().toLowerCase();
+                         const matches = globalCatalog.filter(i =>
+                            i.name.toLowerCase().includes(termLower) || (i.code && i.code.toLowerCase() === termLower)
+                         );
+                         if (matches.length === 0) {
+                            alert(`❌ No se encontró ningún producto que coincida con "${searchTerm}". Ajusta el stock manualmente desde Inventario.`);
+                         } else if (matches.length > 1) {
+                            alert(`⚠️ Coinciden ${matches.length} productos con "${searchTerm}" (${matches.map(m => m.name).join(", ")}). Sé más específico o ajusta el stock manualmente desde Inventario.`);
+                         } else {
+                            const product = matches[0];
+                            const qtyStr = window.prompt(`¿Cuántas unidades de "${product.name}" regresan al inventario?`, "1");
+                            const qty = parseFloat((qtyStr || "").replace(",", "."));
+                            if (!isNaN(qty) && qty > 0) {
+                               const { error: invErr } = await reduceInventoryStock([{ id: product.id, qty: -qty }], "adjustment", `RET-${Date.now()}`);
+                               if (invErr) console.warn("Falla al ajustar inventario en devolución:", invErr.message);
+                               setGlobalCatalog(prev => prev.map(i => i.id === product.id ? { ...i, stock: i.stock + qty } : i));
+                            }
+                         }
+                      }
+                   }
+
+                   alert(`✅ Devolución exitosa. Se retiraron $${amount.toFixed(2)} de la caja.`);
+                } else {
+                   alert("❌ Las devoluciones solo se pueden hacer en modo en línea.");
+                }
               }}
             >
-              🖨️ Imprimir PDF
+              ↩️ Devolución / Reembolso
             </button>
-          </div>
-          <button
-            className="btn-primary"
-            disabled={isCreatingLayaway}
-            style={{
-              width: "100%",
-              marginTop: "10px",
-              padding: "10px",
-              background: "transparent",
-              border: "1px solid #10b981",
-              color: "#10b981",
-              opacity: isCreatingLayaway ? 0.6 : 1,
-              cursor: isCreatingLayaway ? "not-allowed" : "pointer",
-            }}
-            onClick={async () => {
-              // Guarda contra doble clic: sin esto, dos clics rápidos (o
-              // clic + Enter mientras se resuelve el prompt del enganche)
-              // podían crear DOS apartados duplicados y descontar el stock
-              // dos veces para la misma venta.
-              if (isCreatingLayaway) return;
-              if (activeTicket.items.length === 0) return alert("El ticket está vacío.");
-              if (!selectedCustomerId) return alert("❌ Debes seleccionar un cliente para hacer un Apartado (Layaway).");
 
-              setIsCreatingLayaway(true);
-              try {
+            <button
+              className="btn-primary"
+              disabled={isCreatingLayaway}
+              style={{
+                flex: 1.2,
+                padding: "5px 8px",
+                background: "transparent",
+                border: "1px solid #10b981",
+                color: "#10b981",
+                fontSize: "0.72rem",
+                borderRadius: "6px",
+                opacity: isCreatingLayaway ? 0.6 : 1,
+                cursor: isCreatingLayaway ? "not-allowed" : "pointer",
+              }}
+              onClick={async () => {
+                if (isCreatingLayaway) return;
+                if (activeTicket.items.length === 0) return alert("El ticket está vacío.");
+                if (!selectedCustomerId) return alert("❌ Debes seleccionar un cliente para hacer un Apartado (Layaway).");
 
-              const minDownPayment = finalTotal * 0.1;
-              const downPayment = parseFloat(window.prompt(`El total es $${finalTotal.toFixed(2)}.\n¿Cuánto dejará de enganche (Mínimo $${minDownPayment.toFixed(2)})?`) || "");
-              if (isNaN(downPayment) || downPayment <= 0) return;
-              if (downPayment > finalTotal) return alert("El enganche no puede ser mayor al total.");
-              if (downPayment < minDownPayment) {
-                return alert(`❌ El enganche mínimo es $${minDownPayment.toFixed(2)} (10% del total).`);
-              }
+                setIsCreatingLayaway(true);
+                try {
+                const minDownPayment = finalTotal * 0.1;
+                const downPayment = parseFloat(window.prompt(`El total es $${finalTotal.toFixed(2)}.\n¿Cuánto dejará de enganche (Mínimo $${minDownPayment.toFixed(2)})?`) || "");
+                if (isNaN(downPayment) || downPayment <= 0) return;
+                if (downPayment > finalTotal) return alert("El enganche no puede ser mayor al total.");
+                if (downPayment < minDownPayment) {
+                  return alert(`❌ El enganche mínimo es $${minDownPayment.toFixed(2)} (10% del total).`);
+                }
 
               // Validación de stock estricta, igual que en el cobro de contado/tarjeta.
               if (!isOffline) {
