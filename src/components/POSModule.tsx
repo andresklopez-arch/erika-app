@@ -3345,32 +3345,6 @@ export default function POSModule() {
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={openTicketsHistoryModal}
-          style={{
-            background: "rgba(255,255,255,0.04)",
-            border: "1px dashed rgba(255,255,255,0.25)",
-            borderRadius: "8px",
-            padding: "6px 12px",
-            marginBottom: "12px",
-            cursor: "pointer",
-            fontSize: "0.75rem",
-            color: "inherit",
-            opacity: 0.85,
-            width: "100%",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            transition: "all 0.2s ease"
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.opacity = "1"}
-          onMouseLeave={(e) => e.currentTarget.style.opacity = "0.85"}
-        >
-          <span>🎟️ Tickets Anteriores (Últimas 5 ventas / Buscar)</span>
-          <span style={{ color: "var(--color-secondary)", fontWeight: "bold" }}>🔍 Buscar / Reimprimir</span>
-        </button>
-
         <div
           style={{
             flex: 1,
