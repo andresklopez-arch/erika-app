@@ -2026,10 +2026,10 @@ export default function POSModule() {
         return (b.stock || 0) - (a.stock || 0);
       });
 
-      setTopSellingProducts(sorted.slice(0, 24));
+      setTopSellingProducts(sorted.slice(0, 12));
     } catch (e) {
-      console.warn("Falla al calcular top 24 productos y pares aprendidos:", e);
-      setTopSellingProducts(catalog.slice(0, 24));
+      console.warn("Falla al calcular top 12 productos y pares aprendidos:", e);
+      setTopSellingProducts(catalog.slice(0, 12));
     }
   };
 
@@ -3312,9 +3312,9 @@ export default function POSModule() {
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
             <h3 style={{ color: "var(--color-secondary)", margin: 0, fontSize: "0.82rem", fontWeight: "bold" }}>
-              ⚡ Atajos Rápidos (24 Más Vendidos)
+              ⚡ Atajos Rápidos (12 Más Vendidos)
             </h3>
-            <span style={{ fontSize: "0.65rem", opacity: 0.6 }}>3 por fila • 24 productos</span>
+            <span style={{ fontSize: "0.65rem", opacity: 0.6 }}>3 por fila • 12 productos</span>
           </div>
           <div
             style={{
@@ -3323,7 +3323,7 @@ export default function POSModule() {
               gap: "3px",
             }}
           >
-            {(topSellingProducts.length > 0 ? topSellingProducts.slice(0, 24) : globalCatalog.slice(0, 24)).map((c, i) => (
+            {(topSellingProducts.length > 0 ? topSellingProducts.slice(0, 12) : globalCatalog.slice(0, 12)).map((c, i) => (
               <button
                 key={c.id}
                 type="button"
