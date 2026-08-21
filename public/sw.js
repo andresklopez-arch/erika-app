@@ -1,4 +1,4 @@
-const CACHE_NAME = 'erika-pos-cache-v2';
+const CACHE_NAME = 'erika-pos-cache-v3';
 const OFFLINE_URLS = [
   '/',
   '/caja',
@@ -33,7 +33,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Para navegaciones (HTML): Network First para ver cambios desplegados al instante sin quedar atrapado en caché
+  // Para navegaciones (HTML): Network First para ver cambios desplegados al instante
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
@@ -53,10 +53,32 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Para otros assets estáticos: Cache First con fallback a fetch
+  // Para chunks de Next.js y assets: Network-First con fallback a cache
+  if (event.request.url.includes('/_next/')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.status === 200) {
+            const responseClone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Para otros assets estáticos: Stale-while-revalidate
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
+    caches.match(event.request).then((cachedResponse) => {
+      const fetchPromise = fetch(event.request).then((networkResponse) => {
+        if (networkResponse.status === 200) {
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse.clone()));
+        }
+        return networkResponse;
+      }).catch(() => cachedResponse);
+      return cachedResponse || fetchPromise;
     })
   );
 });
