@@ -2816,93 +2816,12 @@ export default function POSModule() {
               : "1px solid rgba(255,255,255,0.1)",
           }}
         >
-          <div className="flex-between" style={{ marginBottom: "15px" }}>
-            <h2
-              style={{
-                color: isOffline ? "#ef4444" : "var(--color-primary)",
-                margin: 0,
-              }}
-            >
-              Terminal de Ventas {isOffline ? "(⚠️ MODO OFFLINE)" : "(☁️ Nube)"}
-            </h2>
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button
-                onClick={() => setShowSyncLogModal(true)}
-                className="btn-primary"
-                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "white" }}
-              >
-                📋 Historial Sync
-              </button>
-              {pendingOfflineCount > 0 && (
-                <span
-                  style={{
-                    background: "#ef4444",
-                    padding: "5px 10px",
-                    borderRadius: "8px",
-                    fontSize: "0.8rem",
-                    fontWeight: "bold",
-                  }}
-                >
-                  {pendingOfflineCount} pendientes
-                </span>
-              )}
-              <button
-                onClick={() => setShowPrinterModal(true)}
-                className="btn-primary"
-                style={{
-                  background: printerConnectionType === "bluetooth"
-                    ? (bleStatus === "connected" ? "rgba(16, 185, 129, 0.2)" : bleStatus === "standby" ? "rgba(245, 158, 11, 0.2)" : "rgba(244, 63, 94, 0.2)")
-                    : (isPrinterConnected ? "rgba(16, 185, 129, 0.15)" : "rgba(244, 63, 94, 0.15)"),
-                  border: printerConnectionType === "bluetooth"
-                    ? (bleStatus === "connected" ? "1px solid #10b981" : bleStatus === "standby" ? "1px solid #f59e0b" : "1px solid #f43f5e")
-                    : (isPrinterConnected ? "1px solid var(--color-secondary)" : "1px solid var(--color-primary)"),
-                  padding: "6px 12px",
-                  fontSize: "0.85rem",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                }}
-              >
-                <span>
-                  {printerConnectionType === "bluetooth"
-                    ? (bleStatus === "connected" ? "🟢" : bleStatus === "standby" ? "🟡" : "🔴")
-                    : (isPrinterConnected ? "🟢" : "🔴")}
-                </span>
-                <span>
-                  {printerConnectionType === "bluetooth"
-                    ? (bleStatus === "connected" ? "BLE Conectado" : bleStatus === "standby" ? "BLE Standby" : "BLE Desconectado")
-                    : (isPrinterConnected ? `Impresora Lista${silentKiosk ? " (Kiosco ⚡)" : ""}` : "Impresora Off")}
-                </span>
-              </button>
-              <button
-                onClick={() => setShowScanner(true)}
-                className="btn-primary"
-                style={{
-                  background: "transparent",
-                  border: "1px solid var(--color-secondary)",
-                }}
-              >
-                📷 Visión
-              </button>
-              <button
-                onClick={startVoiceRecognition}
-                className="btn-primary"
-                style={{
-                  background: isListening ? "#ef4444" : "var(--glass-bg)",
-                  border: "1px solid var(--color-primary)",
-                }}
-              >
-                🎤 Dictar
-              </button>
-            </div>
-          </div>
-
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleSearchSubmit(e as any);
             }}
-            style={{ display: "flex", gap: "10px", marginBottom: "20px" }}
+            style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "20px" }}
           >
             <div style={{ flex: 1, position: "relative" }}>
                     <input
@@ -3032,9 +2951,31 @@ export default function POSModule() {
                     )}
             </div>
             <button
+              type="button"
+              onClick={startVoiceRecognition}
+              title={isListening ? "Escuchando... Clic para detener" : "Dictar producto por voz"}
+              style={{
+                background: isListening ? "#ef4444" : "rgba(255,255,255,0.06)",
+                border: isListening ? "1px solid #ef4444" : "1px solid var(--color-primary)",
+                color: "white",
+                width: "44px",
+                height: "44px",
+                borderRadius: "8px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "1.1rem",
+                cursor: "pointer",
+                flexShrink: 0,
+                transition: "all 0.2s ease"
+              }}
+            >
+              🎤
+            </button>
+            <button
               type="submit"
               className="btn-primary"
-              style={{ background: "var(--color-secondary)", color: "black", height: "46px" }}
+              style={{ background: "var(--color-secondary)", color: "black", height: "44px", padding: "0 18px" }}
             >
               Agregar
             </button>
@@ -3096,6 +3037,100 @@ export default function POSModule() {
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Barra inferior compacta de Terminal / Estado / Herramientas */}
+        <div
+          className="glass-panel"
+          style={{
+            padding: "8px 14px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            border: isOffline ? "1px solid #ef4444" : "1px solid rgba(255,255,255,0.08)",
+            background: "rgba(18, 18, 28, 0.6)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "0.8rem", fontWeight: "bold", color: isOffline ? "#ef4444" : "var(--color-primary)" }}>
+              {isOffline ? "⚠️ Terminal Offline" : "☁️ Terminal Nube"}
+            </span>
+          </div>
+
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <button
+              onClick={() => setShowSyncLogModal(true)}
+              className="btn-primary"
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                color: "white",
+                padding: "4px 10px",
+                fontSize: "0.75rem",
+                borderRadius: "6px"
+              }}
+            >
+              📋 Historial Sync
+              {pendingOfflineCount > 0 && (
+                <span
+                  style={{
+                    background: "#ef4444",
+                    padding: "1px 5px",
+                    borderRadius: "6px",
+                    fontSize: "0.7rem",
+                    fontWeight: "bold",
+                    marginLeft: "4px"
+                  }}
+                >
+                  {pendingOfflineCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setShowPrinterModal(true)}
+              className="btn-primary"
+              style={{
+                background: printerConnectionType === "bluetooth"
+                  ? (bleStatus === "connected" ? "rgba(16, 185, 129, 0.2)" : bleStatus === "standby" ? "rgba(245, 158, 11, 0.2)" : "rgba(244, 63, 94, 0.2)")
+                  : (isPrinterConnected ? "rgba(16, 185, 129, 0.15)" : "rgba(244, 63, 94, 0.15)"),
+                border: printerConnectionType === "bluetooth"
+                  ? (bleStatus === "connected" ? "1px solid #10b981" : bleStatus === "standby" ? "1px solid #f59e0b" : "1px solid #f43f5e")
+                  : (isPrinterConnected ? "1px solid var(--color-secondary)" : "1px solid var(--color-primary)"),
+                padding: "4px 10px",
+                fontSize: "0.75rem",
+                borderRadius: "6px",
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+              }}
+            >
+              <span>
+                {printerConnectionType === "bluetooth"
+                  ? (bleStatus === "connected" ? "🟢" : bleStatus === "standby" ? "🟡" : "🔴")
+                  : (isPrinterConnected ? "🟢" : "🔴")}
+              </span>
+              <span>
+                {printerConnectionType === "bluetooth"
+                  ? (bleStatus === "connected" ? "BLE Conectado" : bleStatus === "standby" ? "BLE Standby" : "BLE Desconectado")
+                  : (isPrinterConnected ? `Impresora Lista${silentKiosk ? " (Kiosco ⚡)" : ""}` : "Impresora Off")}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setShowScanner(true)}
+              className="btn-primary"
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid var(--color-secondary)",
+                padding: "4px 10px",
+                fontSize: "0.75rem",
+                borderRadius: "6px"
+              }}
+            >
+              📷 Visión
+            </button>
           </div>
         </div>
       </div>
