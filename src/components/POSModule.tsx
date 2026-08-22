@@ -5871,9 +5871,35 @@ export default function POSModule() {
                           <span style={{ color: "rgba(255,255,255,0.7)" }}>
                             👤 {ticket.customer_name || "Venta Mostrador"}
                           </span>
-                          <span style={{ color: "var(--color-primary)", fontWeight: "600" }}>
-                            {isSelected ? "▶ Seleccionado" : "Ver detalle"}
-                          </span>
+                          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleReprintHistoryTicket(ticket);
+                              }}
+                              className="btn-primary"
+                              style={{
+                                padding: "3px 8px",
+                                fontSize: "0.72rem",
+                                background: "linear-gradient(135deg, #10b981, #059669)",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "4px",
+                                fontWeight: "bold",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "3px",
+                                cursor: "pointer"
+                              }}
+                              title="Reimprimir este ticket directamente"
+                            >
+                              🖨️ Reimprimir
+                            </button>
+                            <span style={{ color: "var(--color-primary)", fontWeight: "600" }}>
+                              {isSelected ? "▶ Seleccionado" : "Ver detalle"}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     );
@@ -5886,7 +5912,7 @@ export default function POSModule() {
                 background: "rgba(0,0,0,0.25)",
                 border: "1px solid rgba(255,255,255,0.08)",
                 borderRadius: "12px",
-                padding: "16px",
+                padding: "14px",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
@@ -5901,22 +5927,45 @@ export default function POSModule() {
                   }
 
                   return (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "14px", height: "100%" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px", height: "100%" }}>
                       <div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                          <h4 style={{ margin: 0, color: "white", fontSize: "1.1rem" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px", flexWrap: "wrap", gap: "6px" }}>
+                          <h4 style={{ margin: 0, color: "white", fontSize: "1.05rem" }}>
                             Ticket #{selectedHistoryTicket.id}
                           </h4>
-                          <span style={{
-                            background: "rgba(16, 185, 129, 0.15)",
-                            color: "var(--color-secondary)",
-                            padding: "2px 8px",
-                            borderRadius: "6px",
-                            fontSize: "0.75rem",
-                            fontWeight: "bold"
-                          }}>
-                            {selectedHistoryTicket.status || "Venta"}
-                          </span>
+                          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                            <span style={{
+                              background: "rgba(16, 185, 129, 0.15)",
+                              color: "var(--color-secondary)",
+                              padding: "2px 8px",
+                              borderRadius: "6px",
+                              fontSize: "0.75rem",
+                              fontWeight: "bold"
+                            }}>
+                              {selectedHistoryTicket.status || "Venta"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleReprintHistoryTicket(selectedHistoryTicket)}
+                              className="btn-primary"
+                              style={{
+                                padding: "4px 10px",
+                                fontSize: "0.78rem",
+                                fontWeight: "bold",
+                                background: "linear-gradient(135deg, #10b981, #059669)",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "6px",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                cursor: "pointer",
+                                boxShadow: "0 2px 8px rgba(16, 185, 129, 0.3)"
+                              }}
+                            >
+                              🖨️ Reimprimir
+                            </button>
+                          </div>
                         </div>
                         <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.6)", display: "flex", gap: "12px", flexWrap: "wrap" }}>
                           <span>📅 {new Date(selectedHistoryTicket.created_at).toLocaleString()}</span>
@@ -5926,7 +5975,7 @@ export default function POSModule() {
                       </div>
 
                       {/* Tabla de Artículos (Solo Lectura) */}
-                      <div style={{ flex: 1, overflowY: "auto", maxHeight: "220px", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "8px" }}>
+                      <div style={{ flex: 1, overflowY: "auto", maxHeight: "160px", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "8px" }}>
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
                           <thead>
                             <tr style={{ background: "rgba(255,255,255,0.06)", textAlign: "left", color: "rgba(255,255,255,0.7)" }}>
@@ -5956,33 +6005,37 @@ export default function POSModule() {
                       {/* Resumen Total */}
                       <div style={{
                         background: "rgba(255,255,255,0.03)",
-                        padding: "10px 14px",
+                        padding: "8px 12px",
                         borderRadius: "8px",
                         display: "flex",
                         justifyContent: "space-between",
                         alignItems: "center"
                       }}>
                         <span style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.8)" }}>Total Cobrado:</span>
-                        <span style={{ fontSize: "1.3rem", fontWeight: "bold", color: "var(--color-secondary)" }}>
+                        <span style={{ fontSize: "1.2rem", fontWeight: "bold", color: "var(--color-secondary)" }}>
                           ${Number(selectedHistoryTicket.total || 0).toFixed(2)}
                         </span>
                       </div>
 
-                      {/* Botón Reimprimir Destacado */}
+                      {/* Botón Reimprimir Destacado Inferior */}
                       <button
                         type="button"
                         onClick={() => handleReprintHistoryTicket(selectedHistoryTicket)}
                         className="btn-primary"
                         style={{
                           width: "100%",
-                          padding: "12px",
-                          fontSize: "0.95rem",
+                          padding: "10px",
+                          fontSize: "0.9rem",
                           fontWeight: "bold",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           gap: "8px",
-                          boxShadow: "0 4px 15px rgba(244, 63, 94, 0.3)"
+                          background: "linear-gradient(135deg, #10b981, #059669)",
+                          border: "none",
+                          borderRadius: "8px",
+                          cursor: "pointer",
+                          boxShadow: "0 4px 15px rgba(16, 185, 129, 0.3)"
                         }}
                       >
                         🖨️ Reimprimir Ticket #{selectedHistoryTicket.id}
