@@ -958,19 +958,29 @@ export default function POSModule() {
 
       // Reincorporar existencias en el inventario físico
       if (shouldReturnStock && itemsArr.length > 0) {
+        const stockFailures: string[] = [];
         for (const item of itemsArr) {
           if (item.price > 0 && item.name) {
             const invMatch = globalCatalog.find(c => c.name.toLowerCase() === item.name.toLowerCase());
             if (invMatch) {
-              const newStock = (invMatch.stock || 0) + Number(item.qty || 1);
-              await supabase
-                .from("inventory")
-                .update({ stock: newStock })
-                .eq("id", invMatch.id);
-
-              setGlobalCatalog(prev => prev.map(p => p.id === invMatch.id ? { ...p, stock: newStock } : p));
+              const qty = Number(item.qty || 1);
+              const { error: stockErr } = await reduceInventoryStock(
+                [{ id: invMatch.id, qty: -qty }],
+                "cancellation",
+                `TICKET-CANCEL-${ticket.id}`
+              );
+              if (stockErr) {
+                stockFailures.push(item.name);
+                console.warn(`Falla al restituir stock de "${item.name}":`, stockErr);
+              } else {
+                const newStock = (invMatch.stock || 0) + qty;
+                setGlobalCatalog(prev => prev.map(p => p.id === invMatch.id ? { ...p, stock: newStock } : p));
+              }
             }
           }
+        }
+        if (stockFailures.length > 0) {
+          toast.error(`⚠️ No se pudo restituir stock de: ${stockFailures.join(", ")}. Verifica el inventario manualmente.`);
         }
       }
 
@@ -1482,12 +1492,24 @@ export default function POSModule() {
   }, [tickets, activeTicketId, globalCatalog]);
 
   // Efecto para procesar impresión del sistema en ventana principal (evita bloqueadores de popups)
+  // Imprime `_printCopies` copias en serie cuando la config de copia doble está activa.
   useEffect(() => {
     if (receiptToPrint) {
-      const timer = setTimeout(() => {
+      const totalCopies = receiptToPrint._printCopies || 1;
+      let printedCount = 0;
+      let timer: ReturnType<typeof setTimeout>;
+
+      const printNextCopy = () => {
         window.print();
-        setReceiptToPrint(null);
-      }, 350);
+        printedCount += 1;
+        if (printedCount < totalCopies) {
+          timer = setTimeout(printNextCopy, 800);
+        } else {
+          setReceiptToPrint(null);
+        }
+      };
+
+      timer = setTimeout(printNextCopy, 350);
       return () => clearTimeout(timer);
     }
   }, [receiptToPrint]);
@@ -2954,6 +2976,13 @@ export default function POSModule() {
 
     // Si la impresora configurada es del sistema, redireccionar al flujo nativo sin popup
     if (printerConnectionType === "system") {
+      const doubleCopyEnabled =
+        (config as any).printer_double_copy ||
+        config.printer_double_copy_layaway_credit ||
+        (typeof window !== "undefined" && (localStorage.getItem("ERIKA_PRINTER_DOUBLE_COPY") === "true" || localStorage.getItem("ERIKA_DOUBLE_TICKET") === "true")) ||
+        false;
+      const printCopies = (doubleCopyEnabled && !job.isReprint) ? 2 : 1;
+
       if (job.type === "ticket") {
         const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = job.data;
         const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
@@ -2981,7 +3010,8 @@ export default function POSModule() {
           discountAmount: discountAmt,
           finalTotal: finalTotal,
           invoiceToken: realTicketId,
-          paymentMethod
+          paymentMethod,
+          _printCopies: printCopies
         });
       } else if (job.type === "layaway") {
         const { customer, items, finalTotal, downPayment, discountPct = 0, applyIva = false } = job.data;
@@ -3009,7 +3039,8 @@ export default function POSModule() {
           discountAmount: discountAmt,
           finalTotal,
           downPayment,
-          balance: finalTotal - downPayment
+          balance: finalTotal - downPayment,
+          _printCopies: printCopies
         });
       }
       return;

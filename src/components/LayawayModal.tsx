@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { useBusinessProfile } from "./AuthProvider";
+import { useAuth, useBusinessProfile } from "./AuthProvider";
 import { payLayaway, cancelLayaway } from "../lib/layawaysClient";
 import { reduceInventoryStock } from "../lib/inventoryClient";
 
 export default function LayawayModal({ show, onClose }: { show: boolean; onClose: () => void }) {
   const businessProfile = useBusinessProfile();
+  const { businessSettings } = useAuth();
   const [layaways, setLayaways] = useState<any[]>([]);
 
   const fetchLayaways = async () => {
@@ -31,17 +32,14 @@ export default function LayawayModal({ show, onClose }: { show: boolean; onClose
     // Print Thermal Ticket for Abono
     const ticketWindow = window.open("", "_blank", "width=300,height=500");
     if (ticketWindow) {
-      const ticketHtml = `
-        <html>
-          <head>
-            <style>
-              body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; width: 58mm; color: #000; background: #fff; }
-              .center { text-align: center; }
-              .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
-              .bold { font-weight: bold; }
-            </style>
-          </head>
-          <body>
+      const doubleCopyEnabled =
+        (businessSettings?.config as any)?.printer_double_copy ||
+        businessSettings?.config?.printer_double_copy_layaway_credit ||
+        (typeof window !== "undefined" && (localStorage.getItem("ERIKA_PRINTER_DOUBLE_COPY") === "true" || localStorage.getItem("ERIKA_DOUBLE_TICKET") === "true")) ||
+        false;
+
+      const renderAbonoBody = (isCopyFlag: boolean) => `
+            ${isCopyFlag ? `<div class="center bold" style="border: 2px dashed #000; padding: 4px; margin-bottom: 8px; background: #eee;">*** COPIA PARA EL NEGOCIO ***</div>` : ""}
             <div class="center bold" style="font-size: 16px; margin-bottom: 5px;">${businessProfile.name.toUpperCase()}</div>
             <div class="center" style="font-size: 12px;">Comprobante de Abono</div>
             <div class="divider"></div>
@@ -60,6 +58,22 @@ export default function LayawayModal({ show, onClose }: { show: boolean; onClose
             <div class="center bold" style="font-size: 12px; margin-top: 10px;">
               ${isCompleted ? "¡APARTADO LIQUIDADO!" : "¡Gracias por su abono!"}
             </div>
+      `;
+
+      const ticketHtml = `
+        <html>
+          <head>
+            <style>
+              body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; width: 58mm; color: #000; background: #fff; }
+              .center { text-align: center; }
+              .divider { border-bottom: 1px dashed #000; margin: 10px 0; }
+              .bold { font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            ${doubleCopyEnabled
+              ? `${renderAbonoBody(false)}<div style="page-break-after: always; border-bottom: 2px dashed #000; margin: 15px 0;"></div>${renderAbonoBody(true)}`
+              : renderAbonoBody(false)}
           </body>
         </html>
       `;
