@@ -120,7 +120,13 @@ export default function SettingsModule() {
     }
     return false;
   });
-  const [printerDoubleCopy, setPrinterDoubleCopy] = useState<boolean>(false);
+  const [printerDoubleCopy, setPrinterDoubleCopy] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("ERIKA_PRINTER_DOUBLE_COPY");
+      if (saved !== null) return saved === "true";
+    }
+    return false;
+  });
   const [printerBleChunkSize, setPrinterBleChunkSize] = useState<number>(20);
   const [printerEnableAutocut, setPrinterEnableAutocut] = useState<boolean>(true);
   const [printerInvert180, setPrinterInvert180] = useState<boolean>(() => {
@@ -1679,11 +1685,17 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
                 type="checkbox"
                 id="printer-double-copy-checkbox"
                 checked={printerDoubleCopy}
-                onChange={(e) => setPrinterDoubleCopy(e.target.checked)}
+                onChange={(e) => {
+                  const val = e.target.checked;
+                  setPrinterDoubleCopy(val);
+                  if (typeof window !== "undefined") {
+                    localStorage.setItem("ERIKA_PRINTER_DOUBLE_COPY", val ? "true" : "false");
+                  }
+                }}
                 style={{ width: "18px", height: "18px", cursor: "pointer" }}
               />
               <label htmlFor="printer-double-copy-checkbox" style={{ fontSize: "0.9rem", cursor: "pointer", userSelect: "none", color: "white" }}>
-                <strong>Doble copia para Apartados y Crédito</strong> (Imprime automáticamente un segundo ticket de copia para el negocio).
+                <strong>Imprimir Doble Ticket en Ventas y Cobros</strong> (Imprime automáticamente un segundo ticket de copia para el negocio en cada venta, cobro o apartado).
               </label>
             </div>
 

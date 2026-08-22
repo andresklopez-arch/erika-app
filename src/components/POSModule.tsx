@@ -2156,318 +2156,342 @@ export default function POSModule() {
   const subtotal = subtotalNeto;
 
   const generateEscPosBytes = (job: any, config: any) => {
-    const encoder = new TextEncoder();
-    const chunks: Uint8Array[] = [];
+    const generateSingleTicket = (currentJob: any) => {
+      const chunks: Uint8Array[] = [];
+      const encoder = new TextEncoder();
 
-    const sanitizeForThermal = (str: string): string => {
-      if (!str) return "";
-      return str
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "") // á -> a, é -> e, etc.
-        .replace(/¡/g, "!")
-        .replace(/¿/g, "?")
-        .replace(/ñ/g, "n")
-        .replace(/Ñ/g, "N")
-        .replace(/[^\x20-\x7E\r\n\t]/g, ""); // Keep only clean standard ASCII characters
-    };
-    
-    const write = (bytes: number[]) => {
-      chunks.push(new Uint8Array(bytes));
-    };
-    const writeText = (text: string) => {
-      chunks.push(encoder.encode(sanitizeForThermal(text)));
-    };
-    
-    const invertPrint = config.printer_invert_180 !== undefined
-      ? config.printer_invert_180
-      : (typeof window !== "undefined" && localStorage.getItem("ERIKA_PRINTER_INVERT_180") !== null
-          ? localStorage.getItem("ERIKA_PRINTER_INVERT_180") === "true"
-          : true);
-    const topLines = config.printer_margin_top_lines || 0;
-    const bottomLines = config.printer_margin_bottom_lines !== undefined ? config.printer_margin_bottom_lines : 1;
-
-    // Comandos ESC/POS estándar limpios
-    write([0x1b, 0x40]); // Reset ESC @
-    write([0x1b, 0x7b, invertPrint ? 0x01 : 0x00]); // ESC { orientation (0 = Normal, 1 = 180° Invertido)
-    write([0x1b, 0x74, 0x00]); // Code page 437
-    write([0x1b, 0x32]); // Line spacing default
-
-    // Líneas ANTES de imprimir (Encabezado)
-    if (topLines > 0) {
-      write([0x1b, 0x64, topLines]);
-    }
-    
-    const setAlign = (align: number) => {
-      write([0x1b, 0x61, align]);
-    };
-    
-    const setBold = (on: boolean) => {
-      write([0x1b, 0x45, on ? 0x01 : 0x00]);
-    };
-    
-    const setDoubleSize = (on: boolean) => {
-      write([0x1d, 0x21, on ? 0x11 : 0x00]);
-    };
-    
-    const paperSize = config.printer_paper_size || "80mm";
-    const maxCols = paperSize === "58mm" ? 30 : 42;
-    const divider = "-".repeat(maxCols) + "\n";
-    
-    if (job.isReprint) {
-      const nowStr = new Date().toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" });
-      setAlign(1);
-      setBold(true);
-      writeText(`*** COPIA REIMPRESA - ${nowStr} ***\n`);
-      setBold(false);
-      writeText(divider);
-    } else if (job.isCopy) {
-      setAlign(1);
-      setBold(true);
-      writeText("*** COPIA PARA EL NEGOCIO ***\n");
-      setBold(false);
-      writeText(divider);
-    }
-    
-    const fields = config.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"];
-    const showName = fields.includes("name");
-    const showRfc = fields.includes("rfc") && businessProfile.rfc;
-    const showPhone = fields.includes("phone") && businessProfile.phone;
-    const showAddress = fields.includes("address") && businessProfile.address;
-    const showBilling = fields.includes("billing");
-    const showFooter = fields.includes("footer");
-    const showEmail = fields.includes("email") && businessProfile.email;
-    const showPaymentMethod = fields.includes("payment_method");
-    const showSeller = fields.includes("seller");
-    const showCustomer = fields.includes("customer");
-    const showNotes = fields.includes("notes");
-    const showWarranty = fields.includes("warranty");
-
-    setAlign(1);
-    if (showName) {
-      setDoubleSize(true);
-      setBold(true);
-      writeText(businessProfile.name + "\n");
-      setDoubleSize(false);
-    }
-
-    setBold(false);
-    if (showRfc) writeText(`RFC: ${businessProfile.rfc}\n`);
-    if (showPhone) writeText(`Tel: ${businessProfile.phone}\n`);
-    if (showAddress) writeText(`${businessProfile.address}\n`);
-    if (showEmail) writeText(`Email: ${businessProfile.email}\n`);
-    
-    writeText(divider);
-    
-    if (job.type === "ticket") {
-      const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = job.data;
-      const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
-      const printDiscountPct = discountPct < 0 ? 0 : discountPct;
+      const sanitizeForThermal = (str: string): string => {
+        if (!str) return "";
+        return str
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "") // á -> a, é -> e, etc.
+          .replace(/¡/g, "!")
+          .replace(/¿/g, "?")
+          .replace(/ñ/g, "n")
+          .replace(/Ñ/g, "N")
+          .replace(/[^\x20-\x7E\r\n\t]/g, ""); // Keep only clean standard ASCII characters
+      };
       
+      const write = (bytes: number[]) => {
+        chunks.push(new Uint8Array(bytes));
+      };
+      const writeText = (text: string) => {
+        chunks.push(encoder.encode(sanitizeForThermal(text)));
+      };
+      
+      const invertPrint = config.printer_invert_180 !== undefined
+        ? config.printer_invert_180
+        : (typeof window !== "undefined" && localStorage.getItem("ERIKA_PRINTER_INVERT_180") !== null
+            ? localStorage.getItem("ERIKA_PRINTER_INVERT_180") === "true"
+            : true);
+      const topLines = config.printer_margin_top_lines || 0;
+      const bottomLines = config.printer_margin_bottom_lines !== undefined ? config.printer_margin_bottom_lines : 1;
+
+      // Comandos ESC/POS estándar limpios
+      write([0x1b, 0x40]); // Reset ESC @
+      write([0x1b, 0x7b, invertPrint ? 0x01 : 0x00]); // ESC { orientation (0 = Normal, 1 = 180° Invertido)
+      write([0x1b, 0x74, 0x00]); // Code page 437
+      write([0x1b, 0x32]); // Line spacing default
+
+      // Líneas ANTES de imprimir (Encabezado)
+      if (topLines > 0) {
+        write([0x1b, 0x64, topLines]);
+      }
+      
+      const setAlign = (align: number) => {
+        write([0x1b, 0x61, align]);
+      };
+      
+      const setBold = (on: boolean) => {
+        write([0x1b, 0x45, on ? 0x01 : 0x00]);
+      };
+      
+      const setDoubleSize = (on: boolean) => {
+        write([0x1d, 0x21, on ? 0x11 : 0x00]);
+      };
+      
+      const paperSize = config.printer_paper_size || "80mm";
+      const maxCols = paperSize === "58mm" ? 30 : 42;
+      const divider = "-".repeat(maxCols) + "\n";
+      
+      if (currentJob.isReprint) {
+        const nowStr = new Date().toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" });
+        setAlign(1);
+        setBold(true);
+        writeText(`*** COPIA REIMPRESA - ${nowStr} ***\n`);
+        setBold(false);
+        writeText(divider);
+      } else if (currentJob.isCopy) {
+        setAlign(1);
+        setBold(true);
+        writeText("*** COPIA PARA EL NEGOCIO ***\n");
+        setBold(false);
+        writeText(divider);
+      }
+      
+      const fields = config.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"];
+      const showName = fields.includes("name");
+      const showRfc = fields.includes("rfc") && businessProfile.rfc;
+      const showPhone = fields.includes("phone") && businessProfile.phone;
+      const showAddress = fields.includes("address") && businessProfile.address;
+      const showBilling = fields.includes("billing");
+      const showFooter = fields.includes("footer");
+      const showEmail = fields.includes("email") && businessProfile.email;
+      const showPaymentMethod = fields.includes("payment_method");
+      const showSeller = fields.includes("seller");
+      const showCustomer = fields.includes("customer");
+      const showNotes = fields.includes("notes");
+      const showWarranty = fields.includes("warranty");
+
       setAlign(1);
-      setBold(true);
-      writeText(`Ticket: #${realTicketId}\n`);
-      setBold(false);
-      if (paymentMethod === PAYMENT_METHOD_CREDITO) {
-        writeText("*** VENTA A CREDITO ***\n");
+      if (showName) {
+        setDoubleSize(true);
+        setBold(true);
+        writeText(businessProfile.name + "\n");
+        setDoubleSize(false);
       }
 
-      setAlign(0);
-      writeText(`Fecha: ${new Date().toLocaleString()}\n`);
-      // Orden alineado con la lista de "Campos a Imprimir" en Configuración
-      // (payment_method, seller, customer) — antes el orden aquí no
-      // coincidía con el orden mostrado en Configuración.
-      if (showPaymentMethod && paymentMethod) writeText(`Metodo de Pago: ${paymentMethod.toUpperCase()}\n`);
-      if (showSeller) writeText(`Atendido por: ${currentUser?.name || "Venta Mostrador"}\n`);
-      if (showCustomer && job.data.customerName) writeText(`Cliente: ${job.data.customerName}\n`);
-      if (showNotes && job.data.notes) writeText(`Nota: ${job.data.notes}\n`);
-
+      setBold(false);
+      if (showRfc) writeText(`RFC: ${businessProfile.rfc}\n`);
+      if (showPhone) writeText(`Tel: ${businessProfile.phone}\n`);
+      if (showAddress) writeText(`${businessProfile.address}\n`);
+      if (showEmail) writeText(`Email: ${businessProfile.email}\n`);
+      
       writeText(divider);
+      
+      if (currentJob.type === "ticket") {
+        const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = currentJob.data;
+        const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
+        const printDiscountPct = discountPct < 0 ? 0 : discountPct;
 
-      items.forEach((item: any) => {
-        const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
-        const itemTotal = `${Math.round(p * item.qty)}`;
-        // Para productos por peso/longitud/volumen, "0.25x" es confuso —
-        // se muestra la unidad real (ej. "0.25 kg") en vez del prefijo "x".
-        const qtyLabel = item.unit && item.unit !== "pz" ? `${item.qty} ${item.unit}` : `${item.qty}x`;
-        const nameText = `${qtyLabel} ${item.name}`;
+        if (paymentMethod === PAYMENT_METHOD_CREDITO) {
+          setAlign(1);
+          setBold(true);
+          writeText("*** VENTA A CREDITO ***\n");
+          setBold(false);
+          writeText(divider);
+        }
 
-        const wrappedLines: string[] = [];
-        let currentLine = "";
-        const words = nameText.split(" ");
-        words.forEach((word: string) => {
-          if ((currentLine + word).length <= maxCols - 10) {
-            currentLine += (currentLine ? " " : "") + word;
+        setAlign(1);
+        setBold(true);
+        writeText(`Ticket: #${realTicketId}\n`);
+        setBold(false);
+        writeText(`Fecha: ${new Date().toLocaleString()}\n`);
+        
+        setAlign(0);
+        if (showPaymentMethod && paymentMethod) {
+          writeText(`Metodo: ${paymentMethod.toUpperCase()}\n`);
+        }
+        if (showPaymentMethod && currentJob.data.reference) {
+          writeText(`Ref/Folio: ${currentJob.data.reference}\n`);
+        }
+        if (showSeller) {
+          writeText(`Atendido por: ${currentUser?.name || "Venta Mostrador"}\n`);
+        }
+        if (showCustomer && currentJob.data.customerName) {
+          writeText(`Cliente: ${currentJob.data.customerName}\n`);
+        }
+        if (showNotes && currentJob.data.notes) {
+          writeText(`Nota: ${currentJob.data.notes}\n`);
+        }
+        
+        writeText(divider);
+        
+        items.forEach((item: any) => {
+          const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
+          const itemTotal = "$" + Math.round(p * item.qty);
+          const prefix = item.unit && item.unit !== "pz" ? `${item.qty} ${item.unit} ` : `${item.qty}x `;
+          const disc = (item.discountPct || 0) > 0 ? `(-${item.discountPct}%)` : '';
+          const fullName = prefix + item.name + (disc ? " " + disc : "");
+          
+          const maxNameLen = maxCols - itemTotal.length - 1;
+          const words = fullName.split(" ");
+          let currentLine = "";
+          const wrappedLines: string[] = [];
+          
+          words.forEach(word => {
+            if ((currentLine + " " + word).trim().length <= maxNameLen) {
+              currentLine = (currentLine + " " + word).trim();
+            } else {
+              if (currentLine) wrappedLines.push(currentLine);
+              currentLine = word;
+            }
+          });
+          if (currentLine) wrappedLines.push(currentLine);
+          
+          for (let idx = 0; idx < wrappedLines.length - 1; idx++) {
+            writeText(wrappedLines[idx] + "\n");
+          }
+          
+          const lastLine = wrappedLines[wrappedLines.length - 1] || "";
+          const spacesNeeded = maxCols - lastLine.length - itemTotal.length;
+          if (spacesNeeded > 0) {
+            writeText(lastLine + " ".repeat(spacesNeeded) + itemTotal + "\n");
           } else {
-            wrappedLines.push(currentLine);
-            currentLine = word;
+            writeText(lastLine + "\n");
+            setAlign(2);
+            writeText(itemTotal + "\n");
+            setAlign(0);
+          }
+
+          if (item.unit && item.unit !== "pz") {
+            writeText(`  ($${p.toFixed(2)}/${item.unit})\n`);
           }
         });
-        if (currentLine) wrappedLines.push(currentLine);
+
+        writeText(divider);
         
-        for (let idx = 0; idx < wrappedLines.length - 1; idx++) {
-          writeText(wrappedLines[idx] + "\n");
+        const subtotalVal = items.reduce((sum: number, i: any) => {
+           const p = (getItemFinalPrice(i, wholesaleRules) * increaseFactor);
+           return sum + (p * i.qty);
+        }, 0);
+        const discountVal = subtotalVal * (printDiscountPct / 100);
+        const subtotalNeto = subtotalVal - discountVal;
+        const iva = applyIva ? subtotalNeto * (businessSettings?.config?.iva_rate ?? 0.16) : 0;
+        
+        setAlign(2);
+        writeText(`Subtotal: ${Math.round(subtotalVal)}\n`);
+        if (printDiscountPct > 0) {
+          writeText(`Desc. (${printDiscountPct}%): -${Math.round(discountVal)}\n`);
         }
+        if (applyIva) writeText(`IVA (16%): ${Math.round(iva)}\n`);
         
-        const lastLine = wrappedLines[wrappedLines.length - 1] || "";
-        const spacesNeeded = maxCols - lastLine.length - itemTotal.length;
-        if (spacesNeeded > 0) {
-          writeText(lastLine + " ".repeat(spacesNeeded) + itemTotal + "\n");
-        } else {
-          writeText(lastLine + "\n");
-          setAlign(2);
-          writeText(itemTotal + "\n");
+        setBold(true);
+        writeText(`TOTAL: $${Math.round(finalTotal)}\n`);
+        setBold(false);
+        setAlign(0);
+
+        if (showWarranty) {
+          setAlign(1);
+          writeText("\nGarantia de 30 dias contra defectos de fabrica.\n");
           setAlign(0);
         }
-
-        // Precio por unidad visible para que el cliente vea cómo se calculó
-        // el importe en productos vendidos por peso/longitud/volumen.
-        if (item.unit && item.unit !== "pz") {
-          writeText(`  ($${p.toFixed(2)}/${item.unit})\n`);
+        
+        if (showBilling) {
+          setAlign(1);
+          writeText("\nAuto-Facturacion Express:\n");
+          writeText(`${typeof window !== "undefined" ? window.location.origin : ""}/facturacion/${realTicketId}\n`);
+          setAlign(0);
         }
-      });
-
-      writeText(divider);
-      
-      const subtotalVal = items.reduce((sum: number, i: any) => {
-         const p = (getItemFinalPrice(i, wholesaleRules) * increaseFactor);
-         return sum + (p * i.qty);
-      }, 0);
-      const discountVal = subtotalVal * (printDiscountPct / 100);
-      const subtotalNeto = subtotalVal - discountVal;
-      const iva = applyIva ? subtotalNeto * (businessSettings?.config?.iva_rate ?? 0.16) : 0;
-      
-      setAlign(2);
-      writeText(`Subtotal: ${Math.round(subtotalVal)}\n`);
-      if (printDiscountPct > 0) {
-        writeText(`Desc. (${printDiscountPct}%): -${Math.round(discountVal)}\n`);
-      }
-      if (applyIva) {
-        writeText(`IVA (16%): $${Math.round(iva)}\n`);
-      }
-      setBold(true);
-      writeText(`TOTAL: $${Math.round(finalTotal)}\n`);
-      setBold(false);
-      setAlign(0);
-
-      writeText(divider);
-
-      // El cliente y la nota ya se imprimieron arriba (bloque de datos de
-      // la venta) si están marcados en Campos a Imprimir — antes el
-      // cliente se repetía aquí sin condición, duplicando el nombre.
-      if (showWarranty) {
+      } else if (currentJob.type === "layaway") {
+        const { customer, items, finalTotal, downPayment, discountPct = 0, applyIva = false } = currentJob.data;
+        const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
+        const printDiscountPct = discountPct < 0 ? 0 : discountPct;
+        
         setAlign(1);
-        writeText("Garantia de 30 dias contra\ndefectos de fabrica.\n");
-      }
+        setBold(true);
+        writeText("COMPROBANTE DE APARTADO\n");
+        setBold(false);
+        writeText(`Fecha: ${new Date().toLocaleString()}\n`);
+        if (customer?.name) writeText(`Cliente: ${customer.name}\n`);
+        if (showSeller) writeText(`Atendido por: ${currentUser?.name || "Venta Mostrador"}\n`);
 
-      if (showBilling) {
-        setAlign(1);
-        writeText(`Auto-Facturacion Express:\nerika-app.vercel.app/facturacion\n`);
-      }
-    } else if (job.type === "layaway") {
-      const { customer, items, finalTotal, downPayment, discountPct = 0, applyIva = false } = job.data;
-      const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
-      const printDiscountPct = discountPct < 0 ? 0 : discountPct;
-      
-      setAlign(1);
-      setBold(true);
-      writeText("Comprobante de Apartado\n");
-      setBold(false);
-      
-      setAlign(0);
-      writeText(`Fecha: ${new Date().toLocaleString()}\n`);
-      if (showSeller) writeText(`Atendido por: ${currentUser?.name || "Venta Mostrador"}\n`);
-      writeText(`Cliente: ${customer?.name || "Desconocido"}\n`);
-      
-      writeText(divider);
-      
-      items.forEach((item: any) => {
-        const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
-        const itemTotal = `${Math.round(p * item.qty)}`;
-        // Para productos por peso/longitud/volumen, "0.25x" es confuso —
-        // se muestra la unidad real (ej. "0.25 kg") en vez del prefijo "x".
-        const qtyLabel = item.unit && item.unit !== "pz" ? `${item.qty} ${item.unit}` : `${item.qty}x`;
-        const nameText = `${qtyLabel} ${item.name}`;
+        setAlign(0);
+        writeText(divider);
 
-        const wrappedLines: string[] = [];
-        let currentLine = "";
-        const words = nameText.split(" ");
-        words.forEach((word: string) => {
-          if ((currentLine + word).length <= maxCols - 10) {
-            currentLine += (currentLine ? " " : "") + word;
+        items.forEach((item: any) => {
+          const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
+          const itemTotal = "$" + Math.round(p * item.qty);
+          const prefix = item.unit && item.unit !== "pz" ? `${item.qty} ${item.unit} ` : `${item.qty}x `;
+          const fullName = prefix + item.name;
+          
+          const maxNameLen = maxCols - itemTotal.length - 1;
+          const words = fullName.split(" ");
+          let currentLine = "";
+          const wrappedLines: string[] = [];
+          
+          words.forEach(word => {
+            if ((currentLine + " " + word).trim().length <= maxNameLen) {
+              currentLine = (currentLine + " " + word).trim();
+            } else {
+              if (currentLine) wrappedLines.push(currentLine);
+              currentLine = word;
+            }
+          });
+          if (currentLine) wrappedLines.push(currentLine);
+          
+          for (let idx = 0; idx < wrappedLines.length - 1; idx++) {
+            writeText(wrappedLines[idx] + "\n");
+          }
+          
+          const lastLine = wrappedLines[wrappedLines.length - 1] || "";
+          const spacesNeeded = maxCols - lastLine.length - itemTotal.length;
+          if (spacesNeeded > 0) {
+            writeText(lastLine + " ".repeat(spacesNeeded) + itemTotal + "\n");
           } else {
-            wrappedLines.push(currentLine);
-            currentLine = word;
+            writeText(lastLine + "\n");
+            setAlign(2);
+            writeText(itemTotal + "\n");
+            setAlign(0);
+          }
+
+          if (item.unit && item.unit !== "pz") {
+            writeText(`  ($${p.toFixed(2)}/${item.unit})\n`);
           }
         });
-        if (currentLine) wrappedLines.push(currentLine);
-        
-        for (let idx = 0; idx < wrappedLines.length - 1; idx++) {
-          writeText(wrappedLines[idx] + "\n");
-        }
-        
-        const lastLine = wrappedLines[wrappedLines.length - 1] || "";
-        const spacesNeeded = maxCols - lastLine.length - itemTotal.length;
-        if (spacesNeeded > 0) {
-          writeText(lastLine + " ".repeat(spacesNeeded) + itemTotal + "\n");
-        } else {
-          writeText(lastLine + "\n");
-          setAlign(2);
-          writeText(itemTotal + "\n");
-          setAlign(0);
-        }
 
-        // Precio por unidad visible para que el cliente vea cómo se calculó
-        // el importe en productos vendidos por peso/longitud/volumen.
-        if (item.unit && item.unit !== "pz") {
-          writeText(`  ($${p.toFixed(2)}/${item.unit})\n`);
+        writeText(divider);
+        
+        const subtotalVal = items.reduce((sum: number, i: any) => {
+           const p = (getItemFinalPrice(i, wholesaleRules) * increaseFactor);
+           return sum + (p * i.qty);
+        }, 0);
+        const discountVal = subtotalVal * (printDiscountPct / 100);
+        const subtotalNeto = subtotalVal - discountVal;
+        const iva = applyIva ? subtotalNeto * (businessSettings?.config?.iva_rate ?? 0.16) : 0;
+        
+        setAlign(2);
+        writeText(`Subtotal: ${Math.round(subtotalVal)}\n`);
+        if (printDiscountPct > 0) {
+          writeText(`Desc. (${printDiscountPct}%): -${Math.round(discountVal)}\n`);
         }
-      });
-
-      writeText(divider);
-      
-      const subtotalVal = items.reduce((sum: number, i: any) => {
-         const p = (getItemFinalPrice(i, wholesaleRules) * increaseFactor);
-         return sum + (p * i.qty);
-      }, 0);
-      const discountVal = subtotalVal * (printDiscountPct / 100);
-      const subtotalNeto = subtotalVal - discountVal;
-      const iva = applyIva ? subtotalNeto * (businessSettings?.config?.iva_rate ?? 0.16) : 0;
-      
-      setAlign(2);
-      writeText(`Subtotal: ${Math.round(subtotalVal)}\n`);
-      if (printDiscountPct > 0) {
-        writeText(`Desc. (${printDiscountPct}%): -${Math.round(discountVal)}\n`);
+        if (applyIva) writeText(`IVA (16%): ${Math.round(iva)}\n`);
+        
+        setBold(true);
+        writeText(`TOTAL: $${Math.round(finalTotal)}\n`);
+        writeText(`Enganche: $${Math.round(downPayment)}\n`);
+        writeText(`Saldo: $${Math.round(finalTotal - downPayment)}\n`);
+        setBold(false);
+        setAlign(0);
       }
-      if (applyIva) writeText(`IVA (16%): ${Math.round(iva)}\n`);
       
-      setBold(true);
-      writeText(`TOTAL: $${Math.round(finalTotal)}\n`);
-      writeText(`Enganche: $${Math.round(downPayment)}\n`);
-      writeText(`Saldo: $${Math.round(finalTotal - downPayment)}\n`);
-      setBold(false);
-      setAlign(0);
-    }
-    
-    writeText("\n");
-    if (showFooter) {
-      setAlign(1);
-      writeText((config.printer_footer_msg || "Gracias por su compra!") + "\n");
+      writeText("\n");
+      if (showFooter) {
+        setAlign(1);
+        writeText((config.printer_footer_msg || "Gracias por su compra!") + "\n");
+      }
+
+      // Líneas DESPUÉS de imprimir (Pie / Avance configurable por usuario)
+      if (bottomLines > 0) {
+        write([0x1b, 0x64, bottomLines]);
+      }
+      if (config.printer_enable_autocut !== false) {
+        try {
+          write([0x1d, 0x56, 0x01]); // GS V 1 corte seguro
+        } catch (e) {}
+      }
+
+      return chunks;
+    };
+
+    const doubleCopyEnabled = 
+      (config as any).printer_double_copy || 
+      config.printer_double_copy_layaway_credit || 
+      (typeof window !== "undefined" && (localStorage.getItem("ERIKA_PRINTER_DOUBLE_COPY") === "true" || localStorage.getItem("ERIKA_DOUBLE_TICKET") === "true")) || 
+      false;
+
+    let allChunks: Uint8Array[] = [];
+    allChunks.push(...generateSingleTicket(job));
+
+    // Si doble ticket está activado y no es ya una copia o reimpresión, agregar la segunda copia al mismo flujo
+    if (doubleCopyEnabled && !job.isReprint && !job.isCopy) {
+      allChunks.push(...generateSingleTicket({ ...job, isCopy: true }));
     }
 
-    // Líneas DESPUÉS de imprimir (Pie / Avance configurable por usuario)
-    if (bottomLines > 0) {
-      write([0x1b, 0x64, bottomLines]);
-    }
-    if (config.printer_enable_autocut !== false) {
-      try {
-        write([0x1d, 0x56, 0x01]); // GS V 1 corte seguro
-      } catch (e) {}
-    }
-
-    const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+    const totalLength = allChunks.reduce((acc, chunk) => acc + chunk.length, 0);
     const result = new Uint8Array(totalLength);
     let offset = 0;
-    chunks.forEach(chunk => {
+    allChunks.forEach(chunk => {
       result.set(chunk, offset);
       offset += chunk.length;
     });
@@ -2664,20 +2688,11 @@ export default function POSModule() {
 
     const printWindow = window.open("", "_blank", `width=${paperSize === "58mm" ? 300 : 400},height=500`);
     if (!printWindow) {
-      // Antes esto fallaba en silencio. La segunda copia (apartados,
-      // crédito) se abre 1.5s después dentro de un setTimeout, sin
-      // relación directa con el clic del usuario — muchos navegadores
-      // bloquean ese window.open() por default como si fuera una ventana
-      // emergente no solicitada, mientras que la primera copia (que sí
-      // abre en el mismo instante del clic) pasa sin problema. Esto
-      // explica por qué solo llegaba a imprimirse 1 de los 2 tickets.
       toast.error(
         (t) => (
           <span style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <span>
-              {job.isCopy
-                ? "⚠️ El navegador bloqueó la ventana de la copia extra. Permite las ventanas emergentes para este sitio."
-                : "⚠️ El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para este sitio."}
+              ⚠️ El navegador bloqueó la ventana de impresión. Permite las ventanas emergentes para este sitio.
             </span>
             <button
               onClick={() => {
@@ -2705,11 +2720,11 @@ export default function POSModule() {
     }
 
     const nowStr = new Date().toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" });
-    const copyLabelHtml = job.isReprint
-      ? `<div style="text-align:center; font-weight:bold; border: 2px dashed #000; padding: 6px; margin-bottom: 12px; font-size: 0.85em; background: #eee;">*** COPIA REIMPRESA - ${nowStr} ***</div>`
-      : job.isCopy 
-      ? `<div style="text-align:center; font-weight:bold; border: 2px dashed #000; padding: 6px; margin-bottom: 12px; font-size: 0.9em; background: #eee;">*** COPIA PARA EL NEGOCIO ***</div>`
-      : "";
+    const doubleCopyEnabled = 
+      (config as any).printer_double_copy || 
+      config.printer_double_copy_layaway_credit || 
+      (typeof window !== "undefined" && (localStorage.getItem("ERIKA_PRINTER_DOUBLE_COPY") === "true" || localStorage.getItem("ERIKA_DOUBLE_TICKET") === "true")) || 
+      false;
 
     if (job.type === "ticket") {
       const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = job.data;
@@ -2736,6 +2751,84 @@ export default function POSModule() {
       const subtotalNeto = subtotalVal - discountVal;
       const iva = applyIva ? subtotalNeto * (businessSettings?.config?.iva_rate ?? 0.16) : 0;
 
+      const renderTicketBody = (isCopyFlag: boolean) => {
+        const copyLabelHtml = job.isReprint
+          ? `<div style="text-align:center; font-weight:bold; border: 2px dashed #000; padding: 6px; margin-bottom: 12px; font-size: 0.85em; background: #eee;">*** COPIA REIMPRESA - ${nowStr} ***</div>`
+          : isCopyFlag 
+          ? `<div style="text-align:center; font-weight:bold; border: 2px dashed #000; padding: 6px; margin-bottom: 12px; font-size: 0.9em; background: #eee;">*** COPIA PARA EL NEGOCIO ***</div>`
+          : "";
+
+        return `
+          <div style="text-align: ${marginAlign}; width: 100%;">
+            ${copyLabelHtml}
+            ${creditLabelHtml}
+            ${showLogo ? `<div class="center"><img src="${businessProfile.logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
+            ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name}</div>` : ""}
+            ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc}</div>` : ""}
+            ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessProfile.phone}</div>` : ""}
+            ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address}</div>` : ""}
+            ${showEmail ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Email: ${businessProfile.email}</div>` : ""}
+
+            <div class="divider"></div>
+            <div class="center bold" style="margin-bottom: 5px;">Ticket: #${realTicketId}</div>
+            <div style="font-size: 0.9em; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
+
+            ${showPaymentMethod && paymentMethod ? `<div style="font-size: 0.95em; margin-bottom: 5px;">Método de Pago: ${paymentMethod.toUpperCase()}</div>` : ""}
+            ${showPaymentMethod && job.data.reference ? `<div style="font-size: 0.9em; margin-bottom: 5px;">Ref/Folio: ${job.data.reference}</div>` : ""}
+            ${showPaymentMethod && paymentMethod === "mixto" ? `
+            <div style="font-size: 0.85em; margin-left: 10px; margin-bottom: 5px; opacity: 0.8;">
+              ${job.data.cashAmount > 0 ? `<span>- Efec: $${Math.round(job.data.cashAmount)}</span><br>` : ""}
+              ${job.data.cardAmount > 0 ? `<span>- Tarj: $${Math.round(job.data.cardAmount)}</span><br>` : ""}
+              ${job.data.transferAmount > 0 ? `<span>- Trans: $${Math.round(job.data.transferAmount)}</span>` : ""}
+            </div>
+            ` : ""}
+
+            ${showSeller ? `<div style="font-size: 0.9em; margin-bottom: 5px;">Atendido por: ${currentUser?.name || "Venta Mostrador"}</div>` : ""}
+
+            ${showCustomer && job.data.customerName ? `
+            <div style="font-size: 0.85rem; margin-bottom: 5px;">
+              <strong>Cliente:</strong> ${job.data.customerName}
+            </div>
+            ` : ""}
+
+            ${showNotes && job.data.notes ? `
+            <div style="font-size: 0.85em; background: #eee; padding: 5px; margin-bottom: 5px; border-radius: 4px; text-align: left;">
+              <strong>Nota:</strong> ${job.data.notes}
+            </div>
+            ` : ""}
+
+            <div class="divider"></div>
+            ${itemsHtml}
+            <div class="divider"></div>
+            <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span>$${Math.round(subtotalVal)}</span></div>
+            ${printDiscountPct > 0 ? `
+            <div style="display:flex; justify-content:space-between; color: red;"><span>Desc. (${printDiscountPct}%):</span><span>-${Math.round(discountVal)}</span></div>
+            ` : ""}
+            ${applyIva ? `
+            <div style="display:flex; justify-content:space-between;"><span>IVA (16%):</span><span>$${Math.round(iva)}</span></div>
+            ` : ""}
+            <div class="divider"></div>
+            <div style="display:flex; justify-content:space-between; font-size: 1.1em;"><strong>TOTAL:</strong><strong>$${Math.round(finalTotal)}</strong></div>
+
+            ${showWarranty ? `
+            <div class="center" style="font-size: 0.85em; margin-top: 10px; opacity: 0.8;">
+              🛡️ Garantía de 30 días contra defectos de fábrica.
+            </div>
+            ` : ""}
+
+            <div class="divider"></div>
+            ${showBilling ? `
+            <div class="center" style="margin-top: 15px; font-size: 0.9em;">
+              <strong>Auto-Facturación Express</strong><br>
+              <span>Entra a ${window.location.origin}/facturacion/${realTicketId} para facturar.</span>
+            </div>
+            ` : ""}
+            ${showFooter ? `<div class="center bold" style="margin-top: 15px;">${footerMsg}</div>` : ""}
+            <div style="height: 25px;"></div>
+          </div>
+        `;
+      };
+
       const html = `
         <html>
           <head>
@@ -2757,82 +2850,16 @@ export default function POSModule() {
             </style>
           </head>
           <body>
-            <div style="text-align: ${marginAlign}; width: 100%;">
-              ${copyLabelHtml}
-              ${creditLabelHtml}
-              ${showLogo ? `<div class="center"><img src="${businessProfile.logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
-              ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name}</div>` : ""}
-              ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc}</div>` : ""}
-              ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessProfile.phone}</div>` : ""}
-              ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address}</div>` : ""}
-              ${showEmail ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Email: ${businessProfile.email}</div>` : ""}
-
-              <div class="divider"></div>
-              <div class="center bold" style="margin-bottom: 5px;">Ticket: #${realTicketId}</div>
-              <div style="font-size: 0.9em; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
-
-              <!-- Orden alineado con la lista de "Campos a Imprimir" en
-              Configuración (payment_method, seller, customer, notes) -->
-              ${showPaymentMethod && paymentMethod ? `<div style="font-size: 0.95em; margin-bottom: 5px;">Método de Pago: ${paymentMethod.toUpperCase()}</div>` : ""}
-              ${showPaymentMethod && job.data.reference ? `<div style="font-size: 0.9em; margin-bottom: 5px;">Ref/Folio: ${job.data.reference}</div>` : ""}
-              ${showPaymentMethod && paymentMethod === "mixto" ? `
-              <div style="font-size: 0.85em; margin-left: 10px; margin-bottom: 5px; opacity: 0.8;">
-                ${job.data.cashAmount > 0 ? `<span>- Efec: $${Math.round(job.data.cashAmount)}</span><br>` : ""}
-                ${job.data.cardAmount > 0 ? `<span>- Tarj: $${Math.round(job.data.cardAmount)}</span><br>` : ""}
-                ${job.data.transferAmount > 0 ? `<span>- Trans: $${Math.round(job.data.transferAmount)}</span>` : ""}
-              </div>
-              ` : ""}
-
-              ${showSeller ? `<div style="font-size: 0.9em; margin-bottom: 5px;">Atendido por: ${currentUser?.name || "Venta Mostrador"}</div>` : ""}
-
-              ${showCustomer && job.data.customerName ? `
-              <div style="font-size: 0.85rem; margin-bottom: 5px;">
-                <strong>Cliente:</strong> ${job.data.customerName}
-              </div>
-              ` : ""}
-
-              ${showNotes && job.data.notes ? `
-              <div style="font-size: 0.85em; background: #eee; padding: 5px; margin-bottom: 5px; border-radius: 4px; text-align: left;">
-                <strong>Nota:</strong> ${job.data.notes}
-              </div>
-              ` : ""}
-
-              <div class="divider"></div>
-              ${itemsHtml}
-              <div class="divider"></div>
-              <div style="display:flex; justify-content:space-between;"><span>Subtotal:</span><span>$${Math.round(subtotalVal)}</span></div>
-              ${printDiscountPct > 0 ? `
-              <div style="display:flex; justify-content:space-between; color: red;"><span>Desc. (${printDiscountPct}%):</span><span>-${Math.round(discountVal)}</span></div>
-              ` : ""}
-              ${applyIva ? `
-              <div style="display:flex; justify-content:space-between;"><span>IVA (16%):</span><span>$${Math.round(iva)}</span></div>
-              ` : ""}
-              <div class="divider"></div>
-              <div style="display:flex; justify-content:space-between; font-size: 1.1em;"><strong>TOTAL:</strong><strong>$${Math.round(finalTotal)}</strong></div>
-
-              ${showWarranty ? `
-              <div class="center" style="font-size: 0.85em; margin-top: 10px; opacity: 0.8;">
-                🛡️ Garantía de 30 días contra defectos de fábrica.
-              </div>
-              ` : ""}
-
-              <div class="divider"></div>
-              ${showBilling ? `
-              <div class="center" style="margin-top: 15px; font-size: 0.9em;">
-                <strong>Auto-Facturación Express</strong><br>
-                <span>Entra a ${window.location.origin}/facturacion/${realTicketId} para facturar.</span>
-              </div>
-              ` : ""}
-              ${showFooter ? `<div class="center bold" style="margin-top: 15px;">${footerMsg}</div>` : ""}
-              <div style="height: 25px;"></div>
-            </div>
+            ${doubleCopyEnabled && !job.isReprint && !job.isCopy
+              ? `${renderTicketBody(false)}<div style="page-break-after: always; border-bottom: 2px dashed #000; margin: 25px 0; padding-bottom: 10px;"></div>${renderTicketBody(true)}`
+              : renderTicketBody(job.isCopy)}
           </body>
         </html>
       `;
       printWindow.document.write(html);
       printWindow.document.close();
       setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
-      } else if (job.type === "layaway") {
+    } else if (job.type === "layaway") {
       const { customer, items, finalTotal, downPayment, discountPct = 0, applyIva = false } = job.data;
       const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
       const printDiscountPct = discountPct < 0 ? 0 : discountPct;
@@ -2854,6 +2881,70 @@ export default function POSModule() {
       const subtotalNeto = subtotalVal - discountVal;
       const iva = applyIva ? subtotalNeto * (businessSettings?.config?.iva_rate ?? 0.16) : 0;
       
+      const renderLayawayBody = (isCopyFlag: boolean) => {
+        const copyLabelHtml = job.isReprint
+          ? `<div style="text-align:center; font-weight:bold; border: 2px dashed #000; padding: 6px; margin-bottom: 12px; font-size: 0.85em; background: #eee;">*** COPIA REIMPRESA - ${nowStr} ***</div>`
+          : isCopyFlag 
+          ? `<div style="text-align:center; font-weight:bold; border: 2px dashed #000; padding: 6px; margin-bottom: 12px; font-size: 0.9em; background: #eee;">*** COPIA PARA EL NEGOCIO ***</div>`
+          : "";
+
+        return `
+          <div style="text-align: ${marginAlign}; width: 100%;">
+            ${copyLabelHtml}
+            ${showLogo ? `<div class="center"><img src="${businessProfile.logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
+            ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name}</div>` : ""}
+            ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc}</div>` : ""}
+            ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address}</div>` : ""}
+            ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessProfile.phone}</div>` : ""}
+            ${showEmail ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Email: ${businessProfile.email}</div>` : ""}
+            
+            <div class="divider"></div>
+            <div class="center bold" style="font-size: 1.1em;">Comprobante de Apartado</div>
+            <div class="divider"></div>
+            <div style="margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
+            ${showSeller ? `<div style="font-size: 0.9em; margin-bottom: 5px;">Atendido por: ${currentUser?.name || "Venta Mostrador"}</div>` : ""}
+            <div style="margin-bottom: 5px;">Cliente: ${customer?.name || "Desconocido"}</div>
+            <div class="divider"></div>
+            ${itemsHtml}
+            <div class="divider"></div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+              <div>Subtotal:</div>
+              <div>$${Math.round(subtotalVal)}</div>
+            </div>
+            ${printDiscountPct > 0 ? `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: red;">
+              <div>Desc. (${printDiscountPct}%):</div>
+              <div>-${Math.round(discountVal)}</div>
+            </div>
+            ` : ""}
+            ${applyIva ? `
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+              <div>IVA (16%):</div>
+              <div>$${Math.round(iva)}</div>
+            </div>
+            ` : ""}
+            <div class="divider"></div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 1.1em;">
+              <strong>TOTAL:</strong>
+              <strong class="bold">$${Math.round(finalTotal)}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+              <div>Enganche Dado:</div>
+              <div class="bold">$${Math.round(downPayment)}</div>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+              <div>Saldo Pendiente:</div>
+              <div class="bold">$${Math.round(finalTotal - downPayment)}</div>
+            </div>
+            <div class="divider"></div>
+            <div class="center bold" style="margin-bottom: 5px; color: red;">¡ATENCIÓN!</div>
+            <div class="center">Vence: ${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
+            <div class="center" style="margin-top: 5px; font-size: 0.85em;">Pasando esta fecha, la mercancía regresará a piso de ventas.</div>
+            ${showFooter ? `<div class="center bold" style="margin-top: 15px;">${footerMsg}</div>` : ""}
+          </div>
+        `;
+      };
+
       const ticketHtml = `
         <html>
           <head>
@@ -2875,59 +2966,9 @@ export default function POSModule() {
             </style>
           </head>
           <body>
-            <div style="text-align: ${marginAlign}; width: 100%;">
-              ${copyLabelHtml}
-              ${showLogo ? `<div class="center"><img src="${businessProfile.logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
-              ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name}</div>` : ""}
-              ${showRfc ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">RFC: ${businessProfile.rfc}</div>` : ""}
-              ${showAddress ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">${businessProfile.address}</div>` : ""}
-              ${showPhone ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Tel: ${businessProfile.phone}</div>` : ""}
-              ${showEmail ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Email: ${businessProfile.email}</div>` : ""}
-              
-              <div class="divider"></div>
-              <div class="center bold" style="font-size: 1.1em;">Comprobante de Apartado</div>
-              <div class="divider"></div>
-              <div style="margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
-              ${showSeller ? `<div style="font-size: 0.9em; margin-bottom: 5px;">Atendido por: ${currentUser?.name || "Venta Mostrador"}</div>` : ""}
-              <div style="margin-bottom: 5px;">Cliente: ${customer?.name || "Desconocido"}</div>
-              <div class="divider"></div>
-              ${itemsHtml}
-              <div class="divider"></div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                <div>Subtotal:</div>
-                <div>$${Math.round(subtotalVal)}</div>
-              </div>
-              ${printDiscountPct > 0 ? `
-              <div style="display: flex; justify-content: space-between; margin-bottom: 5px; color: red;">
-                <div>Desc. (${printDiscountPct}%):</div>
-                <div>-${Math.round(discountVal)}</div>
-              </div>
-              ` : ""}
-              ${applyIva ? `
-              <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                <div>IVA (16%):</div>
-                <div>$${Math.round(iva)}</div>
-              </div>
-              ` : ""}
-              <div class="divider"></div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 1.1em;">
-                <strong>TOTAL:</strong>
-                <strong class="bold">$${Math.round(finalTotal)}</strong>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                <div>Enganche Dado:</div>
-                <div class="bold">$${Math.round(downPayment)}</div>
-              </div>
-              <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                <div>Saldo Pendiente:</div>
-                <div class="bold">$${Math.round(finalTotal - downPayment)}</div>
-              </div>
-              <div class="divider"></div>
-              <div class="center bold" style="margin-bottom: 5px; color: red;">¡ATENCIÓN!</div>
-              <div class="center">Vence: ${new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
-              <div class="center" style="margin-top: 5px; font-size: 0.85em;">Pasando esta fecha, la mercancía regresará a piso de ventas.</div>
-              ${showFooter ? `<div class="center bold" style="margin-top: 15px;">${footerMsg}</div>` : ""}
-            </div>
+            ${doubleCopyEnabled && !job.isReprint && !job.isCopy
+              ? `${renderLayawayBody(false)}<div style="page-break-after: always; border-bottom: 2px dashed #000; margin: 25px 0; padding-bottom: 10px;"></div>${renderLayawayBody(true)}`
+              : renderLayawayBody(job.isCopy)}
           </body>
         </html>
       `;
@@ -2948,19 +2989,6 @@ export default function POSModule() {
     }
     
     executePrintWindow({ ...job, isCopy: false });
-    
-    const config = businessSettings?.config || {};
-    const doubleCopyEnabled = config.printer_double_copy_layaway_credit || false;
-    
-    const isLayaway = job.type === "layaway";
-    const isCredit = job.type === "ticket" && job.data?.paymentMethod === PAYMENT_METHOD_CREDITO;
-    const isWholesaleSale = job.type === "ticket" && job.data?.items?.some((i: any) => i.qty >= (wholesaleRules.minQty || 10));
-
-    if (doubleCopyEnabled && (isLayaway || isCredit || isWholesaleSale)) {
-      setTimeout(() => {
-        executePrintWindow({ ...job, isCopy: true });
-      }, 1500);
-    }
   };
 
   const handleReconnectPrinter = async (type?: string) => {
