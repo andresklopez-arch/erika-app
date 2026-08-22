@@ -5679,14 +5679,14 @@ export default function POSModule() {
           backdropFilter: "blur(6px)"
         }}>
           <div className="glass-panel animate-fade-in" style={{
-            padding: "24px",
-            width: "950px",
+            padding: "18px 22px",
+            width: "960px",
             maxWidth: "96%",
-            maxHeight: "90vh",
+            maxHeight: "85vh",
             display: "flex",
             flexDirection: "column",
-            gap: "16px",
-            background: "rgba(20, 20, 32, 0.97)",
+            gap: "12px",
+            background: "rgba(20, 20, 32, 0.98)",
             border: "1px solid var(--glass-border)",
             boxShadow: "0 25px 60px rgba(0,0,0,0.7)",
             borderRadius: "16px"
@@ -5870,7 +5870,7 @@ export default function POSModule() {
                         key={ticket.id}
                         onClick={() => setSelectedHistoryTicket(ticket)}
                         style={{
-                          padding: "12px",
+                          padding: "10px 12px",
                           borderRadius: "10px",
                           background: isSelected ? "rgba(244, 63, 94, 0.12)" : "rgba(255,255,255,0.03)",
                           border: isSelected ? "1.5px solid var(--color-primary)" : "1px solid rgba(255,255,255,0.08)",
@@ -5878,28 +5878,28 @@ export default function POSModule() {
                           transition: "all 0.2s ease",
                           display: "flex",
                           flexDirection: "column",
-                          gap: "6px"
+                          gap: "5px"
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontWeight: "bold", color: "white", fontSize: "0.9rem" }}>
-                            Ticket #{ticket.id}
+                          <span style={{ fontWeight: "bold", color: "white", fontSize: "0.88rem" }} title={`Ticket #${ticket.id}`}>
+                            Ticket #{typeof ticket.id === "string" && ticket.id.length > 10 ? ticket.id.slice(0, 8) : ticket.id}
                           </span>
                           <span style={{ fontWeight: "bold", color: "var(--color-secondary)", fontSize: "0.95rem" }}>
                             ${Number(ticket.total || 0).toFixed(2)}
                           </span>
                         </div>
 
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "rgba(255,255,255,0.6)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "rgba(255,255,255,0.6)" }}>
                           <span>📅 {new Date(ticket.created_at).toLocaleDateString()} {new Date(ticket.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                          <span>📦 {itemsArr.length} artículo(s)</span>
+                          <span>📦 {itemsArr.length} art.</span>
                         </div>
 
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.75rem" }}>
-                          <span style={{ color: "rgba(255,255,255,0.7)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.72rem", marginTop: "2px" }}>
+                          <span style={{ color: "rgba(255,255,255,0.7)", maxWidth: "130px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={ticket.customer_name || "Venta Mostrador"}>
                             👤 {ticket.customer_name || "Venta Mostrador"}
                           </span>
-                          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                          <div style={{ display: "flex", gap: "6px", alignItems: "center", flexShrink: 0 }}>
                             <button
                               type="button"
                               onClick={(e) => {
@@ -5918,14 +5918,15 @@ export default function POSModule() {
                                 display: "inline-flex",
                                 alignItems: "center",
                                 gap: "3px",
-                                cursor: "pointer"
+                                cursor: "pointer",
+                                boxShadow: "0 2px 6px rgba(16, 185, 129, 0.3)"
                               }}
                               title="Reimprimir este ticket directamente"
                             >
                               🖨️ Reimprimir
                             </button>
-                            <span style={{ color: "var(--color-primary)", fontWeight: "600" }}>
-                              {isSelected ? "▶ Seleccionado" : "Ver detalle"}
+                            <span style={{ color: "var(--color-primary)", fontWeight: "600", fontSize: "0.72rem" }}>
+                              {isSelected ? "▶ Activo" : "Ver"}
                             </span>
                           </div>
                         </div>
@@ -5940,7 +5941,7 @@ export default function POSModule() {
                 background: "rgba(0,0,0,0.25)",
                 border: "1px solid rgba(255,255,255,0.08)",
                 borderRadius: "12px",
-                padding: "14px",
+                padding: "12px",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
@@ -5954,48 +5955,56 @@ export default function POSModule() {
                     ticketItems = selectedHistoryTicket.items;
                   }
 
+                  const displayTicketId = typeof selectedHistoryTicket.id === "string" && selectedHistoryTicket.id.length > 10
+                    ? selectedHistoryTicket.id.slice(0, 8)
+                    : selectedHistoryTicket.id;
+
                   return (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "10px", height: "100%" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px", height: "100%" }}>
                       <div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px", flexWrap: "wrap", gap: "6px" }}>
-                          <h4 style={{ margin: 0, color: "white", fontSize: "1.05rem" }}>
-                            Ticket #{selectedHistoryTicket.id}
-                          </h4>
-                          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px", gap: "8px", flexWrap: "nowrap" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+                            <h4 style={{ margin: 0, color: "white", fontSize: "1rem", whiteSpace: "nowrap" }} title={`Ticket #${selectedHistoryTicket.id}`}>
+                              Ticket #{displayTicketId}
+                            </h4>
                             <span style={{
                               background: "rgba(16, 185, 129, 0.15)",
                               color: "var(--color-secondary)",
-                              padding: "2px 8px",
-                              borderRadius: "6px",
-                              fontSize: "0.75rem",
-                              fontWeight: "bold"
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              fontSize: "0.72rem",
+                              fontWeight: "bold",
+                              whiteSpace: "nowrap"
                             }}>
                               {selectedHistoryTicket.status || "Venta"}
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => handleReprintHistoryTicket(selectedHistoryTicket)}
-                              className="btn-primary"
-                              style={{
-                                padding: "4px 10px",
-                                fontSize: "0.78rem",
-                                fontWeight: "bold",
-                                background: "linear-gradient(135deg, #10b981, #059669)",
-                                color: "white",
-                                border: "none",
-                                borderRadius: "6px",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                cursor: "pointer",
-                                boxShadow: "0 2px 8px rgba(16, 185, 129, 0.3)"
-                              }}
-                            >
-                              🖨️ Reimprimir
-                            </button>
                           </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleReprintHistoryTicket(selectedHistoryTicket)}
+                            className="btn-primary"
+                            style={{
+                              padding: "5px 12px",
+                              fontSize: "0.8rem",
+                              fontWeight: "bold",
+                              background: "linear-gradient(135deg, #10b981, #059669)",
+                              color: "white",
+                              border: "none",
+                              borderRadius: "6px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              cursor: "pointer",
+                              boxShadow: "0 2px 8px rgba(16, 185, 129, 0.4)",
+                              whiteSpace: "nowrap",
+                              flexShrink: 0
+                            }}
+                          >
+                            🖨️ Reimprimir Ticket
+                          </button>
                         </div>
-                        <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.6)", display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                        <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.6)", display: "flex", gap: "10px", flexWrap: "wrap" }}>
                           <span>📅 {new Date(selectedHistoryTicket.created_at).toLocaleString()}</span>
                           <span>👤 {selectedHistoryTicket.customer_name || "Venta Mostrador"}</span>
                           {selectedHistoryTicket.notes && <span>💳 {selectedHistoryTicket.notes}</span>}
@@ -6003,14 +6012,14 @@ export default function POSModule() {
                       </div>
 
                       {/* Tabla de Artículos (Solo Lectura) */}
-                      <div style={{ flex: 1, overflowY: "auto", maxHeight: "160px", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "8px" }}>
-                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
+                      <div style={{ flex: 1, overflowY: "auto", maxHeight: "130px", border: "1px solid rgba(255,255,255,0.05)", borderRadius: "8px" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.75rem" }}>
                           <thead>
                             <tr style={{ background: "rgba(255,255,255,0.06)", textAlign: "left", color: "rgba(255,255,255,0.7)" }}>
-                              <th style={{ padding: "6px 8px" }}>Cant</th>
-                              <th style={{ padding: "6px 8px" }}>Artículo</th>
-                              <th style={{ padding: "6px 8px", textAlign: "right" }}>P. Unit</th>
-                              <th style={{ padding: "6px 8px", textAlign: "right" }}>Total</th>
+                              <th style={{ padding: "4px 6px" }}>Cant</th>
+                              <th style={{ padding: "4px 6px" }}>Artículo</th>
+                              <th style={{ padding: "4px 6px", textAlign: "right" }}>P. Unit</th>
+                              <th style={{ padding: "4px 6px", textAlign: "right" }}>Total</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -6019,10 +6028,10 @@ export default function POSModule() {
                               const price = Number(item.price || 0);
                               return (
                                 <tr key={idx} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
-                                  <td style={{ padding: "6px 8px", color: "var(--color-secondary)", fontWeight: "bold" }}>{qty}</td>
-                                  <td style={{ padding: "6px 8px" }}>{item.name}</td>
-                                  <td style={{ padding: "6px 8px", textAlign: "right" }}>${price.toFixed(2)}</td>
-                                  <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: "bold" }}>${(qty * price).toFixed(2)}</td>
+                                  <td style={{ padding: "4px 6px", color: "var(--color-secondary)", fontWeight: "bold" }}>{qty}</td>
+                                  <td style={{ padding: "4px 6px" }}>{item.name}</td>
+                                  <td style={{ padding: "4px 6px", textAlign: "right" }}>${price.toFixed(2)}</td>
+                                  <td style={{ padding: "4px 6px", textAlign: "right", fontWeight: "bold" }}>${(qty * price).toFixed(2)}</td>
                                 </tr>
                               );
                             })}
@@ -6033,14 +6042,14 @@ export default function POSModule() {
                       {/* Resumen Total */}
                       <div style={{
                         background: "rgba(255,255,255,0.03)",
-                        padding: "8px 12px",
-                        borderRadius: "8px",
+                        padding: "6px 10px",
+                        borderRadius: "6px",
                         display: "flex",
                         justifyContent: "space-between",
                         alignItems: "center"
                       }}>
-                        <span style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.8)" }}>Total Cobrado:</span>
-                        <span style={{ fontSize: "1.2rem", fontWeight: "bold", color: "var(--color-secondary)" }}>
+                        <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.8)" }}>Total Cobrado:</span>
+                        <span style={{ fontSize: "1.15rem", fontWeight: "bold", color: "var(--color-secondary)" }}>
                           ${Number(selectedHistoryTicket.total || 0).toFixed(2)}
                         </span>
                       </div>
@@ -6052,21 +6061,21 @@ export default function POSModule() {
                         className="btn-primary"
                         style={{
                           width: "100%",
-                          padding: "10px",
-                          fontSize: "0.9rem",
+                          padding: "8px",
+                          fontSize: "0.85rem",
                           fontWeight: "bold",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
-                          gap: "8px",
+                          gap: "6px",
                           background: "linear-gradient(135deg, #10b981, #059669)",
                           border: "none",
-                          borderRadius: "8px",
+                          borderRadius: "6px",
                           cursor: "pointer",
-                          boxShadow: "0 4px 15px rgba(16, 185, 129, 0.3)"
+                          boxShadow: "0 3px 10px rgba(16, 185, 129, 0.3)"
                         }}
                       >
-                        🖨️ Reimprimir Ticket #{selectedHistoryTicket.id}
+                        🖨️ Reimprimir Ticket #{displayTicketId}
                       </button>
                     </div>
                   );
