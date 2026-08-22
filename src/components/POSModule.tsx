@@ -1007,7 +1007,16 @@ export default function POSModule() {
 
                 localStorage.removeItem("ERIKA_RESTORE_QUOTE");
                 localStorage.removeItem("ERIKA_RESTORE_QUOTE_ID");
-                alert("✅ Cotización cargada en la caja exitosamente.");
+
+                const autoCheckout = localStorage.getItem("ERIKA_AUTO_OPEN_CHECKOUT");
+                if (autoCheckout === "true") {
+                   localStorage.removeItem("ERIKA_AUTO_OPEN_CHECKOUT");
+                   setTimeout(() => {
+                      setShowCheckoutModal(true);
+                   }, 300);
+                } else {
+                   alert("✅ Cotización cargada en la caja exitosamente.");
+                }
              }
           } catch(e) {}
        }

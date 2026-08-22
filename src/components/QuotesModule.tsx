@@ -92,57 +92,20 @@ export default function QuotesModule() {
     }
   };
 
-  const convertToSale = async (quote: any) => {
+  const handleSellQuote = async (quote: any) => {
     const pass = window.prompt(
-      "¿Seguro que deseas enviar esta cotización a la Caja para cobrar? (Ingresa tu PIN)",
+      `¿Deseas enviar la Cotización #${quote.quote_number} a Caja para cobrar e imprimir ticket? (Ingresa tu PIN):`
     );
     if (!pass) return;
     if (!(await verifyStaffPin(pass))) {
       return alert("❌ PIN incorrecto. Operación cancelada.");
     }
 
-    // Nota: la cotización YA NO se marca "converted" (vendida) aquí. Antes
-    // se marcaba de inmediato al solo enviarla a caja, así que si el
-    // cajero cerraba la pestaña, cancelaba el cobro o la sesión expiraba,
-    // la cotización quedaba permanentemente marcada "Vendido/Pagado" sin
-    // que existiera ninguna venta real. Ahora solo se marca así cuando el
-    // cobro realmente se completa en POSModule (handleCheckoutSubmit).
-
-    // Enviar artículos a la caja vía localStorage
     localStorage.setItem("ERIKA_RESTORE_QUOTE", JSON.stringify(quote.items));
     localStorage.setItem("ERIKA_RESTORE_QUOTE_ID", quote.id);
-
-    alert(
-      `✅ Cotización de ${quote.customer_name} enviada a caja. Serás redirigido para proceder con el cobro.`,
-    );
-    // Recarga completa a propósito (no router.push): esto va a cobrar
-    // dinero real, así que se prefiere que POSModule monte desde cero y
-    // lea el localStorage recien escrito, en vez de depender de una
-    // navegación cliente que nunca se probó contra este flujo.
-    window.location.href = "/caja";
-  };
-
-  const handleDirectCharge = async (quote: any) => {
-    // Antes esta acción no pedía ningún PIN, a diferencia de "✅ Vender"
-    // (convertToSale) — cualquiera con acceso a la pantalla de Cotizaciones
-    // podía saltarse el control de autorización.
-    const pass = window.prompt(
-      "Ingresa tu PIN para cobrar esta cotización de inmediato:",
-    );
-    if (!pass) return;
-    if (!(await verifyStaffPin(pass))) {
-      return alert("❌ PIN incorrecto. Operación cancelada.");
-    }
-
-    // 1. Guardar artículos y el id de la cotización en localStorage
-    localStorage.setItem("ERIKA_RESTORE_QUOTE", JSON.stringify(quote.items));
-    localStorage.setItem("ERIKA_RESTORE_QUOTE_ID", quote.id);
-
-    // 2. Guardar id del cliente si existe
     if (quote.customer_id) {
       localStorage.setItem("ERIKA_RESTORE_CUSTOMER_ID", quote.customer_id);
-    } else {
-      // Intentar buscar el cliente por nombre en la base de datos de clientes si no está guardado el customer_id
+    } else if (quote.customer_name) {
       try {
         const { data: customer } = await supabase
           .from("customers")
@@ -157,15 +120,12 @@ export default function QuotesModule() {
         console.error("Error al buscar cliente por nombre:", e);
       }
     }
+    localStorage.setItem("ERIKA_AUTO_OPEN_CHECKOUT", "true");
 
-    // Nota: igual que en convertToSale, la cotización YA NO se marca
-    // "converted" aquí — eso ahora ocurre solo cuando el cobro se
-    // completa de verdad en POSModule.
-
-    // 3. Redirigir de inmediato al punto de venta (home page /). Recarga
-    // completa a propósito, mismo motivo que convertToSale: dinero real
-    // de por medio, se prefiere un montaje limpio de POSModule.
-    window.location.href = "/";
+    alert(
+      `✅ Cotización #${quote.quote_number} de ${quote.customer_name} enviada a caja para cobro inmediato.`,
+    );
+    window.location.href = "/caja";
   };
 
   const printQuote = (quote: any) => {
@@ -549,22 +509,9 @@ export default function QuotesModule() {
                               marginTop: "10px",
                               flexWrap: "wrap",
                               justifyContent: "flex-end",
+                              alignItems: "center"
                             }}
                           >
-                            <button
-                              className="btn-primary"
-                              style={{
-                                padding: "8px 15px",
-                                background: "linear-gradient(135deg, #10b981, #059669)",
-                                color: "white",
-                                border: "none",
-                                fontWeight: "bold"
-                              }}
-                              onClick={() => handleDirectCharge(q)}
-                            >
-                              💰 Cobrar de Inmediato
-                            </button>
-
                             {q.status === "pending" && (
                               <>
                                 <button
@@ -605,12 +552,23 @@ export default function QuotesModule() {
                                 </button>
                                 <button
                                   className="btn-primary"
-                                  style={{ padding: "8px 15px" }}
-                                  onClick={() => convertToSale(q)}
+                                  style={{
+                                    padding: "8px 15px",
+                                    background: "linear-gradient(135deg, #10b981, #059669)",
+                                    color: "white",
+                                    border: "none",
+                                    fontWeight: "bold"
+                                  }}
+                                  onClick={() => handleSellQuote(q)}
                                 >
-                                  ✅ Vender
+                                  💰 Cobrar / Vender
                                 </button>
                               </>
+                            )}
+                            {q.status === "converted" && (
+                              <span style={{ color: "#10b981", fontWeight: "bold", padding: "6px 12px", background: "rgba(16,185,129,0.1)", borderRadius: "6px" }}>
+                                ✅ Cotización Vendida / Pagada
+                              </span>
                             )}
                           </div>
                         </div>

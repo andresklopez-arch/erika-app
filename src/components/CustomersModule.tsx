@@ -357,16 +357,104 @@ export default function CustomersModule() {
     }, 500);
   };
 
+  const printCustomerAccountStatement = (customer: any) => {
+    if (!customer) return;
+    const ticketWindow = window.open("", "_blank", "width=300,height=600");
+    if (!ticketWindow) return alert("Por favor permite las ventanas emergentes en tu navegador para imprimir el ticket.");
+
+    const loyaltyRedeemRate = parseFloat(localStorage.getItem("ERIKA_REDEEM_RATE") || "10");
+    const pointsMoney = ((customer.points || 0) / loyaltyRedeemRate).toFixed(2);
+    const availableCredit = Math.max(0, (customer.credit_limit || 0) - (customer.balance || 0));
+
+    const movementsHtml = (transactions || [])
+      .slice(0, 5)
+      .map(
+        (tx: any) => `
+        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px;">
+          <div>${new Date(tx.created_at).toLocaleDateString()} ${tx.type === "cargo" ? "CARGO" : "ABONO"}</div>
+          <div style="font-weight: bold;">$${Number(tx.amount || 0).toFixed(2)}</div>
+        </div>
+        <div style="font-size: 10px; color: #555; margin-bottom: 4px;">${tx.description || "Movimiento"}</div>
+      `
+      )
+      .join("");
+
+    const ticketHtml = `
+      <html>
+        <head>
+          <title>Estado de Cuenta - ${customer.name}</title>
+          <style>
+            body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; width: 58mm; color: #000; background: #fff; }
+            .center { text-align: center; }
+            .divider { border-bottom: 1px dashed #000; margin: 8px 0; }
+            .bold { font-weight: bold; }
+            .row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+          </style>
+        </head>
+        <body>
+          <div class="center bold" style="font-size: 15px;">${businessProfile.name || "FERRETERÍA ERIKA"}</div>
+          <div class="center" style="font-size: 11px; font-weight: bold;">ESTADO DE CUENTA</div>
+          <div class="center" style="font-size: 10px;">${new Date().toLocaleString()}</div>
+          <div class="divider"></div>
+          
+          <div style="font-size: 11px; margin-bottom: 2px;"><strong>CLIENTE:</strong> ${customer.name}</div>
+          ${customer.rfc ? `<div style="font-size: 10px;">RFC: ${customer.rfc}</div>` : ""}
+          ${customer.phone ? `<div style="font-size: 10px;">Tel: ${customer.phone}</div>` : ""}
+          <div class="divider"></div>
+
+          <div class="row">
+            <span>Límite Crédito:</span>
+            <span class="bold">$${(customer.credit_limit || 0).toFixed(2)}</span>
+          </div>
+          <div class="row" style="color: #c00;">
+            <span>Saldo Deudor:</span>
+            <span class="bold">$${(customer.balance || 0).toFixed(2)}</span>
+          </div>
+          <div class="row">
+            <span>Crédito Disponible:</span>
+            <span class="bold">$${availableCredit.toFixed(2)}</span>
+          </div>
+          
+          <div class="divider"></div>
+          <div class="center bold" style="font-size: 11px; margin-bottom: 3px;">PUNTOS DE LEALTAD</div>
+          <div class="row">
+            <span>Puntos Acumulados:</span>
+            <span class="bold">${customer.points || 0} pts</span>
+          </div>
+          <div class="row" style="color: #080;">
+            <span>Dinero en Puntos:</span>
+            <span class="bold">$${pointsMoney}</span>
+          </div>
+
+          ${movementsHtml ? `
+            <div class="divider"></div>
+            <div class="center bold" style="font-size: 10px; margin-bottom: 4px;">ÚLTIMOS MOVIMIENTOS</div>
+            ${movementsHtml}
+          ` : ""}
+
+          <div class="divider"></div>
+          <div class="center bold" style="font-size: 11px; margin-top: 8px;">
+            ¡Gracias por su preferencia!
+          </div>
+        </body>
+      </html>
+    `;
+
+    ticketWindow.document.write(ticketHtml);
+    ticketWindow.document.close();
+    ticketWindow.focus();
+    setTimeout(() => {
+      ticketWindow.print();
+      ticketWindow.close();
+    }, 500);
+  };
+
   const convertQuoteToSale = async (quote: any) => {
     const pass = window.prompt(
       "¿Seguro que deseas enviar esta cotización a la Caja para cobrar? (Ingresa tu PIN)",
     );
     if (!pass) return;
 
-    // Siempre se verifica del lado del servidor (Service Role Key). Un
-    // atajo previo aceptaba el PIN si coincidía con `currentUser.pin` (que
-    // vive sin firma en localStorage) sin llamar al servidor — cualquiera
-    // podía forjar ese valor en localStorage y saltarse el PIN por completo.
     const res = await fetch("/api/auth/verify-pin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -377,20 +465,16 @@ export default function CustomersModule() {
       return alert("❌ PIN incorrecto. Operación cancelada.");
     }
 
-    // La cotización YA NO se marca "converted" (vendida) aquí — antes se
-    // marcaba de inmediato al solo enviarla a caja, así que si el cajero
-    // cancelaba el cobro o cerraba la pestaña, quedaba permanentemente
-    // marcada "Pagado" sin que existiera ninguna venta real. Ahora solo se
-    // marca así cuando el cobro realmente se completa en POSModule.
     localStorage.setItem("ERIKA_RESTORE_QUOTE", JSON.stringify(quote.items));
     localStorage.setItem("ERIKA_RESTORE_QUOTE_ID", quote.id);
+    if (quote.customer_id || selectedCustomerId) {
+      localStorage.setItem("ERIKA_RESTORE_CUSTOMER_ID", quote.customer_id || selectedCustomerId);
+    }
+    localStorage.setItem("ERIKA_AUTO_OPEN_CHECKOUT", "true");
 
     alert(
-      `✅ Cotización de ${quote.customer_name} enviada a caja. Serás redirigido para proceder con el cobro.`,
+      `✅ Cotización de ${quote.customer_name} enviada a caja para cobro inmediato.`,
     );
-    // Recarga completa a propósito (no router.push): mismo motivo que en
-    // QuotesModule — esto va a cobrar dinero real, se prefiere que
-    // POSModule monte desde cero y lea el localStorage recien escrito.
     window.location.href = "/caja";
   };
 
@@ -803,7 +887,7 @@ export default function CustomersModule() {
                             background: "transparent",
                             border: "1px solid var(--color-primary)",
                           }}
-                          onClick={() => window.print()}
+                          onClick={() => printCustomerAccountStatement(c)}
                         >
                           🖨️ Imprimir Estado
                         </button>
