@@ -26,6 +26,33 @@ const normalizeString = (str: string) => {
     .trim();
 };
 
+// Detector inteligente de unidad por nombre/descripción del artículo
+export const detectUnitFromName = (name: string): "pieza" | "kg" | "g" | "m" | "l" => {
+  if (!name) return "pieza";
+  const lower = name.toLowerCase();
+  
+  // Metros
+  if (/\b(metro|metros|mts|mt)\b/i.test(lower) || 
+      /(cable|manguera|perfil|tubo|cadena|soga|alambre|cuerda|lona por metro|malla por metro|guia por metro|cinta por metro)/i.test(lower)) {
+    return "m";
+  }
+  // Litros
+  if (/\b(litro|litros|lt|lts)\b/i.test(lower) || 
+      /(thinner|solvente|aceite|pintura|impermeabilizante|resina|acido|anticongelante|barniz|sellador|pegamento liquido|aguarras|gasolina|alcohol)/i.test(lower)) {
+    return "l";
+  }
+  // Kilogramos
+  if (/\b(kilo|kilos|kg|kgs)\b/i.test(lower) || 
+      /(a granel|por kilo|clavos por kilo|alambre por kilo|estopa por kilo|yeso por kilo|cemento por kilo)/i.test(lower)) {
+    return "kg";
+  }
+  // Gramos
+  if (/\b(gramo|gramos|gr|grs)\b/i.test(lower)) {
+    return "g";
+  }
+  return "pieza";
+};
+
 export default function SmartImporter({
   avgMargin,
   existingItems,
@@ -44,6 +71,7 @@ export default function SmartImporter({
   const [stocks, setStocks] = useState<number[]>([]);
   const [costs, setCosts] = useState<number[]>([]);
   const [prices, setPrices] = useState<number[]>([]);
+  const [units, setUnits] = useState<("pieza" | "kg" | "g" | "m" | "l")[]>([]);
 
   // Paginación de la previsualización final
   const [currentPage, setCurrentPage] = useState(1);
@@ -198,6 +226,9 @@ export default function SmartImporter({
           return isNaN(num) ? 0 : num;
         });
         setPrices(parsedNums);
+        // Inicializar unidades con auto-detección inteligente basada en el nombre
+        const detectedUnits = names.map((name) => detectUnitFromName(name));
+        setUnits(detectedUnits);
         setInputText("");
         setCurrentPage(1); // Reiniciar paginación al entrar a la vista previa
         setStep(7);
@@ -243,6 +274,7 @@ export default function SmartImporter({
       setStocks([]);
       setCosts([]);
       setPrices([]);
+      setUnits([]);
       setInputText("");
       setErrorMsg("");
       setCurrentPage(1);
@@ -465,6 +497,7 @@ export default function SmartImporter({
           stock: stocks[idx] || 0,
           cost: costs[idx] || 0,
           price: prices[idx] || 0,
+          sale_unit: units[idx] || "pieza",
           importedCode: code,
           importedName: names[idx] || "Producto sin nombre",
         };
@@ -953,6 +986,110 @@ export default function SmartImporter({
               </p>
             </div>
 
+            {/* Barra de Asignación Rápida de Unidades */}
+            <div
+              style={{
+                background: "rgba(255, 255, 255, 0.03)",
+                border: "1px solid var(--glass-border)",
+                borderRadius: "10px",
+                padding: "12px 16px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                <span style={{ fontSize: "0.88rem", color: "white", fontWeight: "bold", display: "flex", alignItems: "center", gap: "6px" }}>
+                  ⚖️ Asignación Rápida de Unidades de Venta (Pieza / Metro / Litro / Kg):
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setUnits(names.map((name) => detectUnitFromName(name)))}
+                  style={{
+                    padding: "5px 12px",
+                    fontSize: "0.78rem",
+                    background: "linear-gradient(135deg, var(--color-primary), var(--color-accent))",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    fontWeight: "bold",
+                    cursor: "pointer",
+                    boxShadow: "0 2px 8px rgba(244, 63, 94, 0.3)",
+                  }}
+                  title="Analiza automáticamente cada nombre de producto para clasificarlo inteligentemente"
+                >
+                  🧠 Re-analizar y Auto-Detectar según Nombres
+                </button>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.6)" }}>Cambiar todas a:</span>
+                <button
+                  type="button"
+                  onClick={() => setUnits(new Array(codes.length).fill("pieza"))}
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: "0.75rem",
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid var(--glass-border)",
+                    color: "white",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                  }}
+                >
+                  📦 Todas a Pieza (pz)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUnits(new Array(codes.length).fill("m"))}
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: "0.75rem",
+                    background: "rgba(59, 130, 246, 0.15)",
+                    border: "1px solid #3b82f6",
+                    color: "#60a5fa",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                  }}
+                >
+                  📏 Todas a Metro (m)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUnits(new Array(codes.length).fill("l"))}
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: "0.75rem",
+                    background: "rgba(16, 185, 129, 0.15)",
+                    border: "1px solid #10b981",
+                    color: "#34d399",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                  }}
+                >
+                  🧴 Todas a Litro (L)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUnits(new Array(codes.length).fill("kg"))}
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: "0.75rem",
+                    background: "rgba(245, 158, 11, 0.15)",
+                    border: "1px solid #f59e0b",
+                    color: "#fbbf24",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                  }}
+                >
+                  ⚖️ Todas a Kilo (kg)
+                </button>
+              </div>
+            </div>
+
             {/* Contenedor de la Tabla */}
             <div
               style={{
@@ -963,7 +1100,7 @@ export default function SmartImporter({
                 flexDirection: "column",
               }}
             >
-              <div style={{ overflowX: "auto", maxHeight: "250px" }}>
+              <div style={{ overflowX: "auto", maxHeight: "280px" }}>
                 <table
                   style={{
                     width: "100%",
@@ -982,6 +1119,7 @@ export default function SmartImporter({
                       <th style={{ padding: "10px 15px", color: "rgba(255,255,255,0.5)" }}>#</th>
                       <th style={{ padding: "10px 15px", color: "white" }}>Código</th>
                       <th style={{ padding: "10px 15px", color: "white" }}>Producto</th>
+                      <th style={{ padding: "10px 15px", color: "#60a5fa", fontWeight: "bold" }}>Unidad de Venta</th>
                       <th style={{ padding: "10px 15px", color: "white" }}>Proveedor</th>
                       <th style={{ padding: "10px 15px", color: "white" }}>Ubicación</th>
                       <th style={{ padding: "10px 15px", color: "white" }}>Stock</th>
@@ -996,6 +1134,7 @@ export default function SmartImporter({
                       const stock = stocks[absoluteIdx] || 0;
                       const cost = costs[absoluteIdx] || 0;
                       const price = prices[absoluteIdx] || 0;
+                      const currentUnit = units[absoluteIdx] || "pieza";
 
                       // Lógica de alerta por celda
                       const isCodeErr = !code;
@@ -1066,6 +1205,34 @@ export default function SmartImporter({
                             )}
                           </td>
                           <td style={{ padding: "8px 15px" }}>
+                            <select
+                              value={currentUnit}
+                              onChange={(e) => {
+                                const updated = [...units];
+                                updated[absoluteIdx] = e.target.value as any;
+                                setUnits(updated);
+                              }}
+                              style={{
+                                background: "rgba(0,0,0,0.5)",
+                                border: currentUnit === "m" ? "1px solid #3b82f6" : currentUnit === "l" ? "1px solid #10b981" : currentUnit === "kg" ? "1px solid #f59e0b" : "1px solid var(--glass-border)",
+                                color: currentUnit === "m" ? "#60a5fa" : currentUnit === "l" ? "#34d399" : currentUnit === "kg" ? "#fbbf24" : "white",
+                                borderRadius: "6px",
+                                padding: "4px 8px",
+                                fontSize: "0.82rem",
+                                fontWeight: "bold",
+                                outline: "none",
+                                cursor: "pointer",
+                              }}
+                              title="Selecciona la unidad de venta para este producto"
+                            >
+                              <option value="pieza" style={{ background: "#18181b", color: "white" }}>📦 Pieza (pz)</option>
+                              <option value="m" style={{ background: "#18181b", color: "#60a5fa" }}>📏 Metro (m)</option>
+                              <option value="l" style={{ background: "#18181b", color: "#34d399" }}>🧴 Litro (L)</option>
+                              <option value="kg" style={{ background: "#18181b", color: "#fbbf24" }}>⚖️ Kilo (kg)</option>
+                              <option value="g" style={{ background: "#18181b", color: "#a78bfa" }}>🧂 Gramo (g)</option>
+                            </select>
+                          </td>
+                          <td style={{ padding: "8px 15px" }}>
                             <span
                               style={{
                                 background: "rgba(16, 185, 129, 0.15)",
@@ -1090,7 +1257,7 @@ export default function SmartImporter({
                             }}
                             title={isStockErr ? "Stock negativo" : ""}
                           >
-                            {stock}
+                            {stock} {currentUnit !== "pieza" ? `(${currentUnit})` : ''}
                           </td>
                           <td
                             style={{

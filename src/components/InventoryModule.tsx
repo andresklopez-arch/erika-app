@@ -2676,6 +2676,7 @@ export default function InventoryModule() {
                     location: p.location || "Pendiente",
                     supplier: p.supplier || "Pendiente",
                     autoPriced: p.autoPriced !== undefined ? p.autoPriced : true,
+                    sale_unit: p.sale_unit || "pieza",
                   });
                   newCount++;
                 } else {
@@ -2719,6 +2720,7 @@ export default function InventoryModule() {
                         location: p.location || updates[pendingIdx].location,
                         priceChanged: inflationFlag,
                         autoPriced: p.autoPriced !== undefined ? p.autoPriced : updates[pendingIdx].autoPriced,
+                        sale_unit: p.sale_unit || updates[pendingIdx].sale_unit || "pieza",
                       };
                     } else {
                       undoLog.push({
@@ -2746,6 +2748,7 @@ export default function InventoryModule() {
                         deleted: false,
                         deleted_at: null,
                         autoPriced: p.autoPriced !== undefined ? p.autoPriced : existing.autoPriced,
+                        sale_unit: p.sale_unit || existing.sale_unit || "pieza",
                       });
                     }
                     updatedCount++;
@@ -2774,6 +2777,7 @@ export default function InventoryModule() {
                       location: p.location || "Pendiente",
                       supplier: p.supplier || "Pendiente",
                       autoPriced: p.autoPriced !== undefined ? p.autoPriced : true,
+                      sale_unit: p.sale_unit || "pieza",
                     });
                     newCount++;
                   }
