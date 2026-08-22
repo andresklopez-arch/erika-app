@@ -3979,28 +3979,51 @@ export default function POSModule() {
             )}
           </div>
           
+          <div className="flex-between" style={{ marginBottom: "8px", fontSize: "0.95rem", opacity: 0.9 }}>
+            <span>Subtotal:</span>
+            <span style={{ fontWeight: "bold" }}>${formatPrice(subtotal)}</span>
+          </div>
+
           {itemDiscountsSavings > 0 && (
-             <div className="flex-between" style={{ marginBottom: "10px", color: "#10b981" }}>
+             <div className="flex-between" style={{ marginBottom: "8px", color: "#10b981", fontSize: "0.88rem" }}>
                <span>Ahorro por productos:</span>
                <span>-${formatPrice(itemDiscountsSavings)}</span>
              </div>
           )}
 
           {activeTicket.discountPct > 0 && (
-             <div className="flex-between" style={{ marginBottom: "10px", color: "#10b981" }}>
-               <span>Descuento ({activeTicket.discountPct}%):</span>
+             <div className="flex-between" style={{
+               marginBottom: "8px",
+               color: "#10b981",
+               background: "rgba(16, 185, 129, 0.12)",
+               padding: "5px 10px",
+               borderRadius: "6px",
+               fontWeight: "bold",
+               fontSize: "0.9rem",
+               border: "1px solid rgba(16, 185, 129, 0.25)"
+             }}>
+               <span>🏷️ Descuento (-{activeTicket.discountPct}%):</span>
                <span>-${formatPrice(discountAmount)}</span>
              </div>
           )}
           {activeTicket.discountPct < 0 && (
-             <div className="flex-between" style={{ marginBottom: "10px", color: "#f59e0b" }}>
-               <span>Aumento ({Math.abs(activeTicket.discountPct)}%):</span>
+             <div className="flex-between" style={{
+               marginBottom: "8px",
+               color: "#f59e0b",
+               background: "rgba(245, 158, 11, 0.12)",
+               padding: "5px 10px",
+               borderRadius: "6px",
+               fontWeight: "bold",
+               fontSize: "0.9rem",
+               border: "1px solid rgba(245, 158, 11, 0.25)"
+             }}>
+               <span>📈 Aumento (+{Math.abs(activeTicket.discountPct)}%):</span>
                <span>+${formatPrice(-discountAmount)}</span>
              </div>
           )}
 
           {applyIva && (
-             <div className="flex-between" style={{ marginBottom: "10px", color: "#3b82f6" }}>
+             <div className="flex-between" style={{ marginBottom: "8px", color: "#3b82f6", fontSize: "0.9rem" }}>
                <span>IVA (16%):</span>
                <span>+${formatPrice(iva)}</span>
              </div>
@@ -4895,11 +4918,35 @@ export default function POSModule() {
               💵 Registrar Pago de Venta
             </h3>
             
-            <div style={{ background: "rgba(255,255,255,0.05)", padding: "15px", borderRadius: "8px", marginBottom: "20px", textAlign: "center" }}>
-              <span style={{ fontSize: "0.9rem", opacity: 0.7 }}>TOTAL A COBRAR</span>
-              <h1 style={{ color: "var(--color-secondary)", margin: "5px 0 0 0", fontSize: "2.5rem" }}>
-                ${formatPrice(finalTotal)}
-              </h1>
+            <div style={{ background: "rgba(255,255,255,0.05)", padding: "14px 18px", borderRadius: "10px", marginBottom: "18px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", opacity: 0.85, marginBottom: "4px" }}>
+                <span>Subtotal:</span>
+                <span style={{ fontWeight: "bold" }}>${formatPrice(subtotal)}</span>
+              </div>
+              {activeTicket.discountPct > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", color: "#10b981", fontWeight: "bold", marginBottom: "4px" }}>
+                  <span>🏷️ Descuento (-{activeTicket.discountPct}%):</span>
+                  <span>-${formatPrice(discountAmount)}</span>
+                </div>
+              )}
+              {activeTicket.discountPct < 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", color: "#f59e0b", fontWeight: "bold", marginBottom: "4px" }}>
+                  <span>📈 Aumento (+{Math.abs(activeTicket.discountPct)}%):</span>
+                  <span>+${formatPrice(-discountAmount)}</span>
+                </div>
+              )}
+              {applyIva && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", color: "#3b82f6", marginBottom: "4px" }}>
+                  <span>IVA (16%):</span>
+                  <span>+${formatPrice(iva)}</span>
+                </div>
+              )}
+              <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "8px", marginTop: "6px", textAlign: "center" }}>
+                <span style={{ fontSize: "0.82rem", opacity: 0.7, letterSpacing: "1px" }}>TOTAL A COBRAR</span>
+                <h1 style={{ color: "var(--color-secondary)", margin: "4px 0 0 0", fontSize: "2.3rem", fontWeight: "bold" }}>
+                  ${formatPrice(finalTotal)}
+                </h1>
+              </div>
             </div>
 
             <div style={{ marginBottom: "20px" }}>
