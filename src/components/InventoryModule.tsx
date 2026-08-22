@@ -3459,6 +3459,33 @@ export default function InventoryModule() {
                         </div>
                       ))}
                     </div>
+                    {(() => {
+                      const maxDisc = Math.max(...newRuleTiers.map(t => Number(t.discountPct) || 0), 0);
+                      if (maxDisc >= 25) {
+                        return (
+                          <div
+                            style={{
+                              marginTop: "10px",
+                              background: "rgba(245, 158, 11, 0.12)",
+                              border: "1px solid rgba(245, 158, 11, 0.35)",
+                              borderRadius: "6px",
+                              padding: "8px 10px",
+                              fontSize: "0.78rem",
+                              color: "#fde047",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px"
+                            }}
+                          >
+                            <span style={{ fontSize: "1rem" }}>🛡️</span>
+                            <span>
+                              <strong>Margen Seguro:</strong> Un descuento de hasta el <strong>{maxDisc}%</strong> puede reducir drásticamente tu utilidad neta. Verifica que el precio de venta cubra holgadamente el costo del proveedor.
+                            </span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
 
                   <button

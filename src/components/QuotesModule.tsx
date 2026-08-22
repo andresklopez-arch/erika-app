@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useBusinessProfile, useAuth } from "./AuthProvider";
 import { cleanMexicanPhone, openWhatsAppChat, formatMexicanPhoneDisplay } from "../lib/whatsapp";
 import { fetchActiveCustomers } from "../lib/customersClient";
+import { getSmartVolumeDiscount } from "./POSModule";
 
 export default function QuotesModule() {
   const businessProfile = useBusinessProfile();
@@ -610,7 +611,36 @@ export default function QuotesModule() {
                               <td style={{ padding: "10px" }}>
                                 {i.qty} {i.unit}
                               </td>
-                              <td style={{ padding: "10px" }}>{i.name}</td>
+                              <td style={{ padding: "10px" }}>
+                                <span>{i.name}</span>
+                                {(() => {
+                                  let smartRules = [];
+                                  try {
+                                    smartRules = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("ERIKA_SMART_VOLUME_RULES") || "[]") : [];
+                                  } catch {}
+                                  const smartDisc = getSmartVolumeDiscount(i, smartRules);
+                                  const effectiveDisc = Math.max(i.discountPct || 0, smartDisc.discountPct || 0);
+                                  if (effectiveDisc > 0) {
+                                    return (
+                                      <span
+                                        style={{
+                                          marginLeft: "8px",
+                                          background: "rgba(16, 185, 129, 0.15)",
+                                          border: "1px solid rgba(16, 185, 129, 0.3)",
+                                          color: "#34d399",
+                                          padding: "1px 6px",
+                                          borderRadius: "4px",
+                                          fontSize: "0.72rem",
+                                          fontWeight: "bold"
+                                        }}
+                                      >
+                                        ⚡ -{effectiveDisc}% Vol.
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </td>
                               <td
                                 style={{ padding: "10px", textAlign: "right" }}
                               >

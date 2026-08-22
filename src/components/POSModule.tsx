@@ -193,6 +193,70 @@ export const getSmartVolumeDiscount = (
   return { discountPct: bestDiscount, tierQty: bestTierQty, ruleName: bestRuleName };
 };
 
+// 💡 Detecta la siguiente escala de volumen alcanzable para sugerir al cajero (Upsell)
+export const getNextSmartVolumeTier = (
+  item: any,
+  rules: any[]
+): { nextQty: number; discountPct: number; diff: number; ruleName: string } | null => {
+  if (!item || !rules || !Array.isArray(rules) || rules.length === 0) return null;
+
+  const itemNameNorm = (item.name || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+  const itemCodeNorm = (item.code || "").toLowerCase().trim();
+  const itemSupplierNorm = (item.supplier || "").toLowerCase().trim();
+  const qty = Number(item.qty || 1);
+
+  let bestNextTier: { nextQty: number; discountPct: number; diff: number; ruleName: string } | null = null;
+
+  for (const rule of rules) {
+    if (!rule || !rule.active || !Array.isArray(rule.tiers) || rule.tiers.length === 0) continue;
+
+    let matches = false;
+    const targetValNorm = (rule.targetValue || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+
+    if (rule.targetType === "all") {
+      matches = true;
+    } else if (rule.targetType === "keyword") {
+      matches = targetValNorm !== "" && itemNameNorm.includes(targetValNorm);
+    } else if (rule.targetType === "supplier") {
+      matches = targetValNorm !== "" && itemSupplierNorm.includes(targetValNorm);
+    } else if (rule.targetType === "product") {
+      matches =
+        targetValNorm !== "" &&
+        (String(item.id || "") === rule.targetValue ||
+          itemCodeNorm === targetValNorm ||
+          itemNameNorm === targetValNorm);
+    }
+
+    if (matches) {
+      const sortedTiers = [...rule.tiers].sort((a: any, b: any) => a.minQty - b.minQty);
+      for (const tier of sortedTiers) {
+        if (tier.minQty > qty) {
+          const diff = tier.minQty - qty;
+          if (!bestNextTier || diff < bestNextTier.diff) {
+            bestNextTier = {
+              nextQty: tier.minQty,
+              discountPct: tier.discountPct,
+              diff,
+              ruleName: rule.name
+            };
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  return bestNextTier;
+};
+
 const getItemFinalPrice = (item: any, wholesaleRules: any, smartVolumeRules?: any[]): number => {
   const isWholesale = item.qty >= wholesaleRules.minQty;
   const wholesaleDiscountPct = isWholesale ? (wholesaleRules.discountPct || 0) : 0;
@@ -4199,6 +4263,54 @@ export default function POSModule() {
                       </div>
                     </div>
                   </div>
+
+                  {/* 💡 Sugerencia de Oportunidad de Venta por Volumen (Upsell) */}
+                  {(() => {
+                    const nextTier = getNextSmartVolumeTier(item, smartVolumeRules);
+                    if (nextTier && nextTier.diff <= 25) {
+                      return (
+                        <div
+                          onClick={() => updateItemQty(item.id, nextTier.nextQty)}
+                          style={{
+                            background: "rgba(245, 158, 11, 0.12)",
+                            border: "1px dashed #f59e0b",
+                            borderRadius: "6px",
+                            padding: "4px 8px",
+                            fontSize: "0.75rem",
+                            color: "#fbbf24",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            cursor: "pointer",
+                            transition: "all 0.2s"
+                          }}
+                          title={`Haz clic para cambiar la cantidad a ${nextTier.nextQty} ${item.unit || 'pz'} y obtener ${nextTier.discountPct}% de descuento`}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(245, 158, 11, 0.22)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(245, 158, 11, 0.12)")}
+                        >
+                          <span>
+                            💡 <strong>¡Oportunidad de Venta!:</strong> Lleva <strong>{nextTier.diff} {item.unit || 'pz'}</strong> más para alcanzar {nextTier.nextQty} {item.unit || 'pz'} y obtener <strong>{nextTier.discountPct}% desc.</strong>
+                          </span>
+                          <span
+                            style={{
+                              background: "#f59e0b",
+                              color: "black",
+                              fontWeight: "bold",
+                              padding: "2px 7px",
+                              borderRadius: "4px",
+                              fontSize: "0.7rem",
+                              whiteSpace: "nowrap",
+                              marginLeft: "6px"
+                            }}
+                          >
+                            + Subir a {nextTier.nextQty}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
                 <div className="flex-between" style={{ alignItems: "center" }}>
                   <div
                     style={{
