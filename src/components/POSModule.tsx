@@ -97,6 +97,37 @@ const formatPrice = (value: number): string => {
   return roundTo50(value).toFixed(2);
 };
 
+const FOLIO_CHARS = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+
+// 🎟️ Generador y Formateador de Folio Alfanumérico de 6 Dígitos con separadores -,+,*
+// Convierte cualquier ID numérico/UUID en un folio legible de 6 caracteres (ej. 8B-2K*9M)
+export const formatTicketFolio = (rawId: any): string => {
+  if (!rawId) return "TK-00*00";
+  const rawStr = String(rawId).trim();
+
+  if (/^[A-Z0-9]{2}[-+*][A-Z0-9]{2}[-+*][A-Z0-9]{2}$/i.test(rawStr)) {
+    return rawStr.toUpperCase();
+  }
+
+  const clean = rawStr.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  if (clean.length === 6) {
+    return `${clean.slice(0, 2)}-${clean.slice(2, 4)}*${clean.slice(4, 6)}`;
+  }
+
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    hash = ((hash << 5) - hash) + clean.charCodeAt(i);
+    hash |= 0;
+  }
+  let num = Math.abs(hash);
+  let res = "";
+  for (let i = 0; i < 6; i++) {
+    res += FOLIO_CHARS.charAt(num % FOLIO_CHARS.length);
+    num = Math.floor(num / FOLIO_CHARS.length) + (clean.charCodeAt(i % clean.length) || 7);
+  }
+  return `${res.slice(0, 2)}-${res.slice(2, 4)}*${res.slice(4, 6)}`;
+};
+
 const getItemFinalPrice = (item: any, wholesaleRules: any): number => {
   const isWholesale = item.qty >= wholesaleRules.minQty;
   const wholesaleDiscountPct = isWholesale ? (wholesaleRules.discountPct || 0) : 0;
@@ -381,6 +412,14 @@ export default function POSModule() {
   const [ticketSearchQuery, setTicketSearchQuery] = useState("");
   const [ticketDateFilter, setTicketDateFilter] = useState("");
   const [selectedHistoryTicket, setSelectedHistoryTicket] = useState<any | null>(null);
+
+  // Estados para Modal de Cancelación de Tickets (Autorizado con Clave de Administrador)
+  const [showCancelTicketModal, setShowCancelTicketModal] = useState(false);
+  const [cancelTicketsList, setCancelTicketsList] = useState<any[]>([]);
+  const [isLoadingCancelTickets, setIsLoadingCancelTickets] = useState(false);
+  const [cancelTicketSearchQuery, setCancelTicketSearchQuery] = useState("");
+  const [selectedCancelTicket, setSelectedCancelTicket] = useState<any | null>(null);
+  const [isCancellingTicket, setIsCancellingTicket] = useState(false);
 
   useEffect(() => {
     if (selectedCustomerId) {
@@ -671,6 +710,150 @@ export default function POSModule() {
     setSelectedHistoryTicket(null);
     setShowTicketsHistoryModal(true);
     fetchTicketsHistory();
+  };
+
+  const openCancelTicketModal = async () => {
+    setCancelTicketSearchQuery("");
+    setSelectedCancelTicket(null);
+    setShowCancelTicketModal(true);
+    setIsLoadingCancelTickets(true);
+
+    try {
+      let localOfflineList: any[] = [];
+      try {
+        const off = await getOfflineTransactions();
+        if (off && off.length > 0) {
+          localOfflineList = off.map((tx: any) => ({
+            id: tx.id || `OFF-${tx.offlineId || 1}`,
+            created_at: tx.timestamp || new Date().toISOString(),
+            total: Number(tx.data?.finalTotal || tx.total || 0),
+            items: tx.data?.items || tx.items || [],
+            notes: tx.data?.paymentMethod ? `Pago: ${String(tx.data.paymentMethod).toUpperCase()}` : "Offline",
+            customer_name: tx.data?.customerName || tx.customer_name || "Venta Mostrador",
+            status: "offline"
+          }));
+        }
+      } catch {}
+
+      const { data, error } = await supabase
+        .from("quotes")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(35);
+
+      if (error) {
+        console.error("Error al cargar tickets:", error);
+      }
+      const combined = [...localOfflineList, ...(data || [])];
+      setCancelTicketsList(combined);
+      if (combined.length > 0) {
+        setSelectedCancelTicket(combined[0]);
+      }
+    } catch (e) {
+      console.error("Error al abrir modal de cancelación:", e);
+    } finally {
+      setIsLoadingCancelTickets(false);
+    }
+  };
+
+  const handleExecuteCancelTicket = async (ticket: any) => {
+    if (!ticket) return;
+    if (ticket.status === "cancelled") {
+      return alert("⚠️ Este ticket ya se encuentra cancelado.");
+    }
+
+    const folioFormatted = formatTicketFolio(ticket.id);
+    const pin = await getPinAsync(
+      "🔒 AUTORIZACIÓN DE CANCELACIÓN",
+      `¿Deseas cancelar el Ticket #${folioFormatted} por un total de $${Number(ticket.total || 0).toFixed(2)}?\n\nIngresa la clave/PIN de Administrador para autorizar:`
+    );
+    if (!pin) return;
+    const isValidAdmin = await verifyAdminPinRemote(pin);
+    if (!isValidAdmin) {
+      return alert("❌ PIN incorrecto o sin privilegios de Administrador. Cancelación rechazada.");
+    }
+
+    const shouldReturnStock = window.confirm(
+      `¿Deseas regresar los artículos del Ticket #${folioFormatted} al inventario físico?`
+    );
+
+    setIsCancellingTicket(true);
+    try {
+      let itemsArr: any[] = [];
+      if (typeof ticket.items === "string") {
+        try { itemsArr = JSON.parse(ticket.items); } catch { itemsArr = []; }
+      } else if (Array.isArray(ticket.items)) {
+        itemsArr = ticket.items;
+      }
+
+      // Reincorporar existencias en el inventario físico
+      if (shouldReturnStock && itemsArr.length > 0) {
+        for (const item of itemsArr) {
+          if (item.price > 0 && item.name) {
+            const invMatch = globalCatalog.find(c => c.name.toLowerCase() === item.name.toLowerCase());
+            if (invMatch) {
+              const newStock = (invMatch.stock || 0) + Number(item.qty || 1);
+              await supabase
+                .from("inventory")
+                .update({ stock: newStock })
+                .eq("id", invMatch.id);
+
+              setGlobalCatalog(prev => prev.map(p => p.id === invMatch.id ? { ...p, stock: newStock } : p));
+            }
+          }
+        }
+      }
+
+      const cancelNote = `CANCELADO por Administrador el ${new Date().toLocaleString()}`;
+      const newNotes = ticket.notes ? `${ticket.notes} | ${cancelNote}` : cancelNote;
+
+      const { error: updErr } = await supabase
+        .from("quotes")
+        .update({
+          status: "cancelled",
+          notes: newNotes
+        })
+        .eq("id", ticket.id);
+
+      if (updErr) {
+        console.warn("Falla al actualizar status de ticket:", updErr);
+      }
+
+      // Registrar egreso por anulación en transacciones de caja
+      try {
+        await supabase.from("cash_transactions").insert({
+          type: "expense",
+          amount: Number(ticket.total || 0),
+          description: `🚫 Cancelación de Ticket #${folioFormatted} (${ticket.customer_name || "Mostrador"})`,
+          created_at: new Date().toISOString()
+        });
+      } catch (txErr) {
+        console.warn("Falla al registrar transacción de anulación:", txErr);
+      }
+
+      // Auditoría en error_logs
+      try {
+        await supabase.from("error_logs").insert({
+          module: "Cancelacion_Ticket",
+          message: `Ticket #${folioFormatted} (ID: ${ticket.id}) cancelado por $${Number(ticket.total || 0).toFixed(2)}. Reingreso Stock: ${shouldReturnStock ? "SÍ" : "NO"}`,
+          stack_trace: JSON.stringify({ ticket_id: ticket.id, total: ticket.total, items: itemsArr }),
+          user_agent: navigator.userAgent
+        });
+      } catch {}
+
+      toast.success(`✅ Ticket #${folioFormatted} CANCELADO exitosamente.`);
+      
+      // Actualizar estado en la lista local
+      setCancelTicketsList(prev => prev.map(t => t.id === ticket.id ? { ...t, status: "cancelled", notes: newNotes } : t));
+      if (selectedCancelTicket?.id === ticket.id) {
+        setSelectedCancelTicket({ ...selectedCancelTicket, status: "cancelled", notes: newNotes });
+      }
+    } catch (err: any) {
+      console.error("Error al cancelar ticket:", err);
+      alert("Error al cancelar ticket: " + (err.message || err));
+    } finally {
+      setIsCancellingTicket(false);
+    }
   };
 
   const handleCloseTicket = (e: React.MouseEvent, ticketId: number) => {
@@ -2274,7 +2457,7 @@ export default function POSModule() {
 
         setAlign(1);
         setBold(true);
-        writeText(`Ticket: #${realTicketId}\n`);
+        writeText(`Ticket: #${formatTicketFolio(realTicketId)}\n`);
         setBold(false);
         writeText(`Fecha: ${new Date().toLocaleString()}\n`);
         
@@ -2770,7 +2953,7 @@ export default function POSModule() {
             ${showEmail ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Email: ${businessProfile.email}</div>` : ""}
 
             <div class="divider"></div>
-            <div class="center bold" style="margin-bottom: 5px;">Ticket: #${realTicketId}</div>
+            <div class="center bold" style="margin-bottom: 5px;">Ticket: #${formatTicketFolio(realTicketId)}</div>
             <div style="font-size: 0.9em; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
 
             ${showPaymentMethod && paymentMethod ? `<div style="font-size: 0.95em; margin-bottom: 5px;">Método de Pago: ${paymentMethod.toUpperCase()}</div>` : ""}
@@ -3504,6 +3687,30 @@ export default function POSModule() {
             <span style={{ fontSize: "0.78rem", fontWeight: "bold", color: isOffline ? "#ef4444" : "var(--color-primary)" }}>
               {isOffline ? "⚠️ Terminal Offline" : "☁️ Terminal Nube"}
             </span>
+
+            <button
+              type="button"
+              onClick={openCancelTicketModal}
+              className="btn-primary"
+              style={{
+                background: "rgba(239, 68, 68, 0.15)",
+                border: "1px solid #ef4444",
+                color: "#ef4444",
+                padding: "3px 8px",
+                fontSize: "0.74rem",
+                fontWeight: "bold",
+                borderRadius: "6px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                cursor: "pointer",
+                transition: "all 0.2s ease"
+              }}
+              title="Cancelar tickets impresos/ventas (Requiere clave de administrador)"
+            >
+              <span>🚫</span>
+              <span>Cancelar Ticket</span>
+            </button>
           </div>
 
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
@@ -5930,7 +6137,7 @@ export default function POSModule() {
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <span style={{ fontWeight: "bold", color: "white", fontSize: "0.88rem" }} title={`Ticket #${ticket.id}`}>
-                            Ticket #{typeof ticket.id === "string" && ticket.id.length > 10 ? ticket.id.slice(0, 8) : ticket.id}
+                            Ticket #{formatTicketFolio(ticket.id)}
                           </span>
                           <span style={{ fontWeight: "bold", color: "var(--color-secondary)", fontSize: "0.95rem" }}>
                             ${Number(ticket.total || 0).toFixed(2)}
@@ -6002,9 +6209,7 @@ export default function POSModule() {
                     ticketItems = selectedHistoryTicket.items;
                   }
 
-                  const displayTicketId = typeof selectedHistoryTicket.id === "string" && selectedHistoryTicket.id.length > 10
-                    ? selectedHistoryTicket.id.slice(0, 8)
-                    : selectedHistoryTicket.id;
+                  const displayTicketFolio = formatTicketFolio(selectedHistoryTicket.id);
 
                   return (
                     <div style={{ display: "flex", flexDirection: "column", gap: "8px", height: "100%" }}>
@@ -6012,18 +6217,18 @@ export default function POSModule() {
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px", gap: "8px", flexWrap: "nowrap" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
                             <h4 style={{ margin: 0, color: "white", fontSize: "1rem", whiteSpace: "nowrap" }} title={`Ticket #${selectedHistoryTicket.id}`}>
-                              Ticket #{displayTicketId}
+                              Ticket #{displayTicketFolio}
                             </h4>
                             <span style={{
-                              background: "rgba(16, 185, 129, 0.15)",
-                              color: "var(--color-secondary)",
+                              background: selectedHistoryTicket.status === "cancelled" ? "rgba(239, 68, 68, 0.2)" : "rgba(16, 185, 129, 0.15)",
+                              color: selectedHistoryTicket.status === "cancelled" ? "#ef4444" : "var(--color-secondary)",
                               padding: "2px 6px",
                               borderRadius: "4px",
                               fontSize: "0.72rem",
                               fontWeight: "bold",
                               whiteSpace: "nowrap"
                             }}>
-                              {selectedHistoryTicket.status || "Venta"}
+                              {selectedHistoryTicket.status === "cancelled" ? "🚫 Cancelado" : (selectedHistoryTicket.status || "Venta")}
                             </span>
                           </div>
 
@@ -6122,7 +6327,7 @@ export default function POSModule() {
                           boxShadow: "0 3px 10px rgba(16, 185, 129, 0.3)"
                         }}
                       >
-                        🖨️ Reimprimir Ticket #{displayTicketId}
+                        🖨️ Reimprimir Ticket #{displayTicketFolio}
                       </button>
                     </div>
                   );
@@ -6159,6 +6364,454 @@ export default function POSModule() {
                   fontSize: "0.85rem"
                 }}
                 onClick={() => setShowTicketsHistoryModal(false)}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🚫 MODAL DE CANCELACIÓN DE TICKETS (Requiere Clave de Administrador) */}
+      {showCancelTicketModal && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0,0,0,0.85)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 99999,
+          backdropFilter: "blur(8px)"
+        }}>
+          <div className="glass-panel animate-fade-in" style={{
+            padding: "20px 24px",
+            width: "980px",
+            maxWidth: "96%",
+            maxHeight: "88vh",
+            display: "flex",
+            flexDirection: "column",
+            gap: "14px",
+            background: "rgba(22, 18, 24, 0.98)",
+            border: "1px solid rgba(239, 68, 68, 0.35)",
+            boxShadow: "0 25px 60px rgba(239, 68, 68, 0.15)",
+            borderRadius: "16px"
+          }}>
+            {/* Header Modal */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ fontSize: "1.6rem" }}>🚫</span>
+                <div>
+                  <h3 style={{ color: "#ef4444", margin: 0, fontSize: "1.25rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                    Cancelación de Tickets y Ventas
+                  </h3>
+                  <span style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.6)" }}>
+                    🔒 Requiere clave de Administrador • Folios alfanuméricos de 6 caracteres (ej. 8B-2K*9M)
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowCancelTicketModal(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#ef4444",
+                  fontSize: "1.4rem",
+                  cursor: "pointer"
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Barra de Búsqueda de Ticket para Cancelar */}
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+              <div style={{ flex: 1, minWidth: "240px", position: "relative" }}>
+                <input
+                  type="text"
+                  value={cancelTicketSearchQuery}
+                  onChange={(e) => setCancelTicketSearchQuery(e.target.value)}
+                  placeholder="🔍 Buscar por Folio (ej. 8B-2K*9M), Cliente o Producto..."
+                  style={{
+                    width: "100%",
+                    padding: "9px 14px",
+                    borderRadius: "8px",
+                    background: "rgba(0,0,0,0.4)",
+                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                    color: "white",
+                    fontSize: "0.85rem",
+                    outline: "none"
+                  }}
+                  autoFocus
+                />
+              </div>
+
+              {cancelTicketSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setCancelTicketSearchQuery("")}
+                  className="btn-primary"
+                  style={{
+                    background: "rgba(255,255,255,0.08)",
+                    border: "1px solid rgba(255,255,255,0.15)",
+                    padding: "8px 12px",
+                    fontSize: "0.8rem"
+                  }}
+                >
+                  🔄 Ver Últimos 7
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={openCancelTicketModal}
+                className="btn-primary"
+                style={{
+                  background: "transparent",
+                  border: "1px solid #ef4444",
+                  color: "#ef4444",
+                  padding: "8px 12px",
+                  fontSize: "0.8rem",
+                  fontWeight: "bold"
+                }}
+              >
+                {isLoadingCancelTickets ? "⏳ Cargando..." : "🔄 Actualizar"}
+              </button>
+            </div>
+
+            {/* Contenido en dos columnas: Lista izquierda (7 últimos o búsqueda) | Detalle y Acción derecha */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "1.1fr 1.2fr",
+              gap: "16px",
+              flex: 1,
+              minHeight: 0,
+              maxHeight: "56vh",
+              overflow: "hidden"
+            }}>
+              {/* Columna Izquierda: Lista de Tickets */}
+              <div style={{
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+                paddingRight: "6px"
+              }}>
+                <div style={{ fontSize: "0.8rem", color: "#ef4444", fontWeight: "bold" }}>
+                  {cancelTicketSearchQuery.trim() === "" 
+                    ? "⏱️ Últimos 7 Tickets Impresos:" 
+                    : "📋 Resultados de Búsqueda de Tickets:"}
+                </div>
+
+                {isLoadingCancelTickets ? (
+                  <div style={{ textAlign: "center", padding: "30px", opacity: 0.6 }}>
+                    Cargando tickets...
+                  </div>
+                ) : (() => {
+                  const filtered = cancelTicketsList.filter((ticket) => {
+                    let itemsArr: any[] = [];
+                    if (typeof ticket.items === "string") {
+                      try { itemsArr = JSON.parse(ticket.items); } catch { itemsArr = []; }
+                    } else if (Array.isArray(ticket.items)) {
+                      itemsArr = ticket.items;
+                    }
+
+                    if (cancelTicketSearchQuery.trim()) {
+                      const q = cancelTicketSearchQuery.trim().toLowerCase();
+                      const folio = formatTicketFolio(ticket.id).toLowerCase();
+                      const rawId = String(ticket.id || "").toLowerCase();
+                      const matchCustomer = ticket.customer_name ? ticket.customer_name.toLowerCase().includes(q) : false;
+                      const matchNotes = ticket.notes ? ticket.notes.toLowerCase().includes(q) : false;
+                      const matchArticle = itemsArr.some((it: any) => 
+                        (it.name && it.name.toLowerCase().includes(q)) || 
+                        (it.code && it.code.toLowerCase().includes(q))
+                      );
+                      return folio.includes(q) || rawId.includes(q) || matchCustomer || matchNotes || matchArticle;
+                    }
+
+                    return true;
+                  });
+
+                  // Por defecto muestra los últimos 7 tickets impresos
+                  const displayed = cancelTicketSearchQuery.trim() === ""
+                    ? filtered.slice(0, 7)
+                    : filtered;
+
+                  if (displayed.length === 0) {
+                    return (
+                      <div style={{ textAlign: "center", padding: "30px", opacity: 0.6, border: "1px dashed rgba(255,255,255,0.1)", borderRadius: "8px" }}>
+                        No se encontraron tickets con el folio o criterio buscado.
+                      </div>
+                    );
+                  }
+
+                  return displayed.map((ticket) => {
+                    const isSelected = selectedCancelTicket?.id === ticket.id;
+                    const isCancelled = ticket.status === "cancelled";
+                    const folio = formatTicketFolio(ticket.id);
+
+                    let itemsArr: any[] = [];
+                    if (typeof ticket.items === "string") {
+                      try { itemsArr = JSON.parse(ticket.items); } catch { itemsArr = []; }
+                    } else if (Array.isArray(ticket.items)) {
+                      itemsArr = ticket.items;
+                    }
+
+                    return (
+                      <div
+                        key={ticket.id}
+                        onClick={() => setSelectedCancelTicket(ticket)}
+                        style={{
+                          padding: "10px 12px",
+                          borderRadius: "10px",
+                          background: isSelected ? "rgba(239, 68, 68, 0.15)" : "rgba(255,255,255,0.03)",
+                          border: isSelected ? "1.5px solid #ef4444" : "1px solid rgba(255,255,255,0.08)",
+                          cursor: "pointer",
+                          transition: "all 0.2s ease",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "5px",
+                          opacity: isCancelled ? 0.75 : 1
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ fontWeight: "bold", color: "white", fontSize: "0.92rem", letterSpacing: "0.5px" }}>
+                              Ticket #{folio}
+                            </span>
+                            {isCancelled ? (
+                              <span style={{ background: "rgba(239, 68, 68, 0.25)", color: "#ef4444", border: "1px solid #ef4444", fontSize: "0.68rem", fontWeight: "bold", padding: "1px 5px", borderRadius: "4px" }}>
+                                🚫 Cancelado
+                              </span>
+                            ) : (
+                              <span style={{ background: "rgba(16, 185, 129, 0.15)", color: "#10b981", fontSize: "0.68rem", fontWeight: "bold", padding: "1px 5px", borderRadius: "4px" }}>
+                                ✓ Válido
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ fontWeight: "bold", color: isCancelled ? "rgba(255,255,255,0.5)" : "var(--color-secondary)", fontSize: "0.95rem" }}>
+                            ${Number(ticket.total || 0).toFixed(2)}
+                          </span>
+                        </div>
+
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "rgba(255,255,255,0.6)" }}>
+                          <span>📅 {new Date(ticket.created_at).toLocaleDateString()} {new Date(ticket.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>📦 {itemsArr.length} artículo(s)</span>
+                        </div>
+
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.72rem", marginTop: "2px" }}>
+                          <span style={{ color: "rgba(255,255,255,0.7)", maxWidth: "150px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            👤 {ticket.customer_name || "Venta Mostrador"}
+                          </span>
+
+                          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                            {!isCancelled ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleExecuteCancelTicket(ticket);
+                                }}
+                                disabled={isCancellingTicket}
+                                className="btn-primary"
+                                style={{
+                                  padding: "3px 8px",
+                                  fontSize: "0.72rem",
+                                  background: "rgba(239, 68, 68, 0.2)",
+                                  border: "1px solid #ef4444",
+                                  color: "#ef4444",
+                                  borderRadius: "4px",
+                                  fontWeight: "bold",
+                                  cursor: "pointer"
+                                }}
+                              >
+                                🚫 Cancelar
+                              </button>
+                            ) : (
+                              <span style={{ color: "#ef4444", fontSize: "0.7rem", fontWeight: "bold" }}>Anulado</span>
+                            )}
+                            <span style={{ color: "var(--color-primary)", fontWeight: "600", fontSize: "0.72rem" }}>
+                              {isSelected ? "▶ Activo" : "Ver"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+
+              {/* Columna Derecha: Detalle del Ticket & Confirmación de Cancelación */}
+              <div style={{
+                background: "rgba(0,0,0,0.3)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: "12px",
+                padding: "14px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                overflowY: "auto"
+              }}>
+                {selectedCancelTicket ? (() => {
+                  let ticketItems: any[] = [];
+                  if (typeof selectedCancelTicket.items === "string") {
+                    try { ticketItems = JSON.parse(selectedCancelTicket.items); } catch { ticketItems = []; }
+                  } else if (Array.isArray(selectedCancelTicket.items)) {
+                    ticketItems = selectedCancelTicket.items;
+                  }
+
+                  const displayFolio = formatTicketFolio(selectedCancelTicket.id);
+                  const isCancelled = selectedCancelTicket.status === "cancelled";
+
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px", height: "100%" }}>
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                          <h4 style={{ margin: 0, color: "white", fontSize: "1.05rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span>Ticket #{displayFolio}</span>
+                          </h4>
+                          <span style={{
+                            background: isCancelled ? "rgba(239, 68, 68, 0.25)" : "rgba(16, 185, 129, 0.15)",
+                            color: isCancelled ? "#ef4444" : "#10b981",
+                            border: isCancelled ? "1px solid #ef4444" : "1px solid #10b981",
+                            padding: "2px 8px",
+                            borderRadius: "4px",
+                            fontSize: "0.74rem",
+                            fontWeight: "bold"
+                          }}>
+                            {isCancelled ? "🚫 CANCELADO" : "✓ VENTA VIGENTE"}
+                          </span>
+                        </div>
+
+                        <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.6)", display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                          <span>📅 {new Date(selectedCancelTicket.created_at).toLocaleString()}</span>
+                          <span>👤 {selectedCancelTicket.customer_name || "Venta Mostrador"}</span>
+                          {selectedCancelTicket.notes && <span>💳 {selectedCancelTicket.notes}</span>}
+                        </div>
+                      </div>
+
+                      {/* Desglose de Artículos */}
+                      <div style={{ flex: 1, overflowY: "auto", maxHeight: "140px", border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.75rem" }}>
+                          <thead>
+                            <tr style={{ background: "rgba(255,255,255,0.06)", textAlign: "left", color: "rgba(255,255,255,0.7)" }}>
+                              <th style={{ padding: "5px 8px" }}>Cant</th>
+                              <th style={{ padding: "5px 8px" }}>Artículo</th>
+                              <th style={{ padding: "5px 8px", textAlign: "right" }}>P. Unit</th>
+                              <th style={{ padding: "5px 8px", textAlign: "right" }}>Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ticketItems.map((item: any, idx: number) => {
+                              const qty = Number(item.qty || 1);
+                              const price = Number(item.price || 0);
+                              return (
+                                <tr key={idx} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                                  <td style={{ padding: "5px 8px", color: "var(--color-secondary)", fontWeight: "bold" }}>{qty}</td>
+                                  <td style={{ padding: "5px 8px" }}>{item.name}</td>
+                                  <td style={{ padding: "5px 8px", textAlign: "right" }}>${price.toFixed(2)}</td>
+                                  <td style={{ padding: "5px 8px", textAlign: "right", fontWeight: "bold" }}>${(qty * price).toFixed(2)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Resumen Total */}
+                      <div style={{
+                        background: "rgba(255,255,255,0.03)",
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center"
+                      }}>
+                        <span style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.8)" }}>Monto Total del Ticket:</span>
+                        <span style={{ fontSize: "1.2rem", fontWeight: "bold", color: isCancelled ? "rgba(255,255,255,0.5)" : "var(--color-secondary)" }}>
+                          ${Number(selectedCancelTicket.total || 0).toFixed(2)}
+                        </span>
+                      </div>
+
+                      {/* Botón de Acción de Cancelación */}
+                      {isCancelled ? (
+                        <div style={{
+                          background: "rgba(239, 68, 68, 0.12)",
+                          border: "1px solid #ef4444",
+                          color: "#ef4444",
+                          padding: "10px",
+                          borderRadius: "8px",
+                          textAlign: "center",
+                          fontSize: "0.82rem",
+                          fontWeight: "bold"
+                        }}>
+                          🚫 Este ticket ya fue anulado y procesado como cancelación.
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleExecuteCancelTicket(selectedCancelTicket)}
+                          disabled={isCancellingTicket}
+                          className="btn-primary"
+                          style={{
+                            width: "100%",
+                            padding: "10px",
+                            fontSize: "0.9rem",
+                            fontWeight: "bold",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "8px",
+                            background: "linear-gradient(135deg, #ef4444, #b91c1c)",
+                            border: "none",
+                            borderRadius: "8px",
+                            cursor: isCancellingTicket ? "not-allowed" : "pointer",
+                            boxShadow: "0 4px 14px rgba(239, 68, 68, 0.4)",
+                            color: "white"
+                          }}
+                        >
+                          {isCancellingTicket ? "⏳ Cancelando..." : `🚫 Cancelar Ticket #${displayFolio} (Pedir PIN Admin)`}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })() : (
+                  <div style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    height: "100%",
+                    color: "rgba(255,255,255,0.4)",
+                    textAlign: "center",
+                    gap: "10px",
+                    padding: "30px"
+                  }}>
+                    <span style={{ fontSize: "2.5rem" }}>🚫</span>
+                    <p style={{ fontSize: "0.85rem", margin: 0 }}>
+                      Selecciona un ticket de la lista para ver sus detalles y autorizar su cancelación con clave de administrador.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "12px" }}>
+              <button
+                type="button"
+                className="btn-primary"
+                style={{
+                  background: "rgba(255,255,255,0.08)",
+                  border: "1px solid var(--glass-border)",
+                  padding: "8px 18px",
+                  fontSize: "0.85rem"
+                }}
+                onClick={() => setShowCancelTicketModal(false)}
               >
                 Cerrar
               </button>

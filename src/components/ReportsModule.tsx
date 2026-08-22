@@ -94,6 +94,27 @@ export default function ReportsModule() {
   const [quoteStatsMigrationPending, setQuoteStatsMigrationPending] = useState(false);
   const [copiedQuoteMigrationSql, setCopiedQuoteMigrationSql] = useState(false);
 
+  const FOLIO_CHARS = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const formatTicketFolio = (rawId: any): string => {
+    if (!rawId) return "TK-00*00";
+    const rawStr = String(rawId).trim();
+    if (/^[A-Z0-9]{2}[-+*][A-Z0-9]{2}[-+*][A-Z0-9]{2}$/i.test(rawStr)) return rawStr.toUpperCase();
+    const clean = rawStr.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+    if (clean.length === 6) return `${clean.slice(0, 2)}-${clean.slice(2, 4)}*${clean.slice(4, 6)}`;
+    let hash = 0;
+    for (let i = 0; i < clean.length; i++) {
+      hash = ((hash << 5) - hash) + clean.charCodeAt(i);
+      hash |= 0;
+    }
+    let num = Math.abs(hash);
+    let res = "";
+    for (let i = 0; i < 6; i++) {
+      res += FOLIO_CHARS.charAt(num % FOLIO_CHARS.length);
+      num = Math.floor(num / FOLIO_CHARS.length) + (clean.charCodeAt(i % clean.length) || 7);
+    }
+    return `${res.slice(0, 2)}-${res.slice(2, 4)}*${res.slice(4, 6)}`;
+  };
+
   const fetchPriceAdjustments = async (timeRange = filterAdjustmentTime) => {
     try {
       const today = new Date();
@@ -157,13 +178,14 @@ export default function ReportsModule() {
           }
 
           const itemsSummary = itemsArr.map((it: any) => `${it.qty || 1}x ${it.name || "Art."}`).join(", ");
+          const formattedFolio = formatTicketFolio(q.id);
 
           if (discPct > 0) {
             const origTotal = discPct < 100 ? (totalVal / (1 - discPct / 100)) : totalVal;
             const amount = origTotal - totalVal;
             adjustments.push({
               id: q.id,
-              ticketId: String(q.id).slice(0, 8),
+              ticketId: formattedFolio,
               createdAt: q.created_at,
               customerName: q.customer_name || "Venta Mostrador",
               type: "discount",
@@ -180,7 +202,7 @@ export default function ReportsModule() {
             const amount = totalVal - origTotal;
             adjustments.push({
               id: q.id,
-              ticketId: String(q.id).slice(0, 8),
+              ticketId: formattedFolio,
               createdAt: q.created_at,
               customerName: q.customer_name || "Venta Mostrador",
               type: "increase",
@@ -210,7 +232,7 @@ export default function ReportsModule() {
             if (itemDiscountSum > 0) {
               adjustments.push({
                 id: q.id,
-                ticketId: String(q.id).slice(0, 8),
+                ticketId: formattedFolio,
                 createdAt: q.created_at,
                 customerName: q.customer_name || "Venta Mostrador",
                 type: "discount",
