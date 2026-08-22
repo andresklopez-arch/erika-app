@@ -4058,64 +4058,102 @@ export default function POSModule() {
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: "10px",
-                      background: "rgba(255,255,255,0.1)",
-                      padding: "5px",
-                      borderRadius: "20px",
+                      gap: "6px",
+                      background: "rgba(255,255,255,0.08)",
+                      padding: "3px 8px",
+                      borderRadius: "12px",
+                      border: "1px solid rgba(255,255,255,0.12)"
                     }}
                   >
                     <button
+                      type="button"
                       style={{
-                        background: "transparent",
+                        background: "rgba(255,255,255,0.1)",
                         border: "none",
                         color: "white",
                         cursor: "pointer",
-                        padding: "0 10px",
+                        width: "26px",
+                        height: "26px",
+                        borderRadius: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "1.1rem",
+                        fontWeight: "bold",
+                        lineHeight: 1
                       }}
-                      onClick={() => updateItemQty(item.id, item.qty - 1)}
+                      onClick={() => updateItemQty(item.id, Math.max(1, item.qty - 1))}
+                      title="Disminuir 1 pieza"
                     >
                       -
                     </button>
-                    <span
-                      onClick={() => {
-                        // El stepper +/- solo mueve de 1 en 1 — para productos
-                        // que no se venden por pieza (kg, m, L) se necesita
-                        // poder capturar una cantidad exacta con decimales
-                        // (ej. 0.25 kg), no solo sumar/restar unidades enteras.
-                        if (item.unit === "pz") return;
-                        const input = window.prompt(`Cantidad exacta (${item.unit}) para "${item.name}":`, String(item.qty));
-                        if (input === null) return;
-                        const qty = parseFloat(input.replace(",", "."));
-                        if (!qty || qty <= 0) return alert("⚠️ Cantidad inválida.");
-                        updateItemQty(item.id, qty);
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step={item.unit === "pz" ? "1" : "any"}
+                        value={item.qty}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          if (!isNaN(val) && val > 0) {
+                            updateItemQty(item.id, val);
+                          }
+                        }}
+                        onFocus={(e) => e.target.select()}
+                        onClick={(e) => (e.target as HTMLInputElement).select()}
+                        style={{
+                          width: "56px",
+                          textAlign: "center",
+                          fontWeight: "bold",
+                          fontSize: "0.95rem",
+                          color: "var(--color-secondary)",
+                          background: "rgba(0,0,0,0.5)",
+                          border: "1px solid var(--color-secondary)",
+                          borderRadius: "6px",
+                          padding: "3px 2px",
+                          outline: "none"
+                        }}
+                        title="Escribe directamente la cantidad que deseas vender (ej. 30)"
+                      />
+                      <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.85)", fontWeight: "600" }}>
+                        {item.unit || "pz"}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      style={{
+                        background: "rgba(255,255,255,0.1)",
+                        border: "none",
+                        color: "white",
+                        cursor: "pointer",
+                        width: "26px",
+                        height: "26px",
+                        borderRadius: "6px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "1.1rem",
+                        fontWeight: "bold",
+                        lineHeight: 1
                       }}
-                      style={{ cursor: item.unit === "pz" ? "default" : "pointer", textDecoration: item.unit === "pz" ? "none" : "underline dotted" }}
-                      title={item.unit === "pz" ? undefined : "Clic para capturar cantidad exacta"}
+                      onClick={() => updateItemQty(item.id, item.qty + 1)}
+                      title="Aumentar 1 pieza"
                     >
-                      {item.qty} {item.unit}
-                    </span>
+                      +
+                    </button>
+
                     {hasInsufficientStock && (
-                      <span style={{ color: "#ef4444", fontSize: "0.8rem", fontWeight: "bold", marginLeft: "10px" }}>
+                      <span style={{ color: "#ef4444", fontSize: "0.78rem", fontWeight: "bold", marginLeft: "6px" }}>
                         ⚠️ Excede stock ({invItem.stock})
                       </span>
                     )}
                     {!hasInsufficientStock && isLowStock && (
-                      <span style={{ color: "#f59e0b", fontSize: "0.8rem", fontWeight: "bold", marginLeft: "10px" }}>
-                        ⚠️ Stock bajo ({invItem.stock} disp.)
+                      <span style={{ color: "#f59e0b", fontSize: "0.78rem", fontWeight: "bold", marginLeft: "6px" }}>
+                        ⚠️ Quedan {invItem.stock}
                       </span>
                     )}
-                    <button
-                      style={{
-                        background: "transparent",
-                        border: "none",
-                        color: "white",
-                        cursor: "pointer",
-                        padding: "0 10px",
-                      }}
-                      onClick={() => updateItemQty(item.id, item.qty + 1)}
-                    >
-                      +
-                    </button>
                   </div>
                   <div style={{ display: "flex", gap: "8px" }}>
 
