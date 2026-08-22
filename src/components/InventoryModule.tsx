@@ -189,6 +189,98 @@ export default function InventoryModule() {
   const [bulkTargetMode, setBulkTargetMode] = useState<"visible" | "supplier" | "location">("visible");
   const [bulkSelectedSupplier, setBulkSelectedSupplier] = useState<string>("");
   const [bulkSelectedLocation, setBulkSelectedLocation] = useState<string>("");
+
+  // Descuentos Inteligentes por Volumen / Escalas
+  const [smartModalTab, setSmartModalTab] = useState<"volumen" | "masivo">("volumen");
+  const [smartVolumeRules, setSmartVolumeRules] = useState<any[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem("ERIKA_SMART_VOLUME_RULES");
+      if (saved) return JSON.parse(saved);
+      return [
+        {
+          id: "rule-pijas-default",
+          name: "Pijas por Volumen",
+          targetType: "keyword",
+          targetValue: "pija",
+          tiers: [
+            { minQty: 20, discountPct: 5 },
+            { minQty: 30, discountPct: 30 }
+          ],
+          active: true,
+          createdAt: new Date().toISOString()
+        }
+      ];
+    } catch {
+      return [];
+    }
+  });
+  const [newRuleName, setNewRuleName] = useState("");
+  const [newRuleTargetType, setNewRuleTargetType] = useState<"keyword" | "supplier" | "product" | "all">("keyword");
+  const [newRuleTargetValue, setNewRuleTargetValue] = useState("");
+  const [newRuleTiers, setNewRuleTiers] = useState<{ minQty: number; discountPct: number }[]>([
+    { minQty: 20, discountPct: 5 },
+    { minQty: 30, discountPct: 30 }
+  ]);
+
+  const saveSmartVolumeRules = (rules: any[]) => {
+    setSmartVolumeRules(rules);
+    try {
+      localStorage.setItem("ERIKA_SMART_VOLUME_RULES", JSON.stringify(rules));
+      window.dispatchEvent(new Event("erika_smart_rules_updated"));
+    } catch (e) {}
+  };
+
+  const handleAddSmartRule = () => {
+    if (!newRuleName.trim()) {
+      alert("⚠️ Por favor ingresa un nombre para la regla.");
+      return;
+    }
+    if (newRuleTargetType !== "all" && !newRuleTargetValue.trim()) {
+      alert("⚠️ Por favor ingresa el artículo, palabra clave o proveedor.");
+      return;
+    }
+    const validTiers = newRuleTiers
+      .filter((t) => t.minQty > 0 && t.discountPct > 0)
+      .sort((a, b) => a.minQty - b.minQty);
+
+    if (validTiers.length === 0) {
+      alert("⚠️ Por favor agrega al menos una escala válida (ej. A partir de 20 pz -> 5%).");
+      return;
+    }
+
+    const newRule = {
+      id: `rule-${Date.now()}`,
+      name: newRuleName.trim(),
+      targetType: newRuleTargetType,
+      targetValue: newRuleTargetValue.trim(),
+      tiers: validTiers,
+      active: true,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updated = [newRule, ...smartVolumeRules];
+    saveSmartVolumeRules(updated);
+    alert(`✅ Regla de Descuento Inteligente "${newRule.name}" guardada con éxito.`);
+    setNewRuleName("");
+    setNewRuleTargetValue("");
+    setNewRuleTiers([
+      { minQty: 20, discountPct: 5 },
+      { minQty: 30, discountPct: 30 },
+    ]);
+  };
+
+  const handleDeleteSmartRule = (id: string) => {
+    if (!window.confirm("¿Seguro que deseas eliminar esta regla de descuento inteligente?")) return;
+    const updated = smartVolumeRules.filter((r) => r.id !== id);
+    saveSmartVolumeRules(updated);
+  };
+
+  const handleToggleSmartRule = (id: string) => {
+    const updated = smartVolumeRules.map((r) => (r.id === id ? { ...r, active: !r.active } : r));
+    saveSmartVolumeRules(updated);
+  };
+
   const [auditHistoryItem, setAuditHistoryItem] = useState<InventoryItem | null>(null);
   const [auditHistoryLogs, setAuditHistoryLogs] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
@@ -1909,12 +2001,15 @@ export default function InventoryModule() {
             className="btn-primary"
             onClick={() => setShowBulkPromoModal(true)}
             style={{
-              background: "rgba(244, 63, 94, 0.15)",
+              background: "linear-gradient(135deg, rgba(244, 63, 94, 0.25), rgba(168, 85, 247, 0.25))",
               border: "1px solid var(--color-primary)",
-              color: "var(--color-primary)",
+              color: "white",
+              fontWeight: "bold",
+              boxShadow: "0 0 12px rgba(244, 63, 94, 0.2)",
             }}
+            title="Configurar descuentos automáticos por número de piezas / volumen o promociones masivas"
           >
-            🏷️ Descuento Masivo
+            🧠 Descuento Inteligente
           </button>
           {undoStack && undoStack.length > 0 && (
             <button
@@ -3137,180 +3232,525 @@ export default function InventoryModule() {
               color: "white"
             }}
           >
-            <h2 style={{ color: "var(--color-primary)", marginBottom: "5px", fontSize: "1.4rem" }}>
-              🏷️ Configurar Descuento Masivo
+            <h2 style={{ color: "var(--color-primary)", marginBottom: "5px", fontSize: "1.4rem", display: "flex", alignItems: "center", gap: "8px" }}>
+              🧠 Descuento Inteligente
             </h2>
-            <p style={{ fontSize: "0.85rem", opacity: 0.7, marginBottom: "20px" }}>
-              Aplica un porcentaje de descuento a múltiples productos a la vez.
+            <p style={{ fontSize: "0.85rem", opacity: 0.7, marginBottom: "15px" }}>
+              Configura descuentos automáticos por número de piezas / volumen o aplica promociones masivas.
             </p>
 
-            <div style={{ marginBottom: "15px" }}>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
-                Aplicar a:
-              </label>
-              <select
-                value={bulkTargetMode}
-                onChange={(e: any) => setBulkTargetMode(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "10px 14px",
-                  borderRadius: "8px",
-                  border: "1px solid var(--glass-border)",
-                  background: "rgba(0,0,0,0.5)",
-                  color: "white",
-                  outline: "none",
-                  fontSize: "1rem"
-                }}
-              >
-                <option value="visible" style={{ background: "#1f2937", color: "white" }}>
-                  Productos visibles actualmente en la lista ({items.length})
-                </option>
-                <option value="supplier" style={{ background: "#1f2937", color: "white" }}>
-                  Todos los productos de un Proveedor
-                </option>
-                <option value="location" style={{ background: "#1f2937", color: "white" }}>
-                  Todos los productos de una Ubicación
-                </option>
-              </select>
-            </div>
-
-            {bulkTargetMode === "supplier" && (
-              <div style={{ marginBottom: "15px" }}>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
-                  Seleccionar Proveedor
-                </label>
-                <select
-                  value={bulkSelectedSupplier}
-                  onChange={(e) => setBulkSelectedSupplier(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "10px 14px",
-                    borderRadius: "8px",
-                    border: "1px solid var(--glass-border)",
-                    background: "rgba(0,0,0,0.5)",
-                    color: "white",
-                    outline: "none",
-                    fontSize: "1rem"
-                  }}
-                >
-                  <option value="" style={{ background: "#1f2937", color: "white" }}>-- Selecciona un proveedor --</option>
-                  {Array.from(new Set(allItems.map(i => i.supplier).filter(Boolean))).map(sup => (
-                    <option key={sup} value={sup!} style={{ background: "#1f2937", color: "white" }}>
-                      {sup}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {bulkTargetMode === "location" && (
-              <div style={{ marginBottom: "15px" }}>
-                <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
-                  Seleccionar Ubicación
-                </label>
-                <select
-                  value={bulkSelectedLocation}
-                  onChange={(e) => setBulkSelectedLocation(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "10px 14px",
-                    borderRadius: "8px",
-                    border: "1px solid var(--glass-border)",
-                    background: "rgba(0,0,0,0.5)",
-                    color: "white",
-                    outline: "none",
-                    fontSize: "1rem"
-                  }}
-                >
-                  <option value="" style={{ background: "#1f2937", color: "white" }}>-- Selecciona una ubicación --</option>
-                  {Array.from(new Set(allItems.map(i => i.location).filter(Boolean))).map(loc => (
-                    <option key={loc} value={loc!} style={{ background: "#1f2937", color: "white" }}>
-                      {loc}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div style={{ marginBottom: "15px" }}>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
-                Porcentaje de Descuento (%)
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={bulkPromoPct}
-                placeholder="Ej. 10"
-                onChange={(e) => setBulkPromoPct(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "10px 14px",
-                  borderRadius: "8px",
-                  border: "1px solid var(--glass-border)",
-                  background: "rgba(0,0,0,0.5)",
-                  color: "white",
-                  outline: "none",
-                  fontSize: "1rem"
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: "15px" }}>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
-                Fecha y Hora de Inicio (Opcional)
-              </label>
-              <input
-                type="datetime-local"
-                value={bulkPromoStartAt}
-                onChange={(e) => setBulkPromoStartAt(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "10px 14px",
-                  borderRadius: "8px",
-                  border: "1px solid var(--glass-border)",
-                  background: "rgba(0,0,0,0.5)",
-                  color: "white",
-                  outline: "none",
-                  fontSize: "1rem"
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: "25px" }}>
-              <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
-                Fecha y Hora de Fin (Opcional)
-              </label>
-              <input
-                type="datetime-local"
-                value={bulkPromoEndAt}
-                onChange={(e) => setBulkPromoEndAt(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "10px 14px",
-                  borderRadius: "8px",
-                  border: "1px solid var(--glass-border)",
-                  background: "rgba(0,0,0,0.5)",
-                  color: "white",
-                  outline: "none",
-                  fontSize: "1rem"
-                }}
-              />
-            </div>
-
-            <div style={{ display: "flex", gap: "10px" }}>
+            {/* Pestañas del Modal */}
+            <div style={{ display: "flex", gap: "10px", marginBottom: "20px", borderBottom: "1px solid var(--glass-border)", paddingBottom: "10px" }}>
               <button
-                className="btn-primary"
-                onClick={handleApplyBulkPromo}
-                style={{ flex: 1, padding: "12px", background: "var(--color-primary)", border: "none", color: "black", fontWeight: "bold" }}
+                type="button"
+                onClick={() => setSmartModalTab("volumen")}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: smartModalTab === "volumen" ? "linear-gradient(135deg, var(--color-primary), var(--color-accent))" : "rgba(255,255,255,0.05)",
+                  color: "white",
+                  fontWeight: "bold",
+                  fontSize: "0.85rem",
+                  cursor: "pointer",
+                  transition: "all 0.2s"
+                }}
               >
-                ⚡ Aplicar Descuento Masivo
+                ⚡ Escalas por Volumen (Piezas)
               </button>
               <button
+                type="button"
+                onClick={() => setSmartModalTab("masivo")}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: smartModalTab === "masivo" ? "linear-gradient(135deg, var(--color-primary), var(--color-accent))" : "rgba(255,255,255,0.05)",
+                  color: "white",
+                  fontWeight: "bold",
+                  fontSize: "0.85rem",
+                  cursor: "pointer",
+                  transition: "all 0.2s"
+                }}
+              >
+                🏷️ Descuento Masivo %
+              </button>
+            </div>
+
+            {smartModalTab === "volumen" ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "15px", maxHeight: "65vh", overflowY: "auto", paddingRight: "5px" }}>
+                {/* Formulario de Nueva Regla */}
+                <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid var(--glass-border)", borderRadius: "10px", padding: "15px" }}>
+                  <h4 style={{ color: "var(--color-secondary)", marginBottom: "10px", fontSize: "0.95rem" }}>
+                    ➕ Crear Nueva Regla de Descuento por Volumen
+                  </h4>
+
+                  <div style={{ marginBottom: "12px" }}>
+                    <label style={{ display: "block", marginBottom: "4px", fontSize: "0.82rem", fontWeight: "bold" }}>
+                      Nombre descriptivo de la regla:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej. Pijas por Mayoreo, Pinturas por Cubeta, etc."
+                      value={newRuleName}
+                      onChange={(e) => setNewRuleName(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        borderRadius: "6px",
+                        border: "1px solid var(--glass-border)",
+                        background: "rgba(0,0,0,0.5)",
+                        color: "white",
+                        outline: "none",
+                        fontSize: "0.9rem"
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "12px" }}>
+                    <div>
+                      <label style={{ display: "block", marginBottom: "4px", fontSize: "0.82rem", fontWeight: "bold" }}>
+                        Aplicar según:
+                      </label>
+                      <select
+                        value={newRuleTargetType}
+                        onChange={(e: any) => setNewRuleTargetType(e.target.value)}
+                        style={{
+                          width: "100%",
+                          padding: "8px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid var(--glass-border)",
+                          background: "rgba(0,0,0,0.5)",
+                          color: "white",
+                          outline: "none",
+                          fontSize: "0.85rem"
+                        }}
+                      >
+                        <option value="keyword" style={{ background: "#18181b" }}>🔍 Palabra Clave en Nombre (Ej. Pija)</option>
+                        <option value="supplier" style={{ background: "#18181b" }}>🏭 Proveedor</option>
+                        <option value="product" style={{ background: "#18181b" }}>🎯 Producto Específico (Código/Nombre)</option>
+                        <option value="all" style={{ background: "#18181b" }}>🌐 Todo el Catálogo</option>
+                      </select>
+                    </div>
+
+                    {newRuleTargetType !== "all" && (
+                      <div>
+                        <label style={{ display: "block", marginBottom: "4px", fontSize: "0.82rem", fontWeight: "bold" }}>
+                          {newRuleTargetType === "keyword" ? "Palabra clave:" : newRuleTargetType === "supplier" ? "Nombre de Proveedor:" : "Código o Nombre:"}
+                        </label>
+                        <input
+                          type="text"
+                          placeholder={newRuleTargetType === "keyword" ? "Ej. pija, pintura, cable" : newRuleTargetType === "supplier" ? "Ej. Truper" : "Buscar producto..."}
+                          value={newRuleTargetValue}
+                          onChange={(e) => setNewRuleTargetValue(e.target.value)}
+                          list="smart-target-suggestions"
+                          style={{
+                            width: "100%",
+                            padding: "8px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid var(--glass-border)",
+                            background: "rgba(0,0,0,0.5)",
+                            color: "white",
+                            outline: "none",
+                            fontSize: "0.85rem"
+                          }}
+                        />
+                        <datalist id="smart-target-suggestions">
+                          {newRuleTargetType === "supplier"
+                            ? dbSuppliers.map((s) => <option key={s} value={s} />)
+                            : allItems.slice(0, 100).map((i) => <option key={i.id} value={i.name} />)}
+                        </datalist>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Escalas de volumen dinámicas */}
+                  <div style={{ marginBottom: "15px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                      <label style={{ fontSize: "0.82rem", fontWeight: "bold", color: "#6ee7b7" }}>
+                        📊 Escalas de Descuento (Cantidad ➔ %):
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setNewRuleTiers([...newRuleTiers, { minQty: 10, discountPct: 5 }])}
+                        style={{
+                          background: "rgba(16, 185, 129, 0.2)",
+                          border: "1px solid #10b981",
+                          color: "#34d399",
+                          borderRadius: "4px",
+                          padding: "2px 8px",
+                          fontSize: "0.75rem",
+                          cursor: "pointer",
+                          fontWeight: "bold"
+                        }}
+                      >
+                        ➕ Agregar Escala
+                      </button>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      {newRuleTiers.map((tier, tIdx) => (
+                        <div key={tIdx} style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(0,0,0,0.3)", padding: "6px 10px", borderRadius: "6px" }}>
+                          <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.7)", whiteSpace: "nowrap" }}>A partir de:</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={tier.minQty}
+                            onChange={(e) => {
+                              const updated = [...newRuleTiers];
+                              updated[tIdx].minQty = Math.max(1, parseInt(e.target.value, 10) || 1);
+                              setNewRuleTiers(updated);
+                            }}
+                            style={{
+                              width: "75px",
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              border: "1px solid var(--glass-border)",
+                              background: "rgba(0,0,0,0.5)",
+                              color: "white",
+                              textAlign: "center",
+                              fontSize: "0.85rem",
+                              fontWeight: "bold"
+                            }}
+                          />
+                          <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.7)" }}>piezas ➔</span>
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={tier.discountPct}
+                            onChange={(e) => {
+                              const updated = [...newRuleTiers];
+                              updated[tIdx].discountPct = Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0));
+                              setNewRuleTiers(updated);
+                            }}
+                            style={{
+                              width: "70px",
+                              padding: "4px 8px",
+                              borderRadius: "4px",
+                              border: "1px solid #10b981",
+                              background: "rgba(0,0,0,0.5)",
+                              color: "#34d399",
+                              textAlign: "center",
+                              fontSize: "0.85rem",
+                              fontWeight: "bold"
+                            }}
+                          />
+                          <span style={{ fontSize: "0.8rem", color: "#34d399", fontWeight: "bold" }}>% desc.</span>
+                          {newRuleTiers.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setNewRuleTiers(newRuleTiers.filter((_, idx) => idx !== tIdx))}
+                              style={{
+                                marginLeft: "auto",
+                                background: "rgba(239, 68, 68, 0.2)",
+                                border: "none",
+                                color: "#ef4444",
+                                borderRadius: "4px",
+                                padding: "3px 6px",
+                                cursor: "pointer",
+                                fontSize: "0.75rem"
+                              }}
+                              title="Eliminar escala"
+                            >
+                              ✖
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddSmartRule}
+                    style={{
+                      width: "100%",
+                      padding: "9px",
+                      background: "linear-gradient(135deg, var(--color-primary), var(--color-accent))",
+                      border: "none",
+                      color: "white",
+                      borderRadius: "6px",
+                      fontWeight: "bold",
+                      cursor: "pointer",
+                      fontSize: "0.88rem",
+                      boxShadow: "0 2px 10px rgba(244, 63, 94, 0.3)"
+                    }}
+                  >
+                    💾 Guardar Regla de Descuento Inteligente
+                  </button>
+                </div>
+
+                {/* Lista de Reglas Configuradas */}
+                <div>
+                  <h4 style={{ color: "white", marginBottom: "10px", fontSize: "0.92rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                    📋 Reglas Activas ({smartVolumeRules.length}):
+                  </h4>
+
+                  {smartVolumeRules.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "15px", color: "rgba(255,255,255,0.4)", fontSize: "0.85rem" }}>
+                      No hay reglas de volumen configuradas aún.
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      {smartVolumeRules.map((rule) => (
+                        <div
+                          key={rule.id}
+                          style={{
+                            background: rule.active ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.4)",
+                            border: rule.active ? "1px solid rgba(16, 185, 129, 0.4)" : "1px solid var(--glass-border)",
+                            borderRadius: "8px",
+                            padding: "10px 14px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "10px"
+                          }}
+                        >
+                          <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <strong style={{ color: rule.active ? "white" : "rgba(255,255,255,0.4)", fontSize: "0.9rem" }}>
+                                {rule.name}
+                              </strong>
+                              <span style={{ fontSize: "0.72rem", background: "rgba(255,255,255,0.1)", padding: "2px 6px", borderRadius: "4px", color: "rgba(255,255,255,0.7)" }}>
+                                {rule.targetType === "keyword" ? `Contiene: "${rule.targetValue}"` : rule.targetType === "supplier" ? `Prov: ${rule.targetValue}` : rule.targetType === "product" ? `Prod: ${rule.targetValue}` : "Todo el catálogo"}
+                              </span>
+                            </div>
+                            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "2px" }}>
+                              {rule.tiers.map((t: any, idx: number) => (
+                                <span
+                                  key={idx}
+                                  style={{
+                                    fontSize: "0.75rem",
+                                    background: "rgba(16, 185, 129, 0.15)",
+                                    border: "1px solid rgba(16, 185, 129, 0.3)",
+                                    color: "#34d399",
+                                    padding: "1px 6px",
+                                    borderRadius: "4px",
+                                    fontWeight: "bold"
+                                  }}
+                                >
+                                  {t.minQty}+ pz ➔ -{t.discountPct}%
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleSmartRule(rule.id)}
+                              style={{
+                                background: rule.active ? "rgba(16, 185, 129, 0.2)" : "rgba(255,255,255,0.1)",
+                                border: "1px solid " + (rule.active ? "#10b981" : "rgba(255,255,255,0.2)"),
+                                color: rule.active ? "#34d399" : "rgba(255,255,255,0.5)",
+                                borderRadius: "6px",
+                                padding: "4px 8px",
+                                fontSize: "0.75rem",
+                                cursor: "pointer",
+                                fontWeight: "bold"
+                              }}
+                            >
+                              {rule.active ? "✓ Activa" : "Pausada"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSmartRule(rule.id)}
+                              style={{
+                                background: "rgba(239, 68, 68, 0.15)",
+                                border: "1px solid rgba(239, 68, 68, 0.3)",
+                                color: "#ef4444",
+                                borderRadius: "6px",
+                                padding: "4px 8px",
+                                fontSize: "0.75rem",
+                                cursor: "pointer"
+                              }}
+                              title="Eliminar regla"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ marginBottom: "15px" }}>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
+                    Aplicar a:
+                  </label>
+                  <select
+                    value={bulkTargetMode}
+                    onChange={(e: any) => setBulkTargetMode(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      border: "1px solid var(--glass-border)",
+                      background: "rgba(0,0,0,0.5)",
+                      color: "white",
+                      outline: "none",
+                      fontSize: "1rem"
+                    }}
+                  >
+                    <option value="visible" style={{ background: "#1f2937", color: "white" }}>
+                      Productos visibles actualmente en la lista ({items.length})
+                    </option>
+                    <option value="supplier" style={{ background: "#1f2937", color: "white" }}>
+                      Todos los productos de un Proveedor
+                    </option>
+                    <option value="location" style={{ background: "#1f2937", color: "white" }}>
+                      Todos los productos de una Ubicación
+                    </option>
+                  </select>
+                </div>
+
+                {bulkTargetMode === "supplier" && (
+                  <div style={{ marginBottom: "15px" }}>
+                    <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
+                      Seleccionar Proveedor
+                    </label>
+                    <select
+                      value={bulkSelectedSupplier}
+                      onChange={(e) => setBulkSelectedSupplier(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "10px 14px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--glass-border)",
+                        background: "rgba(0,0,0,0.5)",
+                        color: "white",
+                        outline: "none",
+                        fontSize: "1rem"
+                      }}
+                    >
+                      <option value="" style={{ background: "#1f2937", color: "white" }}>-- Selecciona un proveedor --</option>
+                      {Array.from(new Set(allItems.map(i => i.supplier).filter(Boolean))).map(sup => (
+                        <option key={sup} value={sup!} style={{ background: "#1f2937", color: "white" }}>
+                          {sup}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {bulkTargetMode === "location" && (
+                  <div style={{ marginBottom: "15px" }}>
+                    <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
+                      Seleccionar Ubicación
+                    </label>
+                    <select
+                      value={bulkSelectedLocation}
+                      onChange={(e) => setBulkSelectedLocation(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "10px 14px",
+                        borderRadius: "8px",
+                        border: "1px solid var(--glass-border)",
+                        background: "rgba(0,0,0,0.5)",
+                        color: "white",
+                        outline: "none",
+                        fontSize: "1rem"
+                      }}
+                    >
+                      <option value="" style={{ background: "#1f2937", color: "white" }}>-- Selecciona una ubicación --</option>
+                      {Array.from(new Set(allItems.map(i => i.location).filter(Boolean))).map(loc => (
+                        <option key={loc} value={loc!} style={{ background: "#1f2937", color: "white" }}>
+                          {loc}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div style={{ marginBottom: "15px" }}>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
+                    Porcentaje de Descuento (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={bulkPromoPct}
+                    placeholder="Ej. 10"
+                    onChange={(e) => setBulkPromoPct(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      border: "1px solid var(--glass-border)",
+                      background: "rgba(0,0,0,0.5)",
+                      color: "white",
+                      outline: "none",
+                      fontSize: "1rem"
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: "15px" }}>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
+                    Fecha y Hora de Inicio (Opcional)
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={bulkPromoStartAt}
+                    onChange={(e) => setBulkPromoStartAt(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      border: "1px solid var(--glass-border)",
+                      background: "rgba(0,0,0,0.5)",
+                      color: "white",
+                      outline: "none",
+                      fontSize: "1rem"
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: "25px" }}>
+                  <label style={{ display: "block", marginBottom: "6px", fontSize: "0.9rem", fontWeight: "bold" }}>
+                    Fecha y Hora de Fin (Opcional)
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={bulkPromoEndAt}
+                    onChange={(e) => setBulkPromoEndAt(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      border: "1px solid var(--glass-border)",
+                      background: "rgba(0,0,0,0.5)",
+                      color: "white",
+                      outline: "none",
+                      fontSize: "1rem"
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    className="btn-primary"
+                    onClick={handleApplyBulkPromo}
+                    style={{ flex: 1, padding: "12px", background: "var(--color-primary)", border: "none", color: "black", fontWeight: "bold" }}
+                  >
+                    ⚡ Aplicar Descuento Masivo %
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop: "15px" }}>
+              <button
+                type="button"
                 onClick={() => setShowBulkPromoModal(false)}
                 style={{
-                  flex: 1,
-                  padding: "12px",
+                  width: "100%",
+                  padding: "10px",
                   background: "transparent",
                   border: "1px solid rgba(255,255,255,0.2)",
                   color: "white",
@@ -3319,7 +3759,7 @@ export default function InventoryModule() {
                   fontWeight: "bold"
                 }}
               >
-                Cancelar
+                Cerrar
               </button>
             </div>
           </div>

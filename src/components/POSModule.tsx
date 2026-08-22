@@ -128,11 +128,77 @@ export const formatTicketFolio = (rawId: any): string => {
   return `${res.slice(0, 2)}-${res.slice(2, 4)}*${res.slice(4, 6)}`;
 };
 
-const getItemFinalPrice = (item: any, wholesaleRules: any): number => {
+// 🧠 Evaluador de Descuento Inteligente por Volumen y Escalas (ej. Pijas a partir de 20 pz -> 5%, 30 pz -> 30%)
+export const getSmartVolumeDiscount = (
+  item: any,
+  rules: any[]
+): { discountPct: number; tierQty?: number; ruleName?: string } => {
+  if (!item || !rules || !Array.isArray(rules) || rules.length === 0) {
+    return { discountPct: 0 };
+  }
+
+  const itemNameNorm = (item.name || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+  const itemCodeNorm = (item.code || "").toLowerCase().trim();
+  const itemSupplierNorm = (item.supplier || "").toLowerCase().trim();
+  const qty = Number(item.qty || 1);
+
+  let bestDiscount = 0;
+  let bestTierQty = 0;
+  let bestRuleName = "";
+
+  for (const rule of rules) {
+    if (!rule || !rule.active || !Array.isArray(rule.tiers) || rule.tiers.length === 0) continue;
+
+    let matches = false;
+    const targetValNorm = (rule.targetValue || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+
+    if (rule.targetType === "all") {
+      matches = true;
+    } else if (rule.targetType === "keyword") {
+      matches = targetValNorm !== "" && itemNameNorm.includes(targetValNorm);
+    } else if (rule.targetType === "supplier") {
+      matches = targetValNorm !== "" && itemSupplierNorm.includes(targetValNorm);
+    } else if (rule.targetType === "product") {
+      matches =
+        targetValNorm !== "" &&
+        (String(item.id || "") === rule.targetValue ||
+          itemCodeNorm === targetValNorm ||
+          itemNameNorm === targetValNorm);
+    }
+
+    if (matches) {
+      // Ordenar escalas de mayor cantidad a menor para aplicar el tramo más alto alcanzado
+      const sortedTiers = [...rule.tiers].sort((a: any, b: any) => b.minQty - a.minQty);
+      for (const tier of sortedTiers) {
+        if (qty >= tier.minQty) {
+          if (tier.discountPct > bestDiscount) {
+            bestDiscount = tier.discountPct;
+            bestTierQty = tier.minQty;
+            bestRuleName = rule.name;
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  return { discountPct: bestDiscount, tierQty: bestTierQty, ruleName: bestRuleName };
+};
+
+const getItemFinalPrice = (item: any, wholesaleRules: any, smartVolumeRules?: any[]): number => {
   const isWholesale = item.qty >= wholesaleRules.minQty;
   const wholesaleDiscountPct = isWholesale ? (wholesaleRules.discountPct || 0) : 0;
   const productDiscountPct = item.discountPct || 0;
-  const maxDiscountPct = Math.max(wholesaleDiscountPct, productDiscountPct);
+  const smartDisc = smartVolumeRules ? getSmartVolumeDiscount(item, smartVolumeRules).discountPct : 0;
+  const maxDiscountPct = Math.max(wholesaleDiscountPct, productDiscountPct, smartDisc);
   return item.price * (1 - maxDiscountPct / 100);
 };
 
@@ -286,6 +352,46 @@ export default function POSModule() {
     minQty: 10,
     discountPct: 10,
   });
+
+  const [smartVolumeRules, setSmartVolumeRules] = useState<any[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem("ERIKA_SMART_VOLUME_RULES");
+      if (saved) return JSON.parse(saved);
+      return [
+        {
+          id: "rule-pijas-default",
+          name: "Pijas por Volumen",
+          targetType: "keyword",
+          targetValue: "pija",
+          tiers: [
+            { minQty: 20, discountPct: 5 },
+            { minQty: 30, discountPct: 30 }
+          ],
+          active: true,
+          createdAt: new Date().toISOString()
+        }
+      ];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    const loadSmartRules = () => {
+      try {
+        const saved = localStorage.getItem("ERIKA_SMART_VOLUME_RULES");
+        if (saved) setSmartVolumeRules(JSON.parse(saved));
+      } catch (e) {}
+    };
+
+    window.addEventListener("erika_smart_rules_updated", loadSmartRules);
+    window.addEventListener("storage", loadSmartRules);
+    return () => {
+      window.removeEventListener("erika_smart_rules_updated", loadSmartRules);
+      window.removeEventListener("storage", loadSmartRules);
+    };
+  }, []);
 
   useEffect(() => {
     const sEarnRate = parseFloat(localStorage.getItem("ERIKA_EARN_RATE") || "100");
@@ -2321,16 +2427,16 @@ export default function POSModule() {
   const increaseFactor = activeTicket.discountPct < 0 ? (1 + Math.abs(activeTicket.discountPct) / 100) : 1;
 
   const rawTotal = activeTicket.items.reduce((sum, item) => {
-    const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
+    const p = (getItemFinalPrice(item, wholesaleRules, smartVolumeRules) * increaseFactor);
     return sum + p * item.qty;
   }, 0);
   
   const totalCost = activeTicket.items.reduce((sum, item) => sum + (item.cost * item.qty), 0);
   
-  // Ahorro por productos individual con descuento (Sugerencia 2)
+  // Ahorro por productos individual con descuento o volumen inteligente (Sugerencia 2)
   const itemDiscountsSavings = activeTicket.items.reduce((sum, item) => {
     const pNormal = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct / 100) : item.price;
-    const pDiscounted = getItemFinalPrice(item, wholesaleRules);
+    const pDiscounted = getItemFinalPrice(item, wholesaleRules, smartVolumeRules);
     return sum + (pNormal - pDiscounted) * item.qty;
   }, 0);
   
@@ -2483,10 +2589,12 @@ export default function POSModule() {
         writeText(divider);
         
         items.forEach((item: any) => {
-          const p = (getItemFinalPrice(item, wholesaleRules) * increaseFactor);
+          const smartDisc = getSmartVolumeDiscount(item, smartVolumeRules);
+          const effectiveDiscPct = Math.max(item.discountPct || 0, smartDisc.discountPct || 0);
+          const p = (getItemFinalPrice(item, wholesaleRules, smartVolumeRules) * increaseFactor);
           const itemTotal = "$" + Math.round(p * item.qty);
           const prefix = item.unit && item.unit !== "pz" ? `${item.qty} ${item.unit} ` : `${item.qty}x `;
-          const disc = (item.discountPct || 0) > 0 ? `(-${item.discountPct}%)` : '';
+          const disc = effectiveDiscPct > 0 ? `(-${effectiveDiscPct}%)` : '';
           const fullName = prefix + item.name + (disc ? " " + disc : "");
           
           const maxNameLen = maxCols - itemTotal.length - 1;
@@ -2920,16 +3028,18 @@ export default function POSModule() {
         : "";
 
       const itemsHtml = items.map((i: any) => {
-        const p = (getItemFinalPrice(i, wholesaleRules) * increaseFactor);
+        const smartDisc = getSmartVolumeDiscount(i, smartVolumeRules);
+        const effectiveDiscPct = Math.max(i.discountPct || 0, smartDisc.discountPct || 0);
+        const p = (getItemFinalPrice(i, wholesaleRules, smartVolumeRules) * increaseFactor);
         return `
         <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
-          <span>${i.unit && i.unit !== "pz" ? `${i.qty} ${i.unit}` : `${i.qty}x`} ${i.name} ${(i.discountPct || 0) > 0 ? `(-${i.discountPct}%)` : ''}${i.unit && i.unit !== "pz" ? `<div style="font-size: 0.8em; opacity: 0.7;">($${p.toFixed(2)}/${i.unit})</div>` : ''}</span>
+          <span>${i.unit && i.unit !== "pz" ? `${i.qty} ${i.unit}` : `${i.qty}x`} ${i.name} ${effectiveDiscPct > 0 ? `(-${effectiveDiscPct}%)` : ''}${i.unit && i.unit !== "pz" ? `<div style="font-size: 0.8em; opacity: 0.7;">($${p.toFixed(2)}/${i.unit})</div>` : ''}</span>
           <span>${Math.round(p * i.qty)}</span>
         </div>`;
       }).join("");
       
       const subtotalVal = items.reduce((sum: number, i: any) => {
-         const p = (getItemFinalPrice(i, wholesaleRules) * increaseFactor);
+         const p = (getItemFinalPrice(i, wholesaleRules, smartVolumeRules) * increaseFactor);
          return sum + (p * i.qty);
       }, 0);
       const discountVal = subtotalVal * (printDiscountPct / 100);
@@ -4009,52 +4119,86 @@ export default function POSModule() {
                     background: hasInsufficientStock ? "rgba(239, 68, 68, 0.05)" : isLowStock ? "rgba(245, 158, 11, 0.03)" : "transparent",
                   }}
                 >
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: "10px" }}
-                >
-                  {item.image_url && (
-                    <img
-                      src={item.image_url}
-                      alt={item.name}
-                      style={{
-                        width: "40px",
-                        height: "40px",
-                        objectFit: "cover",
-                        borderRadius: "6px",
-                      }}
-                    />
-                  )}
-                  <div className="flex-between" style={{ flex: 1 }}>
-                    <div>
-                      <strong style={{ fontSize: "1.1rem" }}>{item.name}</strong>
-                      {item.qty >= wholesaleRules.minQty && (
-                        <span style={{ marginLeft: "10px", background: "#3b82f6", color: "white", padding: "2px 6px", borderRadius: "4px", fontSize: "0.7rem", fontWeight: "bold" }}>
-                           MAYOREO -{wholesaleRules.discountPct}%
-                        </span>
-                      )}
-                      {selectedCustomerId && JSON.parse(localStorage.getItem(`ERIKA_CLIENT_HISTORY_${selectedCustomerId}`) || "{}")[item.name] && (
-                        <span style={{ display: "block", fontSize: "0.75rem", color: "#f59e0b" }}>
-                          ⭐ Historial cliente: ${JSON.parse(localStorage.getItem(`ERIKA_CLIENT_HISTORY_${selectedCustomerId}`) || "{}")[item.name]}
-                        </span>
-                      )}
-                    </div>
-                    <div>
-                      <strong
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: "10px" }}
+                  >
+                    {item.image_url && (
+                      <img
+                        src={item.image_url}
+                        alt={item.name}
                         style={{
-                          color: "var(--color-secondary)",
-                          fontSize: "1.1rem",
+                          width: "40px",
+                          height: "40px",
+                          objectFit: "cover",
+                          borderRadius: "6px",
                         }}
-                      >
-                        ${((getItemFinalPrice(item, wholesaleRules) * increaseFactor) * item.qty).toFixed(activeTicket.discountPct < 0 ? 0 : 2)}
-                      </strong>
-                      {(item.discountPct || 0) > 0 && (
-                        <span style={{ fontSize: "0.75rem", color: "#ef4444", display: "block", textAlign: "right", marginTop: "2px" }}>
-                          Desc. -{item.discountPct}%
-                        </span>
-                      )}
+                      />
+                    )}
+                    <div className="flex-between" style={{ flex: 1 }}>
+                      <div>
+                        <strong style={{ fontSize: "1.1rem" }}>{item.name}</strong>
+                        {(() => {
+                          const smartDisc = getSmartVolumeDiscount(item, smartVolumeRules);
+                          if (smartDisc.discountPct > 0) {
+                            return (
+                              <span
+                                style={{
+                                  marginLeft: "8px",
+                                  background: "linear-gradient(135deg, #10b981, #059669)",
+                                  color: "white",
+                                  padding: "2px 8px",
+                                  borderRadius: "6px",
+                                  fontSize: "0.72rem",
+                                  fontWeight: "bold",
+                                  boxShadow: "0 2px 6px rgba(16,185,129,0.3)",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "3px"
+                                }}
+                                title={`Descuento inteligente aplicado: ${smartDisc.ruleName || 'Volumen'} (${smartDisc.tierQty}+ pz)`}
+                              >
+                                ⚡ VOLUMEN ({smartDisc.tierQty}+ {item.unit || 'pz'}): -{smartDisc.discountPct}%
+                              </span>
+                            );
+                          } else if (item.qty >= wholesaleRules.minQty) {
+                            return (
+                              <span style={{ marginLeft: "10px", background: "#3b82f6", color: "white", padding: "2px 6px", borderRadius: "4px", fontSize: "0.7rem", fontWeight: "bold" }}>
+                                 MAYOREO -{wholesaleRules.discountPct}%
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
+                        {selectedCustomerId && JSON.parse(localStorage.getItem(`ERIKA_CLIENT_HISTORY_${selectedCustomerId}`) || "{}")[item.name] && (
+                          <span style={{ display: "block", fontSize: "0.75rem", color: "#f59e0b" }}>
+                            ⭐ Historial cliente: ${JSON.parse(localStorage.getItem(`ERIKA_CLIENT_HISTORY_${selectedCustomerId}`) || "{}")[item.name]}
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <strong
+                          style={{
+                            color: "var(--color-secondary)",
+                            fontSize: "1.1rem",
+                          }}
+                        >
+                          ${((getItemFinalPrice(item, wholesaleRules, smartVolumeRules) * increaseFactor) * item.qty).toFixed(activeTicket.discountPct < 0 ? 0 : 2)}
+                        </strong>
+                        {(() => {
+                          const smartDisc = getSmartVolumeDiscount(item, smartVolumeRules);
+                          const effectiveDisc = Math.max(item.discountPct || 0, smartDisc.discountPct || 0);
+                          if (effectiveDisc > 0) {
+                            return (
+                              <span style={{ fontSize: "0.75rem", color: "#10b981", display: "block", textAlign: "right", marginTop: "2px", fontWeight: "bold" }}>
+                                Desc. -{effectiveDisc}%
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
                     </div>
                   </div>
-                </div>
                 <div className="flex-between" style={{ alignItems: "center" }}>
                   <div
                     style={{
