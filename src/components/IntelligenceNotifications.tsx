@@ -123,6 +123,90 @@ export default function IntelligenceNotifications() {
         targetPath: "/"
       });
 
+      // 6. Descuentos y Aumentos aplicados desde el último corte de caja
+      try {
+        const { data: currentOpenSession } = await supabase
+          .from("cash_sessions")
+          .select("id, opened_at")
+          .eq("status", "open")
+          .order("opened_at", { ascending: false })
+          .limit(1);
+
+        let cutoffTime: string;
+        if (currentOpenSession && currentOpenSession.length > 0 && currentOpenSession[0].opened_at) {
+          cutoffTime = currentOpenSession[0].opened_at;
+        } else {
+          const { data: lastClosedSession } = await supabase
+            .from("cash_sessions")
+            .select("id, closed_at")
+            .eq("status", "closed")
+            .order("closed_at", { ascending: false })
+            .limit(1);
+
+          if (lastClosedSession && lastClosedSession.length > 0 && lastClosedSession[0].closed_at) {
+            cutoffTime = lastClosedSession[0].closed_at;
+          } else {
+            const startOfDay = new Date();
+            startOfDay.setHours(0, 0, 0, 0);
+            cutoffTime = startOfDay.toISOString();
+          }
+        }
+
+        const { data: ticketsSinceCut } = await supabase
+          .from("quotes")
+          .select("id, discount_pct, items, total, created_at")
+          .in("status", ["ticket", "sale", "completed"])
+          .gte("created_at", cutoffTime);
+
+        let discountsCount = 0;
+        let increasesCount = 0;
+
+        if (ticketsSinceCut && ticketsSinceCut.length > 0) {
+          ticketsSinceCut.forEach((t: any) => {
+            const discPct = Number(t.discount_pct || 0);
+            let itemsArr: any[] = [];
+            if (typeof t.items === "string") {
+              try { itemsArr = JSON.parse(t.items); } catch { itemsArr = []; }
+            } else if (Array.isArray(t.items)) {
+              itemsArr = t.items;
+            }
+
+            if (discPct > 0) {
+              discountsCount++;
+            } else if (discPct < 0) {
+              increasesCount++;
+            } else {
+              const hasItemDiscount = itemsArr.some((i: any) => (i.discountPct && Number(i.discountPct) > 0) || (Number(i.price) < 0));
+              if (hasItemDiscount) {
+                discountsCount++;
+              }
+            }
+          });
+        }
+
+        if (discountsCount > 0 || increasesCount > 0) {
+          const parts: string[] = [];
+          if (discountsCount > 0) parts.push(`${discountsCount} descuento(s)`);
+          if (increasesCount > 0) parts.push(`${increasesCount} aumento(s)`);
+
+          activeAlerts.push({
+            id: "discounts-increases-audit",
+            type: discountsCount >= 5 ? "warning" : "info",
+            message: `🏷️ Ajustes de Precios: ${parts.join(" y ")} aplicado(s) en ventas desde el último corte de caja.`,
+            targetPath: "/reportes"
+          });
+        } else {
+          activeAlerts.push({
+            id: "discounts-increases-audit-zero",
+            type: "info",
+            message: `🏷️ Ajustes de Precios: 0 descuentos o aumentos aplicados desde el último corte de caja.`,
+            targetPath: "/reportes"
+          });
+        }
+      } catch (discErr) {
+        console.error("Error al calcular descuentos/aumentos para alertas:", discErr);
+      }
+
       setAlerts(activeAlerts);
     } catch (e) {
       console.error("Error al cargar alertas de inteligencia:", e);
@@ -145,6 +229,12 @@ export default function IntelligenceNotifications() {
          fetchAlerts();
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "cash_sessions" }, () => {
+         fetchAlerts();
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "quotes" }, () => {
+         fetchAlerts();
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "quotes" }, () => {
          fetchAlerts();
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "business_losses" }, () => {
