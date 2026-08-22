@@ -68,12 +68,169 @@ export default function ReportsModule() {
   const [searchAuditProduct, setSearchAuditProduct] = useState("");
   const [searchAuditUser, setSearchAuditUser] = useState("");
 
+  interface PriceAdjustmentItem {
+    id: string;
+    ticketId: string;
+    createdAt: string;
+    customerName: string;
+    type: "discount" | "increase";
+    pct: number;
+    amount: number;
+    finalTotal: number;
+    itemsCount: number;
+    itemsSummary: string;
+    isHighDiscount: boolean;
+  }
+
+  const [priceAdjustments, setPriceAdjustments] = useState<PriceAdjustmentItem[]>([]);
+  const [filterAdjustmentTime, setFilterAdjustmentTime] = useState<"turno" | "hoy" | "semana" | "mes" | "todos">("turno");
+  const [searchAdjustment, setSearchAdjustment] = useState("");
+  const [filterAdjustmentType, setFilterAdjustmentType] = useState<"todos" | "discount" | "increase" | "high">("todos");
+
   const [quoteStats, setQuoteStats] = useState({ sentThisWeek: 0, needingFollowUp: 0 });
   // Solo se muestra el panel si la consulta funcionó (la columna
   // whatsapp_sent_at puede no existir todavía si no se corrió la migración).
   const [quoteStatsAvailable, setQuoteStatsAvailable] = useState(false);
   const [quoteStatsMigrationPending, setQuoteStatsMigrationPending] = useState(false);
   const [copiedQuoteMigrationSql, setCopiedQuoteMigrationSql] = useState(false);
+
+  const fetchPriceAdjustments = async (timeRange = filterAdjustmentTime) => {
+    try {
+      const today = new Date();
+      let filterDate: string | null = null;
+      if (timeRange === "turno") {
+        const { data: openSess } = await supabase
+          .from("cash_sessions")
+          .select("opened_at")
+          .eq("status", "open")
+          .order("opened_at", { ascending: false })
+          .limit(1);
+        if (openSess && openSess.length > 0 && openSess[0].opened_at) {
+          filterDate = openSess[0].opened_at;
+        } else {
+          const { data: closedSess } = await supabase
+            .from("cash_sessions")
+            .select("closed_at")
+            .eq("status", "closed")
+            .order("closed_at", { ascending: false })
+            .limit(1);
+          if (closedSess && closedSess.length > 0 && closedSess[0].closed_at) {
+            filterDate = closedSess[0].closed_at;
+          } else {
+            const d = new Date();
+            d.setHours(0, 0, 0, 0);
+            filterDate = d.toISOString();
+          }
+        }
+      } else if (timeRange === "hoy") {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        filterDate = d.toISOString();
+      } else if (timeRange === "semana") {
+        filterDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      } else if (timeRange === "mes") {
+        filterDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
+      }
+
+      let query = supabase
+        .from("quotes")
+        .select("id, customer_name, discount_pct, items, total, status, created_at")
+        .in("status", ["ticket", "sale", "completed"])
+        .order("created_at", { ascending: false });
+
+      if (filterDate) {
+        query = query.gte("created_at", filterDate);
+      }
+
+      const { data: quotesData } = await query;
+      const adjustments: PriceAdjustmentItem[] = [];
+
+      if (quotesData) {
+        quotesData.forEach((q: any) => {
+          const discPct = Number(q.discount_pct || 0);
+          const totalVal = Number(q.total || 0);
+          let itemsArr: any[] = [];
+          if (typeof q.items === "string") {
+            try { itemsArr = JSON.parse(q.items); } catch { itemsArr = []; }
+          } else if (Array.isArray(q.items)) {
+            itemsArr = q.items;
+          }
+
+          const itemsSummary = itemsArr.map((it: any) => `${it.qty || 1}x ${it.name || "Art."}`).join(", ");
+
+          if (discPct > 0) {
+            const origTotal = discPct < 100 ? (totalVal / (1 - discPct / 100)) : totalVal;
+            const amount = origTotal - totalVal;
+            adjustments.push({
+              id: q.id,
+              ticketId: String(q.id).slice(0, 8),
+              createdAt: q.created_at,
+              customerName: q.customer_name || "Venta Mostrador",
+              type: "discount",
+              pct: discPct,
+              amount,
+              finalTotal: totalVal,
+              itemsCount: itemsArr.length,
+              itemsSummary,
+              isHighDiscount: discPct >= 15,
+            });
+          } else if (discPct < 0) {
+            const factor = 1 + Math.abs(discPct) / 100;
+            const origTotal = totalVal / factor;
+            const amount = totalVal - origTotal;
+            adjustments.push({
+              id: q.id,
+              ticketId: String(q.id).slice(0, 8),
+              createdAt: q.created_at,
+              customerName: q.customer_name || "Venta Mostrador",
+              type: "increase",
+              pct: Math.abs(discPct),
+              amount,
+              finalTotal: totalVal,
+              itemsCount: itemsArr.length,
+              itemsSummary,
+              isHighDiscount: false,
+            });
+          } else {
+            let itemDiscountSum = 0;
+            let highestItemPct = 0;
+            itemsArr.forEach((it: any) => {
+              const itemDisc = Number(it.discountPct || 0);
+              const itemPrice = Number(it.price || 0);
+              const itemQty = Number(it.qty || 1);
+              if (itemDisc > 0) {
+                if (itemDisc > highestItemPct) highestItemPct = itemDisc;
+                const regularPrice = itemDisc < 100 ? (itemPrice / (1 - itemDisc / 100)) : itemPrice;
+                itemDiscountSum += (regularPrice - itemPrice) * itemQty;
+              } else if (itemPrice < 0) {
+                itemDiscountSum += Math.abs(itemPrice) * itemQty;
+              }
+            });
+
+            if (itemDiscountSum > 0) {
+              adjustments.push({
+                id: q.id,
+                ticketId: String(q.id).slice(0, 8),
+                createdAt: q.created_at,
+                customerName: q.customer_name || "Venta Mostrador",
+                type: "discount",
+                pct: highestItemPct || Math.round((itemDiscountSum / (totalVal + itemDiscountSum)) * 100),
+                amount: itemDiscountSum,
+                finalTotal: totalVal,
+                itemsCount: itemsArr.length,
+                itemsSummary,
+                isHighDiscount: highestItemPct >= 15,
+              });
+            }
+          }
+        });
+      }
+
+      setPriceAdjustments(adjustments);
+    } catch (e) {
+      console.error("Error al cargar auditoría de ajustes de precios:", e);
+    }
+  };
 
   const fetchData = async () => {
     const today = new Date();
@@ -871,6 +1028,249 @@ export default function ReportsModule() {
               </tbody>
             </table>
           </div>
+      </div>
+
+      {/* 🏷️ Auditoría de Descuentos y Aumentos de Precios */}
+      <div className="glass-panel" style={{ marginTop: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px", flexWrap: "wrap", gap: "10px" }}>
+          <div>
+            <h2 style={{ color: "var(--color-primary)", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+              🏷️ Auditoría de Descuentos y Aumentos de Precios
+            </h2>
+            <p style={{ margin: "4px 0 0 0", fontSize: "0.85rem", opacity: 0.7 }}>
+              Supervisión en tiempo real de todos los precios modificados, descuentos y aumentos aplicados en caja.
+            </p>
+          </div>
+
+          <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+            <select
+              value={filterAdjustmentTime}
+              onChange={(e) => {
+                const val = e.target.value as any;
+                setFilterAdjustmentTime(val);
+                fetchPriceAdjustments(val);
+              }}
+              style={{
+                padding: "8px 12px",
+                borderRadius: "8px",
+                background: "rgba(0,0,0,0.35)",
+                color: "white",
+                border: "1px solid var(--color-primary)",
+                outline: "none",
+                cursor: "pointer",
+                fontSize: "0.85rem"
+              }}
+            >
+              <option value="turno" style={{ background: "#1f2937" }}>⏱️ Turno Actual (Desde último corte)</option>
+              <option value="hoy" style={{ background: "#1f2937" }}>📅 Hoy</option>
+              <option value="semana" style={{ background: "#1f2937" }}>🗓️ Últimos 7 días</option>
+              <option value="mes" style={{ background: "#1f2937" }}>📊 Este mes</option>
+              <option value="todos" style={{ background: "#1f2937" }}>🌐 Todo el historial</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Resumen KPI de Ajustes */}
+        {(() => {
+          const totalDiscounts = priceAdjustments.filter(a => a.type === "discount");
+          const totalIncreases = priceAdjustments.filter(a => a.type === "increase");
+          const highDiscounts = priceAdjustments.filter(a => a.isHighDiscount);
+          const sumDiscounts = totalDiscounts.reduce((sum, a) => sum + a.amount, 0);
+          const sumIncreases = totalIncreases.reduce((sum, a) => sum + a.amount, 0);
+
+          return (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", marginBottom: "20px" }}>
+              <div style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.3)", padding: "12px 16px", borderRadius: "10px" }}>
+                <span style={{ fontSize: "0.8rem", color: "#10b981", fontWeight: "bold" }}>🏷️ TOTAL DESCONTADO</span>
+                <h3 style={{ margin: "4px 0 0 0", color: "#10b981", fontSize: "1.4rem" }}>
+                  -${sumDiscounts.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                </h3>
+                <span style={{ fontSize: "0.75rem", opacity: 0.7 }}>{totalDiscounts.length} venta(s) con descuento</span>
+              </div>
+
+              <div style={{ background: "rgba(245, 158, 11, 0.08)", border: "1px solid rgba(245, 158, 11, 0.3)", padding: "12px 16px", borderRadius: "10px" }}>
+                <span style={{ fontSize: "0.8rem", color: "#f59e0b", fontWeight: "bold" }}>📈 TOTAL AUMENTADO</span>
+                <h3 style={{ margin: "4px 0 0 0", color: "#f59e0b", fontSize: "1.4rem" }}>
+                  +${sumIncreases.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                </h3>
+                <span style={{ fontSize: "0.75rem", opacity: 0.7 }}>{totalIncreases.length} venta(s) con aumento</span>
+              </div>
+
+              <div style={{ background: highDiscounts.length > 0 ? "rgba(239, 68, 68, 0.12)" : "rgba(255, 255, 255, 0.03)", border: highDiscounts.length > 0 ? "1px solid #ef4444" : "1px solid rgba(255,255,255,0.08)", padding: "12px 16px", borderRadius: "10px" }}>
+                <span style={{ fontSize: "0.8rem", color: highDiscounts.length > 0 ? "#ef4444" : "rgba(255,255,255,0.7)", fontWeight: "bold" }}>
+                  🔥 DESCUENTOS ALTOS (≥ 15%)
+                </span>
+                <h3 style={{ margin: "4px 0 0 0", color: highDiscounts.length > 0 ? "#ef4444" : "white", fontSize: "1.4rem" }}>
+                  {highDiscounts.length}
+                </h3>
+                <span style={{ fontSize: "0.75rem", opacity: 0.7 }}>{highDiscounts.length > 0 ? "⚠️ Requieren supervisión" : "Sin anomalías"}</span>
+              </div>
+
+              <div style={{ background: "rgba(59, 130, 246, 0.08)", border: "1px solid rgba(59, 130, 246, 0.3)", padding: "12px 16px", borderRadius: "10px" }}>
+                <span style={{ fontSize: "0.8rem", color: "#3b82f6", fontWeight: "bold" }}>📦 TOTAL OPERACIONES</span>
+                <h3 style={{ margin: "4px 0 0 0", color: "#3b82f6", fontSize: "1.4rem" }}>
+                  {priceAdjustments.length}
+                </h3>
+                <span style={{ fontSize: "0.75rem", opacity: 0.7 }}>Ventas con precio modificado</span>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Barra de Búsqueda y Filtro de Tipo */}
+        <div style={{ display: "flex", gap: "10px", marginBottom: "15px", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: "220px" }}>
+            <input
+              type="text"
+              placeholder="🔍 Buscar por Folio, Cliente o Artículo..."
+              value={searchAdjustment}
+              onChange={(e) => setSearchAdjustment(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "8px 12px",
+                borderRadius: "8px",
+                background: "rgba(0,0,0,0.3)",
+                color: "white",
+                border: "1px solid var(--glass-border)",
+                fontSize: "0.85rem",
+                outline: "none"
+              }}
+            />
+          </div>
+
+          <div style={{ display: "flex", gap: "6px" }}>
+            {[
+              { id: "todos", label: "Todos" },
+              { id: "discount", label: "🏷️ Descuentos" },
+              { id: "increase", label: "📈 Aumentos" },
+              { id: "high", label: "🔥 Críticos (≥15%)" }
+            ].map(f => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFilterAdjustmentType(f.id as any)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "6px",
+                  fontSize: "0.8rem",
+                  fontWeight: "bold",
+                  background: filterAdjustmentType === f.id ? "var(--color-primary)" : "rgba(255,255,255,0.05)",
+                  color: filterAdjustmentType === f.id ? "black" : "white",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  cursor: "pointer"
+                }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Tabla de Registros */}
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.85rem" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--glass-border)", background: "rgba(255,255,255,0.03)" }}>
+                <th style={{ padding: "10px" }}>Folio Ticket</th>
+                <th style={{ padding: "10px" }}>Fecha / Hora</th>
+                <th style={{ padding: "10px" }}>Cliente</th>
+                <th style={{ padding: "10px" }}>Tipo de Ajuste</th>
+                <th style={{ padding: "10px", textAlign: "right" }}>% Ajuste</th>
+                <th style={{ padding: "10px", textAlign: "right" }}>Monto Afectado</th>
+                <th style={{ padding: "10px", textAlign: "right" }}>Total Venta</th>
+                <th style={{ padding: "10px" }}>Artículos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(() => {
+                const filtered = priceAdjustments.filter(item => {
+                  if (filterAdjustmentType === "discount" && item.type !== "discount") return false;
+                  if (filterAdjustmentType === "increase" && item.type !== "increase") return false;
+                  if (filterAdjustmentType === "high" && !item.isHighDiscount) return false;
+
+                  if (searchAdjustment.trim()) {
+                    const q = searchAdjustment.toLowerCase();
+                    const matchId = item.id.toLowerCase().includes(q);
+                    const matchCust = item.customerName.toLowerCase().includes(q);
+                    const matchItems = item.itemsSummary.toLowerCase().includes(q);
+                    return matchId || matchCust || matchItems;
+                  }
+                  return true;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={8} style={{ padding: "30px", textAlign: "center", color: "rgba(255,255,255,0.5)" }}>
+                        No se registraron ventas con descuento o aumento en el período seleccionado ({filterAdjustmentTime}).
+                      </td>
+                    </tr>
+                  );
+                }
+
+                return filtered.map(item => (
+                  <tr
+                    key={item.id}
+                    style={{
+                      borderBottom: "1px solid rgba(255,255,255,0.05)",
+                      background: item.isHighDiscount ? "rgba(239, 68, 68, 0.05)" : "transparent"
+                    }}
+                  >
+                    <td style={{ padding: "10px", fontWeight: "bold" }}>
+                      <span style={{ color: "white" }} title={`Ticket #${item.id}`}>#{item.ticketId}</span>
+                    </td>
+                    <td style={{ padding: "10px", opacity: 0.8, fontSize: "0.8rem" }}>
+                      {new Date(item.createdAt).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}
+                    </td>
+                    <td style={{ padding: "10px" }}>{item.customerName}</td>
+                    <td style={{ padding: "10px" }}>
+                      {item.type === "discount" ? (
+                        <span style={{
+                          background: item.isHighDiscount ? "rgba(239, 68, 68, 0.2)" : "rgba(16, 185, 129, 0.15)",
+                          color: item.isHighDiscount ? "#ef4444" : "#10b981",
+                          border: item.isHighDiscount ? "1px solid #ef4444" : "1px solid #10b981",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.75rem",
+                          fontWeight: "bold",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px"
+                        }}>
+                          {item.isHighDiscount ? "🔥 Desc. Alto" : "🏷️ Descuento"}
+                        </span>
+                      ) : (
+                        <span style={{
+                          background: "rgba(245, 158, 11, 0.15)",
+                          color: "#f59e0b",
+                          border: "1px solid #f59e0b",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.75rem",
+                          fontWeight: "bold"
+                        }}>
+                          📈 Aumento
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: "10px", textAlign: "right", fontWeight: "bold", color: item.type === "discount" ? "#10b981" : "#f59e0b" }}>
+                      {item.type === "discount" ? `-${item.pct.toFixed(1)}%` : `+${item.pct.toFixed(1)}%`}
+                    </td>
+                    <td style={{ padding: "10px", textAlign: "right", fontWeight: "bold", color: item.type === "discount" ? "#10b981" : "#f59e0b" }}>
+                      {item.type === "discount" ? `-$${item.amount.toFixed(2)}` : `+$${item.amount.toFixed(2)}`}
+                    </td>
+                    <td style={{ padding: "10px", textAlign: "right", fontWeight: "bold" }}>
+                      ${item.finalTotal.toFixed(2)}
+                    </td>
+                    <td style={{ padding: "10px", fontSize: "0.75rem", opacity: 0.8, maxWidth: "220px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={item.itemsSummary}>
+                      {item.itemsSummary}
+                    </td>
+                  </tr>
+                ));
+              })()}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="glass-panel" style={{ marginTop: "20px" }}>

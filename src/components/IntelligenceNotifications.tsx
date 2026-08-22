@@ -160,10 +160,14 @@ export default function IntelligenceNotifications() {
 
         let discountsCount = 0;
         let increasesCount = 0;
+        let totalDiscountMoney = 0;
+        let totalIncreaseMoney = 0;
+        let highDiscountsCount = 0;
 
         if (ticketsSinceCut && ticketsSinceCut.length > 0) {
           ticketsSinceCut.forEach((t: any) => {
             const discPct = Number(t.discount_pct || 0);
+            const totalVal = Number(t.total || 0);
             let itemsArr: any[] = [];
             if (typeof t.items === "string") {
               try { itemsArr = JSON.parse(t.items); } catch { itemsArr = []; }
@@ -173,26 +177,54 @@ export default function IntelligenceNotifications() {
 
             if (discPct > 0) {
               discountsCount++;
+              if (discPct >= 15) highDiscountsCount++;
+              const origTotal = discPct < 100 ? (totalVal / (1 - discPct / 100)) : totalVal;
+              totalDiscountMoney += (origTotal - totalVal);
             } else if (discPct < 0) {
               increasesCount++;
+              const factor = 1 + Math.abs(discPct) / 100;
+              const origTotal = totalVal / factor;
+              totalIncreaseMoney += (totalVal - origTotal);
             } else {
-              const hasItemDiscount = itemsArr.some((i: any) => (i.discountPct && Number(i.discountPct) > 0) || (Number(i.price) < 0));
-              if (hasItemDiscount) {
+              let itemDiscountSum = 0;
+              itemsArr.forEach((i: any) => {
+                const itemDisc = Number(i.discountPct || 0);
+                const itemPrice = Number(i.price || 0);
+                const itemQty = Number(i.qty || 1);
+                if (itemDisc > 0) {
+                  if (itemDisc >= 15) highDiscountsCount++;
+                  const regularPrice = itemDisc < 100 ? (itemPrice / (1 - itemDisc / 100)) : itemPrice;
+                  itemDiscountSum += (regularPrice - itemPrice) * itemQty;
+                } else if (itemPrice < 0) {
+                  itemDiscountSum += Math.abs(itemPrice) * itemQty;
+                }
+              });
+              if (itemDiscountSum > 0) {
                 discountsCount++;
+                totalDiscountMoney += itemDiscountSum;
               }
             }
           });
         }
 
+        if (highDiscountsCount > 0) {
+          activeAlerts.push({
+            id: "high-discounts-alert",
+            type: "critical",
+            message: `🔥 Alerta Descuentos Altos: ${highDiscountsCount} venta(s) con descuento ≥ 15% (Ahorro concedido: -$${Math.round(totalDiscountMoney).toLocaleString("es-MX")}).`,
+            targetPath: "/reportes"
+          });
+        }
+
         if (discountsCount > 0 || increasesCount > 0) {
           const parts: string[] = [];
-          if (discountsCount > 0) parts.push(`${discountsCount} descuento(s)`);
-          if (increasesCount > 0) parts.push(`${increasesCount} aumento(s)`);
+          if (discountsCount > 0) parts.push(`${discountsCount} desc. (-$${Math.round(totalDiscountMoney).toLocaleString("es-MX")})`);
+          if (increasesCount > 0) parts.push(`${increasesCount} aum. (+$${Math.round(totalIncreaseMoney).toLocaleString("es-MX")})`);
 
           activeAlerts.push({
             id: "discounts-increases-audit",
             type: discountsCount >= 5 ? "warning" : "info",
-            message: `🏷️ Ajustes de Precios: ${parts.join(" y ")} aplicado(s) en ventas desde el último corte de caja.`,
+            message: `🏷️ Ajustes de Precios: ${parts.join(" y ")} en ventas desde el último corte de caja.`,
             targetPath: "/reportes"
           });
         } else {
