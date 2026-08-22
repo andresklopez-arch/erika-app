@@ -101,6 +101,7 @@ export default function QuotesModule() {
       return alert("❌ PIN incorrecto. Operación cancelada.");
     }
 
+    localStorage.setItem("ERIKA_PRINTER_CONNECTED", "true");
     localStorage.setItem("ERIKA_RESTORE_QUOTE", JSON.stringify(quote.items));
     localStorage.setItem("ERIKA_RESTORE_QUOTE_ID", quote.id);
     if (quote.customer_id) {
@@ -122,9 +123,7 @@ export default function QuotesModule() {
     }
     localStorage.setItem("ERIKA_AUTO_OPEN_CHECKOUT", "true");
 
-    alert(
-      `✅ Cotización #${quote.quote_number} de ${quote.customer_name} enviada a caja para cobro inmediato.`,
-    );
+    toast.success(`Cotización #${quote.quote_number} enviada a caja para cobro.`);
     window.location.href = "/caja";
   };
 
@@ -561,7 +560,7 @@ export default function QuotesModule() {
                                   }}
                                   onClick={() => handleSellQuote(q)}
                                 >
-                                  💰 Cobrar / Vender
+                                  💰 Vender y Cobrar Ticket
                                 </button>
                               </>
                             )}

@@ -357,74 +357,170 @@ export default function CustomersModule() {
     }, 500);
   };
 
-  const printCustomerAccountStatement = (customer: any) => {
+  const printThermalTicketDirect = (html: string) => {
+    try {
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0px";
+      iframe.style.height = "0px";
+      iframe.style.border = "none";
+      document.body.appendChild(iframe);
+
+      const iframeDoc = iframe.contentWindow?.document;
+      if (iframeDoc) {
+        iframeDoc.open();
+        iframeDoc.write(html);
+        iframeDoc.close();
+        setTimeout(() => {
+          try {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          } catch (e) {
+            console.error("Iframe print error:", e);
+          } finally {
+            setTimeout(() => {
+              if (document.body.contains(iframe)) {
+                document.body.removeChild(iframe);
+              }
+            }, 2000);
+          }
+        }, 300);
+        return;
+      }
+    } catch (e) {
+      console.warn("Fallo iframe print, usando fallback:", e);
+    }
+
+    const ticketWindow = window.open("", "_blank", "width=320,height=600");
+    if (ticketWindow) {
+      ticketWindow.document.write(html);
+      ticketWindow.document.close();
+      ticketWindow.focus();
+      setTimeout(() => {
+        ticketWindow.print();
+        ticketWindow.close();
+      }, 500);
+    } else {
+      alert("⚠️ Por favor permite las ventanas emergentes en tu navegador para imprimir el ticket.");
+    }
+  };
+
+  const printCustomerAccountStatement = async (customer: any) => {
     if (!customer) return;
-    const ticketWindow = window.open("", "_blank", "width=300,height=600");
-    if (!ticketWindow) return alert("Por favor permite las ventanas emergentes en tu navegador para imprimir el ticket.");
+
+    let currentTxs = transactions;
+    if (!currentTxs || currentTxs.length === 0) {
+      try {
+        const { data: txData } = await supabase
+          .from("credit_transactions")
+          .select("*")
+          .eq("customer_id", customer.id)
+          .order("created_at", { ascending: false })
+          .limit(10);
+        if (txData) currentTxs = txData;
+      } catch (e) {}
+    }
+
+    let totalPurchases = 0;
+    try {
+      const { data: qData } = await supabase
+        .from("quotes")
+        .select("total, status")
+        .eq("customer_id", customer.id);
+      if (qData) {
+        totalPurchases = qData
+          .filter((q: any) => q.status === "ticket" || q.status === "sale" || q.status === "completed" || q.status === "converted")
+          .reduce((sum: number, q: any) => sum + Number(q.total || 0), 0);
+      }
+    } catch (e) {}
 
     const loyaltyRedeemRate = parseFloat(localStorage.getItem("ERIKA_REDEEM_RATE") || "10");
     const pointsMoney = ((customer.points || 0) / loyaltyRedeemRate).toFixed(2);
     const availableCredit = Math.max(0, (customer.credit_limit || 0) - (customer.balance || 0));
 
-    const movementsHtml = (transactions || [])
-      .slice(0, 5)
+    const movementsHtml = (currentTxs || [])
+      .slice(0, 8)
       .map(
         (tx: any) => `
-        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px;">
-          <div>${new Date(tx.created_at).toLocaleDateString()} ${tx.type === "cargo" ? "CARGO" : "ABONO"}</div>
-          <div style="font-weight: bold;">$${Number(tx.amount || 0).toFixed(2)}</div>
+        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
+          <div>${new Date(tx.created_at).toLocaleDateString()} ${tx.type === "charge" ? "CARGO" : "ABONO"}</div>
+          <div style="font-weight: bold; color: ${tx.type === 'charge' ? '#990000' : '#007700'};">
+            ${tx.type === 'charge' ? '+' : '-'}$${Number(tx.amount || 0).toFixed(2)}
+          </div>
         </div>
-        <div style="font-size: 10px; color: #555; margin-bottom: 4px;">${tx.description || "Movimiento"}</div>
+        <div style="font-size: 9.5px; color: #444; margin-bottom: 5px; border-bottom: 1px dotted #ccc; padding-bottom: 2px;">
+          ${tx.notes || tx.description || "Movimiento"}
+        </div>
       `
       )
       .join("");
 
     const ticketHtml = `
+      <!DOCTYPE html>
       <html>
         <head>
+          <meta charset="utf-8">
           <title>Estado de Cuenta - ${customer.name}</title>
           <style>
-            body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; width: 58mm; color: #000; background: #fff; }
+            @page { margin: 0; }
+            body { 
+              font-family: 'Courier New', Courier, monospace; 
+              margin: 0 auto; 
+              padding: 8px; 
+              width: 58mm; 
+              color: #000; 
+              background: #fff; 
+              box-sizing: border-box;
+            }
             .center { text-align: center; }
             .divider { border-bottom: 1px dashed #000; margin: 8px 0; }
             .bold { font-weight: bold; }
-            .row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+            .row { display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 4px; }
           </style>
         </head>
         <body>
-          <div class="center bold" style="font-size: 15px;">${businessProfile.name || "FERRETERÍA ERIKA"}</div>
-          <div class="center" style="font-size: 11px; font-weight: bold;">ESTADO DE CUENTA</div>
-          <div class="center" style="font-size: 10px;">${new Date().toLocaleString()}</div>
+          <div class="center bold" style="font-size: 14px; margin-bottom: 3px;">${businessProfile.name || "FERRETERÍA ERIKA"}</div>
+          <div class="center" style="font-size: 10.5px; font-weight: bold; letter-spacing: 1px;">*** ESTADO DE CUENTA ***</div>
+          <div class="center" style="font-size: 9.5px;">${new Date().toLocaleString()}</div>
           <div class="divider"></div>
           
-          <div style="font-size: 11px; margin-bottom: 2px;"><strong>CLIENTE:</strong> ${customer.name}</div>
-          ${customer.rfc ? `<div style="font-size: 10px;">RFC: ${customer.rfc}</div>` : ""}
+          <div style="font-size: 11.5px; margin-bottom: 2px;"><strong>CLIENTE:</strong> ${customer.name}</div>
+          ${customer.company_name && customer.company_name !== customer.name ? `<div style="font-size: 10px;">Empresa: ${customer.company_name}</div>` : ""}
           ${customer.phone ? `<div style="font-size: 10px;">Tel: ${customer.phone}</div>` : ""}
+          ${customer.rfc ? `<div style="font-size: 10px;">RFC: ${customer.rfc}</div>` : ""}
           <div class="divider"></div>
 
+          <div class="center bold" style="font-size: 11px; margin-bottom: 4px;">💳 SALDO Y LÍNEA DE CRÉDITO</div>
           <div class="row">
             <span>Límite Crédito:</span>
             <span class="bold">$${(customer.credit_limit || 0).toFixed(2)}</span>
           </div>
-          <div class="row" style="color: #c00;">
+          <div class="row" style="color: ${customer.balance > 0 ? '#990000' : '#000'}; font-weight: bold;">
             <span>Saldo Deudor:</span>
-            <span class="bold">$${(customer.balance || 0).toFixed(2)}</span>
+            <span>$${(customer.balance || 0).toFixed(2)}</span>
           </div>
           <div class="row">
             <span>Crédito Disponible:</span>
-            <span class="bold">$${availableCredit.toFixed(2)}</span>
+            <span class="bold" style="color: #007700;">$${availableCredit.toFixed(2)}</span>
           </div>
           
           <div class="divider"></div>
-          <div class="center bold" style="font-size: 11px; margin-bottom: 3px;">PUNTOS DE LEALTAD</div>
+          <div class="center bold" style="font-size: 11px; margin-bottom: 4px;">🎁 PUNTOS Y BENEFICIOS</div>
           <div class="row">
             <span>Puntos Acumulados:</span>
             <span class="bold">${customer.points || 0} pts</span>
           </div>
-          <div class="row" style="color: #080;">
-            <span>Dinero en Puntos:</span>
-            <span class="bold">$${pointsMoney}</span>
+          <div class="row" style="color: #007700; font-weight: bold;">
+            <span>Dinero Ganado/Ahorro:</span>
+            <span>$${pointsMoney}</span>
           </div>
+          ${totalPurchases > 0 ? `
+          <div class="row" style="font-size: 10.5px; opacity: 0.9;">
+            <span>Compras Históricas:</span>
+            <span>$${totalPurchases.toFixed(2)}</span>
+          </div>` : ""}
 
           ${movementsHtml ? `
             <div class="divider"></div>
@@ -433,25 +529,20 @@ export default function CustomersModule() {
           ` : ""}
 
           <div class="divider"></div>
-          <div class="center bold" style="font-size: 11px; margin-top: 8px;">
+          <div class="center bold" style="font-size: 10.5px; margin-top: 6px;">
             ¡Gracias por su preferencia!
           </div>
         </body>
       </html>
     `;
 
-    ticketWindow.document.write(ticketHtml);
-    ticketWindow.document.close();
-    ticketWindow.focus();
-    setTimeout(() => {
-      ticketWindow.print();
-      ticketWindow.close();
-    }, 500);
+    printThermalTicketDirect(ticketHtml);
+    toast.success("🖨️ Mandando a imprimir Estado de Cuenta en ticket...");
   };
 
   const convertQuoteToSale = async (quote: any) => {
     const pass = window.prompt(
-      "¿Seguro que deseas enviar esta cotización a la Caja para cobrar? (Ingresa tu PIN)",
+      `¿Deseas enviar la Cotización #${quote.quote_number || ''} a Caja para cobrar e imprimir ticket? (Ingresa tu PIN):`,
     );
     if (!pass) return;
 
@@ -465,6 +556,7 @@ export default function CustomersModule() {
       return alert("❌ PIN incorrecto. Operación cancelada.");
     }
 
+    localStorage.setItem("ERIKA_PRINTER_CONNECTED", "true");
     localStorage.setItem("ERIKA_RESTORE_QUOTE", JSON.stringify(quote.items));
     localStorage.setItem("ERIKA_RESTORE_QUOTE_ID", quote.id);
     if (quote.customer_id || selectedCustomerId) {
@@ -472,9 +564,7 @@ export default function CustomersModule() {
     }
     localStorage.setItem("ERIKA_AUTO_OPEN_CHECKOUT", "true");
 
-    alert(
-      `✅ Cotización de ${quote.customer_name} enviada a caja para cobro inmediato.`,
-    );
+    toast.success(`✅ Cotización de ${quote.customer_name} enviada a caja para cobro.`);
     window.location.href = "/caja";
   };
 
@@ -1230,10 +1320,10 @@ export default function CustomersModule() {
                                       </button>
                                       <button
                                         className="btn-primary"
-                                        style={{ padding: "3px 6px", fontSize: "0.75rem" }}
+                                        style={{ padding: "3px 8px", fontSize: "0.75rem", background: "linear-gradient(135deg, #10b981, #059669)", color: "white", border: "none", fontWeight: "bold" }}
                                         onClick={() => convertQuoteToSale(q)}
                                       >
-                                        ✅ Vender
+                                        💰 Vender / Cobrar
                                       </button>
                                     </>
                                   )}

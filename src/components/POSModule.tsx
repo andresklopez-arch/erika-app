@@ -1194,11 +1194,13 @@ export default function POSModule() {
                 const autoCheckout = localStorage.getItem("ERIKA_AUTO_OPEN_CHECKOUT");
                 if (autoCheckout === "true") {
                    localStorage.removeItem("ERIKA_AUTO_OPEN_CHECKOUT");
+                   setIsPrinterConnected(true);
+                   localStorage.setItem("ERIKA_PRINTER_CONNECTED", "true");
                    setTimeout(() => {
                       setShowCheckoutModal(true);
                    }, 300);
                 } else {
-                   alert("✅ Cotización cargada en la caja exitosamente.");
+                   toast.success("Cotización cargada en la caja.");
                 }
              }
           } catch(e) {}
