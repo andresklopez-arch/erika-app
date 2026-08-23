@@ -50,6 +50,33 @@ interface Ticket {
   quoteId?: string;
 }
 
+// Snapshot ya calculado (subtotal/iva/descuento/total) de un ticket o
+// apartado, listo para renderizar en el recibo imprimible. Se arma una vez
+// en executePrintWindow y se guarda aquí en vez de recalcularlo en el JSX.
+interface ReceiptToPrint {
+  type: "ticket" | "layaway";
+  ticketId?: number | string;
+  customerName: string;
+  items: POSItem[];
+  subtotal: number;
+  iva: number;
+  discountPct: number;
+  discountAmount: number;
+  finalTotal: number;
+  invoiceToken?: number | string;
+  paymentMethod?: string;
+  downPayment?: number;
+  balance?: number;
+  cashAmount?: number;
+  cardAmount?: number;
+  transferAmount?: number;
+  reference?: string;
+  notes?: string;
+  // Cuántas veces debe llamarse window.print() en serie (copia doble en
+  // impresora "system") — ver el useEffect que consume receiptToPrint.
+  _printCopies?: number;
+}
+
 const levenshtein = (a: string, b: string) => {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
@@ -539,7 +566,7 @@ export default function POSModule() {
   const [applyIva, setApplyIva] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [paymentReference, setPaymentReference] = useState("");
-  const [receiptToPrint, setReceiptToPrint] = useState<any>(null);
+  const [receiptToPrint, setReceiptToPrint] = useState<ReceiptToPrint | null>(null);
   const [pendingOfflineCount, setPendingOfflineCount] = useState(0);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [isCreatingLayaway, setIsCreatingLayaway] = useState(false);
@@ -3511,8 +3538,8 @@ export default function POSModule() {
   const printCustomerName = isPrintingJob 
     ? receiptToPrint.customerName 
     : (selectedCustomerId && customers.find(c => c.id === selectedCustomerId) ? customers.find(c => c.id === selectedCustomerId).name : "");
-  const printDownPayment = isPrintingJob ? receiptToPrint.downPayment : 0;
-  const printBalance = isPrintingJob ? receiptToPrint.balance : 0;
+  const printDownPayment = isPrintingJob ? (receiptToPrint?.downPayment ?? 0) : 0;
+  const printBalance = isPrintingJob ? (receiptToPrint?.balance ?? 0) : 0;
 
   const previewConfig = businessSettings?.config || {};
   const previewFields = previewConfig.printer_fields || ["name", "rfc", "phone", "address", "logo", "footer"];
