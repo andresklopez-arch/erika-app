@@ -88,21 +88,29 @@ migración antes del `CREATE TABLE`.
   políticas RLS con estas llaves se quedaron como scripts manuales
   (`npm run check-rls` usa solo la llave pública y sí corre en CI).
 
-# Escrituras directas en `quotes` pendientes de mover cuando se cierre esa tabla
+# `quotes`: código ya migrado a /api/quotes/save, falta correr el lockdown
 
-`quotes` sigue en `knownOpenPending` (ver arriba), así que estos 2 sitios
-todavía escriben directo desde el navegador con la llave pública y
-**dejarán de funcionar en cuanto se corra el lockdown de `quotes`** (paso 3
-del patrón de arriba). Cuando le toque el turno a esta tabla, mover ambos
-a una ruta de servidor (`/api/quotes/save` con lista blanca de columnas,
-siguiendo el mismo patrón que `inventoryFields.ts`) antes de correr el
-`admin_reset_table_to_select_only('quotes')`:
+Todas las escrituras directas a `quotes` desde el navegador (había 8, no 2
+— la nota vieja de esta sección estaba desactualizada) ya se movieron a
+`/api/quotes/save` (lista blanca en `src/lib/quotesFields.ts`, helper en
+`src/lib/quotesClient.ts`, mismo shape `{data, error}` que el resto):
 
-- `POSModule.tsx` — el insert de una cotización nueva (botón "Guardar
-  cotización" en el ticket activo) y el insert de status `"ticket"` al
-  cobrar una venta.
-- `QuotesModule.tsx` — `sendWhatsApp` actualiza `whatsapp_sent_at` con un
-  `.update()` directo después de abrir el chat.
+- `POSModule.tsx` — guardar cotización, insertar el ticket al cobrar,
+  editar la nota de un ticket, cancelar un ticket (status + nota),
+  marcar una cotización como vendida (`status: "converted"`).
+- `QuotesModule.tsx` — `sendWhatsApp` marca `whatsapp_sent_at`.
+- `src/app/facturacion/[id]/page.tsx` — fallback que marca el ticket como
+  `"converted"` si el RPC `claim_invoice` falla.
+
+El webhook de Facturama (`src/app/api/webhooks/facturama/route.ts`) ya
+usaba `supabaseAdmin`, no necesitó cambios.
+
+**`quotes` sigue en `knownOpenPending` a propósito**: la migración SQL
+(`supabase/migrations/20260828000000_lock_quotes_writes.sql`) existe pero
+NO se ha corrido contra producción todavía — falta confirmar en vivo que
+cobrar/cotizar/cancelar sigue funcionando de punta a punta con las rutas
+nuevas antes de correr `admin_reset_table_to_select_only('quotes')` y
+mover la tabla a `mustBeBlocked` en `scripts/check-rls-lockdown.js`.
 
 # Avisos operativos con OPERATIONAL_WARNING_EVENT
 

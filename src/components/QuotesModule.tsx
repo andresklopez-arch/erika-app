@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useBusinessProfile, useAuth } from "./AuthProvider";
 import { cleanMexicanPhone, openWhatsAppChat, formatMexicanPhoneDisplay } from "../lib/whatsapp";
 import { fetchActiveCustomers } from "../lib/customersClient";
+import { saveQuote } from "../lib/quotesClient";
 import { getSmartVolumeDiscount } from "./POSModule";
 
 export default function QuotesModule() {
@@ -223,10 +224,7 @@ export default function QuotesModule() {
     if (openWhatsAppChat(cleanPhone, text)) {
       // Best-effort: si la columna whatsapp_sent_at todavia no existe en
       // esta base (falta correr la migracion), simplemente no se guarda.
-      const { error } = await supabase
-        .from("quotes")
-        .update({ whatsapp_sent_at: new Date().toISOString() })
-        .eq("id", quote.id);
+      const { error } = await saveQuote({ id: quote.id, fields: { whatsapp_sent_at: new Date().toISOString() } });
       if (!error) fetchQuotes();
     }
   };

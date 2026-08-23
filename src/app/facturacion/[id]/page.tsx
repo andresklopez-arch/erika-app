@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useBusinessProfile } from "../../../components/AuthProvider";
+import { saveQuote } from "../../../lib/quotesClient";
 
 export default function FacturacionExpress() {
   const businessProfile = useBusinessProfile();
@@ -122,10 +123,7 @@ export default function FacturacionExpress() {
          }
 
          try {
-            await supabase
-               .from("quotes")
-               .update({ status: "converted" })
-               .eq("id", ticketData.id);
+            await saveQuote({ id: ticketData.id, fields: { status: "converted" } });
          } catch (err) {
             console.warn("No se pudo actualizar el estado del ticket en quotes:", err);
          }

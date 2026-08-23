@@ -19,6 +19,7 @@ import { insertCashTransaction } from "../lib/cashTransactionClient";
 import { saveCustomer, adjustCustomerPoints, fetchActiveCustomers } from "../lib/customersClient";
 import { createLayaway } from "../lib/layawaysClient";
 import { reduceInventoryStock } from "../lib/inventoryClient";
+import { saveQuote } from "../lib/quotesClient";
 import { cleanMexicanPhone, openWhatsAppChat } from "../lib/whatsapp";
 
 // Único valor de método de pago que dispara lógica especial de crédito
@@ -824,19 +825,13 @@ export default function POSModule() {
   const handleSaveTicketNote = async (ticketId: number, currentNotes: string) => {
      const newNotes = window.prompt("Escribe una nota para este ticket:", currentNotes || "");
      if (newNotes === null) return;
-     
-     const { error } = await supabase
-       .from("quotes")
-       .update({ notes: newNotes.trim() })
-       .eq("id", ticketId);
-       
+
+     const { error } = await saveQuote({ id: ticketId, fields: { notes: newNotes.trim() } });
+
      if (error) {
        console.warn("Falla al guardar nota en quotes, reintentando con description...");
-       const { error: fallbackError } = await supabase
-         .from("quotes")
-         .update({ description: newNotes.trim() })
-         .eq("id", ticketId);
-         
+       const { error: fallbackError } = await saveQuote({ id: ticketId, fields: { description: newNotes.trim() } });
+
        if (fallbackError) {
          return alert("❌ Error al guardar nota: " + fallbackError.message);
        }
@@ -1014,13 +1009,10 @@ export default function POSModule() {
       const cancelNote = `CANCELADO por Administrador el ${new Date().toLocaleString()}`;
       const newNotes = ticket.notes ? `${ticket.notes} | ${cancelNote}` : cancelNote;
 
-      const { error: updErr } = await supabase
-        .from("quotes")
-        .update({
-          status: "cancelled",
-          notes: newNotes
-        })
-        .eq("id", ticket.id);
+      const { error: updErr } = await saveQuote({
+        id: ticket.id,
+        fields: { status: "cancelled", notes: newNotes },
+      });
 
       if (updErr) {
         console.warn("Falla al actualizar status de ticket:", updErr);
@@ -2209,23 +2201,23 @@ export default function POSModule() {
              apply_iva: applyIva,
              notes: `Pago: ${selectedMethod.toUpperCase()}${reference ? ` (Ref: ${reference})` : ""}`
           };
-          const { data: quoteData, error: quoteErr } = await supabase.from("quotes").insert(insertObj).select("id").single();
+          const { data: quoteData, error: quoteErr } = await saveQuote({ fields: insertObj });
 
           if (quoteErr) {
              console.warn("Falla al insertar quotes con columnas de descuento, reintentando con fallback...");
              delete insertObj.discount_pct;
              delete insertObj.apply_iva;
              delete insertObj.notes;
-             const fallback = await supabase.from("quotes").insert(insertObj).select("id").single();
+             const fallback = await saveQuote({ fields: insertObj });
              if (fallback.data) {
-                realTicketId = fallback.data.id;
+                realTicketId = Number(fallback.data.id);
              }
           } else if (quoteData) {
-             realTicketId = quoteData.id;
+             realTicketId = Number(quoteData.id);
           }
 
           if (quoteData) {
-             realTicketId = quoteData.id;
+             realTicketId = Number(quoteData.id);
              
              // Registrar en invoice_claims (completamente aislado)
              try {
@@ -2347,15 +2339,11 @@ export default function POSModule() {
       // marcaba "converted" solo por enviarla a caja, sin esperar a que
       // el cajero de verdad completara el cobro).
       if (activeTicket.quoteId) {
-        supabase
-          .from("quotes")
-          .update({ status: "converted" })
-          .eq("id", activeTicket.quoteId)
-          .then(({ error: quoteUpdateError }: { error: any }) => {
-            if (quoteUpdateError) {
-              console.error("No se pudo marcar la cotización como vendida:", quoteUpdateError);
-            }
-          });
+        saveQuote({ id: activeTicket.quoteId, fields: { status: "converted" } }).then(({ error: quoteUpdateError }) => {
+          if (quoteUpdateError) {
+            console.error("No se pudo marcar la cotización como vendida:", quoteUpdateError);
+          }
+        });
       }
 
       // Aprendizaje dinámico en tiempo real: Registrar combinaciones vendidas en este ticket
@@ -4987,11 +4975,11 @@ export default function POSModule() {
                   total: finalTotal,
                   status: "pending",
                 };
-                let { error } = await supabase.from("quotes").insert(quoteInsertObj);
+                let { error } = await saveQuote({ fields: quoteInsertObj });
                 if (error) {
                   console.warn("Falla al insertar quotes con customer_phone, reintentando sin ella...");
                   delete quoteInsertObj.customer_phone;
-                  ({ error } = await supabase.from("quotes").insert(quoteInsertObj));
+                  ({ error } = await saveQuote({ fields: quoteInsertObj }));
                 }
                 if (error)
                   return alert("Error al guardar cotización: " + error.message);
