@@ -999,27 +999,44 @@ export default function POSModule() {
         console.warn("Falla al actualizar status de ticket:", updErr);
       }
 
-      // Registrar egreso por anulación en transacciones de caja
+      // Registrar retiro en caja por la porción en EFECTIVO de la venta anulada
+      // (solo el efectivo afecta el total físico esperado del corte; tarjeta y
+      // transferencia no salen del cajón, así que no se tocan). El monto exacto
+      // en efectivo no se guarda en el ticket (`quotes`) — se busca en la
+      // transacción de venta original, que sí lo desglosa.
       try {
-        await supabase.from("cash_transactions").insert({
-          type: "expense",
-          amount: Number(ticket.total || 0),
-          description: `🚫 Cancelación de Ticket #${folioFormatted} (${ticket.customer_name || "Mostrador"})`,
-          created_at: new Date().toISOString()
-        });
+        const { data: origSaleTx } = await supabase
+          .from("cash_transactions")
+          .select("cash_amount, description")
+          .eq("type", "sale")
+          .ilike("description", `%Venta Ticket #${ticket.id}%`)
+          .limit(1)
+          .maybeSingle();
+
+        let cashPortion = Number(origSaleTx?.cash_amount ?? 0);
+        if (!cashPortion && origSaleTx?.description) {
+          const m = origSaleTx.description.match(/\[CASH:([\d.]+)\]/);
+          if (m) cashPortion = parseFloat(m[1]);
+        }
+
+        if (cashPortion > 0) {
+          const { error: txErr } = await insertCashTransaction({
+            type: "withdrawal",
+            amount: cashPortion,
+            description: `🚫 Cancelación de Ticket #${folioFormatted} (${ticket.customer_name || "Mostrador"})`,
+          }, cashPortion > 2000 ? pin : undefined);
+          if (txErr) console.warn("Falla al registrar retiro de caja por anulación:", txErr.message);
+        }
       } catch (txErr) {
         console.warn("Falla al registrar transacción de anulación:", txErr);
       }
 
       // Auditoría en error_logs
-      try {
-        await supabase.from("error_logs").insert({
-          module: "Cancelacion_Ticket",
-          message: `Ticket #${folioFormatted} (ID: ${ticket.id}) cancelado por $${Number(ticket.total || 0).toFixed(2)}. Reingreso Stock: ${shouldReturnStock ? "SÍ" : "NO"}`,
-          stack_trace: JSON.stringify({ ticket_id: ticket.id, total: ticket.total, items: itemsArr }),
-          user_agent: navigator.userAgent
-        });
-      } catch {}
+      await LoggerService.logError(
+        "Cancelacion_Ticket",
+        `Ticket #${folioFormatted} (ID: ${ticket.id}) cancelado por $${Number(ticket.total || 0).toFixed(2)}. Reingreso Stock: ${shouldReturnStock ? "SÍ" : "NO"}. Items: ${JSON.stringify(itemsArr)}`,
+        currentUser?.name
+      );
 
       toast.success(`✅ Ticket #${folioFormatted} CANCELADO exitosamente.`);
       
