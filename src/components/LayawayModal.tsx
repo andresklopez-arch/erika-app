@@ -3,11 +3,13 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth, useBusinessProfile } from "./AuthProvider";
 import { payLayaway, cancelLayaway } from "../lib/layawaysClient";
 import { reduceInventoryStock } from "../lib/inventoryClient";
+import { usePromptModal } from "./PromptModal";
 
 export default function LayawayModal({ show, onClose }: { show: boolean; onClose: () => void }) {
   const businessProfile = useBusinessProfile();
   const { businessSettings } = useAuth();
   const [layaways, setLayaways] = useState<any[]>([]);
+  const { modal: promptModal, confirmAsync, promptNumberAsync } = usePromptModal();
 
   const fetchLayaways = async () => {
     const { data } = await supabase.from("layaways").select("*").order("created_at", { ascending: false });
@@ -21,8 +23,13 @@ export default function LayawayModal({ show, onClose }: { show: boolean; onClose
   if (!show) return null;
 
   const handlePay = async (layaway: any) => {
-    const payment = parseFloat(window.prompt(`Saldo pendiente: $${layaway.balance.toFixed(2)}\n¿Cuánto va a abonar?`) || "");
-    if (isNaN(payment) || payment <= 0) return;
+    const payment = await promptNumberAsync(
+      "💵 Registrar Abono",
+      `Saldo pendiente: $${layaway.balance.toFixed(2)}\n¿Cuánto va a abonar?`,
+      "",
+      "Registrar Abono"
+    );
+    if (payment === null || isNaN(payment) || payment <= 0) return;
     if (payment > layaway.balance) return alert("El abono no puede superar el saldo pendiente.");
 
     const { error, newBalance: resultBalance, isCompleted } = await payLayaway(layaway.id, payment);
@@ -90,7 +97,12 @@ export default function LayawayModal({ show, onClose }: { show: boolean; onClose
   };
 
   const handleCancel = async (layaway: any) => {
-    if (!window.confirm("¿Seguro que deseas cancelar este apartado? La mercancía regresará al inventario físico.")) return;
+    const confirmed = await confirmAsync(
+      "❌ Cancelar Apartado",
+      "¿Seguro que deseas cancelar este apartado? La mercancía regresará al inventario físico.",
+      { confirmLabel: "Sí, cancelar", danger: true }
+    );
+    if (!confirmed) return;
 
     const failedItems: string[] = [];
     for (const item of layaway.items) {
@@ -126,6 +138,7 @@ export default function LayawayModal({ show, onClose }: { show: boolean; onClose
   };
 
   return (
+    <>
     <div
       style={{
         position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
@@ -202,5 +215,7 @@ export default function LayawayModal({ show, onClose }: { show: boolean; onClose
         </div>
       </div>
     </div>
+    {promptModal}
+    </>
   );
 }

@@ -5,10 +5,12 @@ import { LayawaySchema } from "../lib/schemas";
 import { useAuth, useBusinessProfile } from "./AuthProvider";
 import { payLayaway, cancelLayaway } from "../lib/layawaysClient";
 import { reduceInventoryStock } from "../lib/inventoryClient";
+import { usePromptModal } from "./PromptModal";
 
 export default function LayawaysModule() {
   const businessProfile = useBusinessProfile();
   const { businessSettings } = useAuth();
+  const { modal: promptModal, confirmAsync, promptNumberAsync } = usePromptModal();
   const [layaways, setLayaways] = useState<any[]>([]);
   const [limit, setLimit] = useState(20);
   const [hasMore, setHasMore] = useState(true);
@@ -66,12 +68,13 @@ export default function LayawaysModule() {
   }, [limit, searchQuery]);
 
   const handlePay = async (layaway: any) => {
-    const payment = parseFloat(
-      window.prompt(
-        `Saldo pendiente: $${layaway.balance.toFixed(2)}\n¿Cuánto va a abonar?`
-      ) || ""
+    const payment = await promptNumberAsync(
+      "💵 Registrar Abono",
+      `Saldo pendiente: $${layaway.balance.toFixed(2)}\n¿Cuánto va a abonar?`,
+      "",
+      "Registrar Abono"
     );
-    if (isNaN(payment) || payment <= 0) return;
+    if (payment === null || isNaN(payment) || payment <= 0) return;
     if (payment > layaway.balance)
       return alert("El abono no puede superar el saldo pendiente.");
 
@@ -146,12 +149,12 @@ export default function LayawaysModule() {
   };
 
   const handleCancel = async (layaway: any) => {
-    if (
-      !window.confirm(
-        "¿Seguro que deseas cancelar este apartado? La mercancía regresará al inventario físico."
-      )
-    )
-      return;
+    const confirmed = await confirmAsync(
+      "❌ Cancelar Apartado",
+      "¿Seguro que deseas cancelar este apartado? La mercancía regresará al inventario físico.",
+      { confirmLabel: "Sí, cancelar", danger: true }
+    );
+    if (!confirmed) return;
 
     const failedItems: string[] = [];
     for (const item of layaway.items) {
@@ -186,6 +189,7 @@ export default function LayawaysModule() {
   };
 
   return (
+    <>
     <div
       className="animate-fade-in"
       style={{
@@ -296,5 +300,7 @@ export default function LayawaysModule() {
         )}
       </div>
     </div>
+    {promptModal}
+    </>
   );
 }
