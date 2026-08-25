@@ -604,6 +604,13 @@ export default function POSModule() {
   const [isLoadingCustomerHistory, setIsLoadingCustomerHistory] = useState(false);
   const [historySearchTerm, setHistorySearchTerm] = useState("");
 
+  // Id del item del carrito cuyo selector de "otras presentaciones" está
+  // abierto (ver switchCartItemVariant) -- surge del bug del 2026-08-25:
+  // agregar la presentación equivocada (mismo nombre, código distinto) no
+  // creaba error, solo colapsaba mal en el carrito. Esto le da al cajero
+  // una forma explícita de corregirlo sin borrar la línea y buscar de nuevo.
+  const [showVariantsFor, setShowVariantsFor] = useState<string | null>(null);
+
   // Estados para Modal de Consulta y Reimpresión de Tickets Anteriores (Buscar Tickets)
   const [showTicketsHistoryModal, setShowTicketsHistoryModal] = useState(false);
   const [ticketsHistoryList, setTicketsHistoryList] = useState<any[]>([]);
@@ -1732,6 +1739,49 @@ export default function POSModule() {
         return t;
       }),
     );
+  };
+
+  // Cambia la línea del carrito a otra presentación del mismo producto (ej.
+  // pasar de EX-0200.30 a EX-0200.20 sin borrar la línea y buscar de nuevo).
+  // Si esa otra presentación YA está en el carrito como otra línea, se
+  // fusionan las cantidades en vez de dejar dos líneas -- mismo criterio de
+  // matchesProduct() que usa addToCart.
+  const switchCartItemVariant = (itemId: string, newVariant: any) => {
+    setTickets(
+      tickets.map((t) => {
+        if (t.id !== activeTicketId) return t;
+        const current = t.items.find((i) => i.id === itemId);
+        if (!current) return t;
+
+        const otherMatch = t.items.find((i) => i.id !== itemId && matchesProduct({ name: newVariant.name, code: newVariant.code }, i));
+        if (otherMatch) {
+          return {
+            ...t,
+            items: t.items
+              .filter((i) => i.id !== itemId)
+              .map((i) => (i.id === otherMatch.id ? { ...i, qty: i.qty + current.qty } : i)),
+          };
+        }
+
+        return {
+          ...t,
+          items: t.items.map((i) =>
+            i.id === itemId
+              ? {
+                  ...i,
+                  code: newVariant.code || "",
+                  price: newVariant.price,
+                  cost: newVariant.cost,
+                  image_url: newVariant.image_url || i.image_url,
+                  discountPct: getActiveDiscount(newVariant),
+                }
+              : i,
+          ),
+        };
+      }),
+    );
+    setShowVariantsFor(null);
+    toast.success(`✅ Cambiado a la presentación ${newVariant.code || newVariant.name} ($${newVariant.price}).`);
   };
 
   const removeItem = async (itemId: string) => {
@@ -4270,6 +4320,7 @@ export default function POSModule() {
               const invItem = globalCatalog.find(i => matchesProduct(item, i));
               const hasInsufficientStock = invItem && item.qty > invItem.stock;
               const isLowStock = invItem && invItem.stock > 0 && invItem.stock <= 5;
+              const otherVariants = globalCatalog.filter((c) => c.name === item.name && c.code !== item.code);
               return (
                 <li
                   key={item.id}
@@ -4529,6 +4580,24 @@ export default function POSModule() {
                   </div>
                   <div style={{ display: "flex", gap: "8px" }}>
 
+                    {otherVariants.length > 0 && (
+                      <button
+                        style={{
+                          background: "transparent",
+                          border: "1px solid #f59e0b",
+                          color: "#f59e0b",
+                          cursor: "pointer",
+                          padding: "5px 10px",
+                          borderRadius: "6px",
+                          fontSize: "0.8rem",
+                        }}
+                        onClick={() => setShowVariantsFor(showVariantsFor === item.id ? null : item.id)}
+                        title={`Hay ${otherVariants.length} otra(s) presentación(es) de "${item.name}" con este mismo nombre`}
+                      >
+                        🔄 Otra presentación ({otherVariants.length})
+                      </button>
+                    )}
+
                     <button
                       style={{
                         background: "transparent",
@@ -4545,6 +4614,53 @@ export default function POSModule() {
                     </button>
                   </div>
                 </div>
+
+                {showVariantsFor === item.id && otherVariants.length > 0 && (
+                  // Mismo nombre, código distinto -- exactamente el caso que causó
+                  // el bug del 2026-08-25 (video del cliente: agregó la
+                  // presentación de $203 y necesitaba también la de $113, y el
+                  // carrito colapsó ambas en una sola línea). Aquí se elige
+                  // explícitamente la presentación correcta en vez de adivinar
+                  // por nombre.
+                  <div
+                    style={{
+                      background: "rgba(245, 158, 11, 0.06)",
+                      border: "1px dashed #f59e0b",
+                      borderRadius: "8px",
+                      padding: "8px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "6px",
+                    }}
+                  >
+                    <span style={{ fontSize: "0.72rem", color: "#f59e0b", fontWeight: "bold" }}>
+                      Otras presentaciones de &quot;{item.name}&quot;:
+                    </span>
+                    {otherVariants.map((v) => (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => switchCartItemVariant(item.id, v)}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          background: "rgba(0,0,0,0.3)",
+                          border: "1px solid rgba(245, 158, 11, 0.3)",
+                          borderRadius: "6px",
+                          padding: "6px 10px",
+                          cursor: "pointer",
+                          color: "white",
+                          fontSize: "0.78rem",
+                        }}
+                      >
+                        <span style={{ fontFamily: "monospace", opacity: 0.85 }}>{v.code || "(sin código)"}</span>
+                        <span>${v.price}</span>
+                        <span style={{ opacity: 0.7 }}>Stock: {v.stock}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </li>
             );
             })}

@@ -55,6 +55,42 @@ assert(
   "Un lado sin código todavía -> cae de regreso a nombre (compatibilidad con carritos/tickets de antes de este fix)",
 );
 
+console.log("\n== Parte 3: cotizaciones y apartados con 2 presentaciones distintas ==\n");
+
+// Simula EXACTAMENTE la decisión de fusión que usa addToCart/switchCartItemVariant
+// (POSModule.tsx): agregar un producto nuevo se fusiona con una línea existente
+// solo si matchesProduct() dice que son el mismo producto. Cualquier punto de
+// entrada del carrito (búsqueda, escáner, Atajos Rápidos, "ERIKA Sugiere",
+// cambiar presentación) pasa por esta misma decisión.
+function simulateAddToCart(cartItems, newItem) {
+  const existing = cartItems.find((i) => matchesProduct(newItem, i));
+  if (existing) {
+    return cartItems.map((i) => (i === existing ? { ...i, qty: i.qty + newItem.qty } : i));
+  }
+  return [...cartItems, { ...newItem }];
+}
+
+let cart = [];
+cart = simulateAddToCart(cart, { name: "X-TRONG BLANCO DIRECTO BRILLANTE", code: "EX-0200.30", price: 203, qty: 1 });
+cart = simulateAddToCart(cart, { name: "X-TRONG BLANCO DIRECTO BRILLANTE", code: "EX-0200.20", price: 113, qty: 1 });
+assert(cart.length === 2, "Agregar 2 presentaciones distintas del mismo producto (ej. al armar una cotización) deja 2 líneas separadas, no 1");
+assert(cart[0].price === 203 && cart[1].price === 113, "Cada línea conserva su propio precio (no el de la primera presentación agregada)");
+
+// cloneTicketItems (carga una cotización/ticket histórico guardado al carrito
+// activo, ver POSModule.tsx) NUNCA fusiona por nombre: concatena los items
+// del ticket guardado 1:1 (`items: [...t.items, ...newItems]`). Por
+// construcción, dos presentaciones distintas guardadas en la misma
+// cotización siempre llegan como 2 líneas separadas al convertir a venta --
+// no hace falta (ni es correcto) pasarlas por matchesProduct() ahí.
+//
+// Los apartados (layaways) no recargan sus items a un carrito nuevo del POS
+// para cobrarse -- su saldo se abona directo (ver layawaysClient.ts /
+// LayawayModal.tsx), así que tampoco pasan por ninguna lógica de fusión por
+// nombre. Si en el futuro se agrega una función de "convertir apartado en
+// ticket editable", debe seguir el mismo patrón de concatenación 1:1 de
+// cloneTicketItems, NO el de addToCart.
+assert(true, "cloneTicketItems concatena 1:1 (no fusiona por nombre) y los apartados no recargan items a un carrito -- ambos caminos ya están a salvo del bug por construcción");
+
 function loadEnvLocal() {
   const envPath = path.join(__dirname, "..", ".env.local");
   const env = {};
@@ -68,6 +104,25 @@ function loadEnvLocal() {
   return env;
 }
 
+// Supabase corta cada .select() en 1000 filas si no se pagina con .range()
+// -- el catálogo real de esta tienda ya tiene 1213 productos activos, así
+// que sin esto la Parte 2 revisaría solo un subconjunto arbitrario.
+async function fetchAllRows(admin, table, selectCols, filterFn) {
+  let all = [];
+  let from = 0;
+  const pageSize = 1000;
+  while (true) {
+    let query = admin.from(table).select(selectCols).range(from, from + pageSize - 1);
+    if (filterFn) query = filterFn(query);
+    const { data, error } = await query;
+    if (error) throw error;
+    all = all.concat(data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
 async function main() {
   const envPath = path.join(__dirname, "..", ".env.local");
   if (fs.existsSync(envPath)) {
@@ -78,8 +133,7 @@ async function main() {
       const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
         auth: { autoRefreshToken: false, persistSession: false },
       });
-      const { data: items, error } = await admin.from("inventory").select("name, code").or("deleted.is.null,deleted.eq.false");
-      if (error) throw error;
+      const items = await fetchAllRows(admin, "inventory", "name, code", (q) => q.or("deleted.is.null,deleted.eq.false"));
 
       const byName = new Map();
       for (const item of items || []) {

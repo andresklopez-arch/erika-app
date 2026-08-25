@@ -173,6 +173,19 @@ export default function SettingsModule() {
   }
   const [rlsFunctions, setRlsFunctions] = useState<RlsFunctionStatus[] | null>(null);
   const [isCheckingRls, setIsCheckingRls] = useState(false);
+
+  // Salud del Catálogo: visibilidad del bug del 2026-08-25 (POSModule.tsx
+  // emparejaba productos por `name` en vez de `code` -- ver
+  // src/lib/posItemMatch.ts). Un producto sin código, o dos productos con
+  // el mismo nombre y sin código único, siguen expuestos al fallback por
+  // nombre de matchesProduct().
+  interface CatalogHealthData {
+    totalActiveProducts: number;
+    duplicateNameGroups: { name: string; variants: { code: string; price: number; stock: number }[] }[];
+    emptyCodeItems: { name: string; price: number; stock: number }[];
+  }
+  const [catalogHealth, setCatalogHealth] = useState<CatalogHealthData | null>(null);
+  const [isCheckingCatalogHealth, setIsCheckingCatalogHealth] = useState(false);
   const [showTestInstructions, setShowTestInstructions] = useState(false);
   const [copiedSqlTable, setCopiedSqlTable] = useState<string | null>(null);
   const [copiedSqlFn, setCopiedSqlFn] = useState<string | null>(null);
@@ -306,6 +319,29 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
       alert("❌ Error: " + e.message);
     } finally {
       setIsCheckingRls(false);
+    }
+  };
+
+  const checkCatalogHealth = async () => {
+    const pin = window.prompt("🔑 Ingresa el PIN de Administrador para ver la salud del catálogo:");
+    if (!pin) return;
+    setIsCheckingCatalogHealth(true);
+    try {
+      const res = await fetch("/api/admin/audit/catalog-health", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adminPin: pin }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        alert("❌ " + (json.error || "No se pudo consultar la salud del catálogo."));
+        return;
+      }
+      setCatalogHealth(json);
+    } catch (e: any) {
+      alert("❌ Error: " + e.message);
+    } finally {
+      setIsCheckingCatalogHealth(false);
     }
   };
 
@@ -2254,6 +2290,81 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
                 </table>
               )}
             </div>
+          </div>
+
+          <div className="glass-panel" style={{ border: "1px solid #f59e0b" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+              <h3 style={{ margin: 0, color: "#f59e0b", display: "flex", alignItems: "center", gap: "10px" }}>
+                📦 Salud del Catálogo
+              </h3>
+              <button
+                onClick={checkCatalogHealth}
+                disabled={isCheckingCatalogHealth}
+                style={{ background: "rgba(245,158,11,0.15)", color: "#f59e0b", border: "1px solid #f59e0b", padding: "5px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "0.8rem" }}
+              >
+                {isCheckingCatalogHealth ? "Verificando..." : "🔍 Verificar Ahora"}
+              </button>
+            </div>
+            <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", marginBottom: "15px" }}>
+              Productos que comparten nombre (distintas presentaciones, ej. tamaños o colores) y productos sin código propio.
+              Ambos siguen expuestos al bug corregido el 2026-08-25 (el carrito emparejaba por nombre en vez de código) si además les falta un código único. Requiere PIN de Administrador.
+            </p>
+            {catalogHealth && (
+              <>
+                <div style={{ display: "flex", gap: "15px", marginBottom: "15px" }}>
+                  <div style={{ flex: 1, textAlign: "center", padding: "10px", borderRadius: "6px", background: "rgba(255,255,255,0.04)" }}>
+                    <div style={{ fontSize: "1.4rem", fontWeight: "bold", color: "white" }}>{catalogHealth.totalActiveProducts}</div>
+                    <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.6)" }}>Productos activos</div>
+                  </div>
+                  <div style={{ flex: 1, textAlign: "center", padding: "10px", borderRadius: "6px", background: catalogHealth.duplicateNameGroups.length > 0 ? "rgba(245,158,11,0.1)" : "rgba(16,185,129,0.08)" }}>
+                    <div style={{ fontSize: "1.4rem", fontWeight: "bold", color: catalogHealth.duplicateNameGroups.length > 0 ? "#f59e0b" : "#10b981" }}>{catalogHealth.duplicateNameGroups.length}</div>
+                    <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.6)" }}>Grupos de nombre duplicado</div>
+                  </div>
+                  <div style={{ flex: 1, textAlign: "center", padding: "10px", borderRadius: "6px", background: catalogHealth.emptyCodeItems.length > 0 ? "rgba(239,68,68,0.1)" : "rgba(16,185,129,0.08)" }}>
+                    <div style={{ fontSize: "1.4rem", fontWeight: "bold", color: catalogHealth.emptyCodeItems.length > 0 ? "#ef4444" : "#10b981" }}>{catalogHealth.emptyCodeItems.length}</div>
+                    <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.6)" }}>Productos sin código</div>
+                  </div>
+                </div>
+
+                {catalogHealth.emptyCodeItems.length > 0 && (
+                  <div style={{ marginBottom: "15px" }}>
+                    <p style={{ fontSize: "0.8rem", color: "#ef4444", fontWeight: "bold", marginBottom: "8px" }}>
+                      🚨 Sin código propio — si comparten nombre con otro producto, siguen expuestos al bug original
+                    </p>
+                    <div style={{ maxHeight: "150px", overflowY: "auto" }}>
+                      {catalogHealth.emptyCodeItems.map((i, idx) => (
+                        <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", padding: "6px 8px", marginBottom: "4px", background: "rgba(239,68,68,0.08)", borderRadius: "4px" }}>
+                          <span>{i.name}</span>
+                          <span style={{ opacity: 0.7 }}>${i.price} · Stock: {i.stock}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {catalogHealth.duplicateNameGroups.length > 0 && (
+                  <div>
+                    <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.8)", fontWeight: "bold", marginBottom: "8px" }}>
+                      📋 Grupos con nombre duplicado (candidatos a recuento físico de inventario)
+                    </p>
+                    <div style={{ maxHeight: "220px", overflowY: "auto" }}>
+                      {catalogHealth.duplicateNameGroups.map((g, idx) => (
+                        <div key={idx} style={{ padding: "8px 10px", marginBottom: "6px", borderRadius: "6px", background: "rgba(255,255,255,0.04)" }}>
+                          <div style={{ fontSize: "0.82rem", fontWeight: "bold", marginBottom: "4px" }}>{g.name} <span style={{ opacity: 0.5, fontWeight: "normal" }}>({g.variants.length} presentaciones)</span></div>
+                          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                            {g.variants.map((v, vi) => (
+                              <span key={vi} style={{ fontSize: "0.72rem", fontFamily: "monospace", padding: "2px 6px", borderRadius: "4px", background: "rgba(255,255,255,0.06)", opacity: v.code ? 1 : 0.6 }}>
+                                {v.code || "(sin código)"} · ${v.price} · Stock {v.stock}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           <div className="glass-panel" style={{ border: "1px solid #f59e0b" }}>

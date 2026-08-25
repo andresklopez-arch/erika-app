@@ -48,6 +48,26 @@ function extractFieldList(constName, fileContents) {
   return [...match[1].matchAll(/["']([a-zA-Z0-9_]+)["']/g)].map((m) => m[1]);
 }
 
+// Supabase corta cada .select() en 1000 filas si no se pagina con .range()
+// -- se descubrió el 2026-08-25 contando "productos sin código" y llegando
+// a un total de 1000 justo, cuando el catálogo real ya tenía 1213. Sin esto,
+// un producto sin código fuera de la primera página pasaría desapercibido.
+async function fetchAllRows(admin, table, selectCols, filterFn) {
+  let all = [];
+  let from = 0;
+  const pageSize = 1000;
+  while (true) {
+    let query = admin.from(table).select(selectCols).range(from, from + pageSize - 1);
+    if (filterFn) query = filterFn(query);
+    const { data, error } = await query;
+    if (error) throw error;
+    all = all.concat(data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
 async function main() {
   const env = loadEnvLocal();
   if (!env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -118,8 +138,7 @@ async function main() {
   let emptyCodeCount = 0;
   let emptyCodeSummaryLine = "";
   try {
-    const { data: inv, error: invError } = await admin.from("inventory").select("name, code").or("deleted.is.null,deleted.eq.false");
-    if (invError) throw invError;
+    const inv = await fetchAllRows(admin, "inventory", "name, code", (q) => q.or("deleted.is.null,deleted.eq.false"));
     const emptyCodeItems = (inv || []).filter((i) => !i.code || String(i.code).trim() === "");
     emptyCodeCount = emptyCodeItems.length;
     if (emptyCodeCount === 0) {
