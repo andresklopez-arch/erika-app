@@ -1402,8 +1402,20 @@ export default function POSModule() {
                 // antes (antes se marcaba "converted" al solo enviarla a
                 // caja, aunque el cajero cancelara o nunca cobrara).
                 const savedQuoteId = localStorage.getItem("ERIKA_RESTORE_QUOTE_ID");
-                setTickets([{ id: 1, items, discountPct: 0, quoteId: savedQuoteId || undefined }]);
+                // Restaurar tambien el % de descuento/aumento y el IVA con
+                // los que se guardo la cotizacion -- antes discountPct se
+                // ponia en 0 a fuerza y el IVA se dejaba como estuviera en
+                // la sesion actual, sin importar como se habia cotizado
+                // originalmente. Bug real: cotizacion por $46.80 (con 4%
+                // de aumento aplicado), venta resultante por $45.00 (sin el
+                // aumento) porque se perdia al mandarla a caja.
+                const restoredDiscountPct = Number(localStorage.getItem("ERIKA_RESTORE_QUOTE_DISCOUNT_PCT")) || 0;
+                const restoredApplyIva = localStorage.getItem("ERIKA_RESTORE_QUOTE_APPLY_IVA") === "true";
+                localStorage.removeItem("ERIKA_RESTORE_QUOTE_DISCOUNT_PCT");
+                localStorage.removeItem("ERIKA_RESTORE_QUOTE_APPLY_IVA");
+                setTickets([{ id: 1, items, discountPct: restoredDiscountPct, quoteId: savedQuoteId || undefined }]);
                 setActiveTicketId(1);
+                setApplyIva(restoredApplyIva);
 
                 // Restablecer cliente si existe
                 const savedCustId = localStorage.getItem("ERIKA_RESTORE_CUSTOMER_ID");
@@ -5129,6 +5141,13 @@ export default function POSModule() {
                   items: activeTicket.items,
                   total: finalTotal,
                   status: "pending",
+                  // Sin esto, el % de descuento/aumento y el IVA que
+                  // produjeron `finalTotal` se perdían por completo: al
+                  // mandar la cotización a caja se recalculaba el total
+                  // desde los precios base de `items`, dando un monto
+                  // distinto al que realmente se le cotizó al cliente.
+                  discount_pct: activeTicket.discountPct,
+                  apply_iva: applyIva,
                 };
                 let { error } = await saveQuote({ fields: quoteInsertObj });
                 if (error) {

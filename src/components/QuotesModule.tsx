@@ -106,6 +106,14 @@ export default function QuotesModule() {
     localStorage.setItem("ERIKA_PRINTER_CONNECTED", "true");
     localStorage.setItem("ERIKA_RESTORE_QUOTE", JSON.stringify(quote.items));
     localStorage.setItem("ERIKA_RESTORE_QUOTE_ID", quote.id);
+    // Antes solo se restauraban los items (precios base, sin ajuste) --
+    // si la cotización se guardó con IVA activado y/o un % de descuento o
+    // aumento sobre el total del ticket, ese ajuste se perdía por completo
+    // al mandarla a caja: se recobraba un total distinto (más bajo, sin el
+    // aumento) al que realmente se le había cotizado al cliente. Ver
+    // restoreQuote() en POSModule.tsx.
+    localStorage.setItem("ERIKA_RESTORE_QUOTE_DISCOUNT_PCT", String(quote.discount_pct ?? 0));
+    localStorage.setItem("ERIKA_RESTORE_QUOTE_APPLY_IVA", String(quote.apply_iva ?? false));
     if (quote.customer_id) {
       localStorage.setItem("ERIKA_RESTORE_CUSTOMER_ID", quote.customer_id);
     } else if (quote.customer_name) {
