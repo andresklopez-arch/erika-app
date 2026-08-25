@@ -4,7 +4,7 @@ import Link from "next/link";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "./AuthProvider";
 import { LoggerService } from "../services/loggerService";
-import { getOrReconnectBlePrinter, sendBleBytes } from "../utils/bluetoothPrinter";
+import { getOrReconnectBlePrinter, sendBleBytes, sanitizeForThermal } from "../utils/bluetoothPrinter";
 import { deleteCustomer, OPERATIONAL_WARNING_EVENT, CUSTOMER_COUNT_WARNED_COUNT_KEY, CUSTOMER_COUNT_WARNED_SEVERITY_KEY, isCustomerWarningDismissed, dismissCustomerListWarning, CustomerListWarningSeverity } from "../lib/customersClient";
 import { deleteInventoryItem } from "../lib/inventoryClient";
 import { deleteSupplier } from "../lib/suppliersClient";
@@ -925,18 +925,6 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
 
         const encoder = new TextEncoder();
         const chunks: Uint8Array[] = [];
-
-        const sanitizeForThermal = (str: string): string => {
-          if (!str) return "";
-          return str
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .replace(/¡/g, "!")
-            .replace(/¿/g, "?")
-            .replace(/ñ/g, "n")
-            .replace(/Ñ/g, "N")
-            .replace(/[^\x20-\x7E\r\n\t]/g, "");
-        };
 
         const write = (b: number[]) => chunks.push(new Uint8Array(b));
         const writeText = (t: string) => chunks.push(encoder.encode(sanitizeForThermal(t)));

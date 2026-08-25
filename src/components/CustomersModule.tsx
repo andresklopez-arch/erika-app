@@ -7,7 +7,8 @@ import { useBusinessProfile, useAuth } from "./AuthProvider";
 import { saveCustomer, deleteCustomer } from "../lib/customersClient";
 import { payLayaway, cancelLayaway } from "../lib/layawaysClient";
 import { reduceInventoryStock } from "../lib/inventoryClient";
-import { getOrReconnectBlePrinter, sendBleBytes, sanitizeForThermal } from "../utils/bluetoothPrinter";
+import { printEscPosBytes, sanitizeForThermal } from "../utils/bluetoothPrinter";
+import { LoggerService } from "../services/loggerService";
 
 export default function CustomersModule() {
   const businessProfile = useBusinessProfile();
@@ -454,17 +455,10 @@ export default function CustomersModule() {
     // "Imprimir Estado" el mismo camino.
     if (localStorage.getItem("ERIKA_PRINTER_TYPE") === "bluetooth") {
       try {
-        const result = await getOrReconnectBlePrinter(undefined, true);
-        if (!result.success || !result.char) {
-          alert("Fallo al imprimir por Bluetooth: " + (result.error || "No se pudo conectar a la impresora."));
-          return;
-        }
-
         const paperSize = localStorage.getItem("ERIKA_PRINTER_PAPER_SIZE") || "80mm";
         const maxCols = paperSize === "58mm" ? 30 : 42;
         const divider = "-".repeat(maxCols) + "\n";
 
-        const char = result.char;
         const encoder = new TextEncoder();
         const chunks: Uint8Array[] = [];
         const write = (b: number[]) => chunks.push(new Uint8Array(b));
@@ -524,11 +518,17 @@ export default function CustomersModule() {
         chunks.forEach((c) => { bytes.set(c, offset); offset += c.length; });
 
         const chunkSize = Number(localStorage.getItem("ERIKA_PRINTER_BLE_CHUNK_SIZE")) || 20;
-        await sendBleBytes(char, bytes, chunkSize, 20);
+        const printResult = await printEscPosBytes(bytes, chunkSize, 20);
+        if (!printResult.success) {
+          alert("Fallo al imprimir por Bluetooth: " + printResult.error);
+          LoggerService.logError("Print_EstadoCuenta_Bluetooth", printResult.error, currentUser?.name || "Cajero");
+          return;
+        }
         toast.success("🖨️ Estado de Cuenta enviado a la impresora Bluetooth.");
       } catch (err: any) {
         console.error(err);
         alert("Fallo al imprimir por Bluetooth: " + err.message);
+        LoggerService.logError("Print_EstadoCuenta_Bluetooth", err.message, currentUser?.name || "Cajero");
       }
       return;
     }
@@ -1071,8 +1071,9 @@ export default function CustomersModule() {
                             border: "1px solid var(--color-primary)",
                           }}
                           onClick={() => printCustomerAccountStatement(c)}
+                          title={typeof window !== "undefined" && localStorage.getItem("ERIKA_PRINTER_TYPE") === "bluetooth" ? "Se enviará por Bluetooth a la impresora térmica" : "Se abrirá el diálogo de impresión del navegador"}
                         >
-                          🖨️ Imprimir Estado
+                          🖨️ Imprimir Estado {typeof window !== "undefined" && localStorage.getItem("ERIKA_PRINTER_TYPE") === "bluetooth" ? "(Bluetooth)" : ""}
                         </button>
                         <button
                           className="btn-primary"

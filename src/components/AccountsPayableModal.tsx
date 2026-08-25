@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useBusinessProfile } from "./AuthProvider";
 import { saveSupplierDebt, paySupplierDebt } from "../lib/supplierDebtsClient";
+import { printEscPosBytes, sanitizeForThermal } from "../utils/bluetoothPrinter";
+import { LoggerService } from "../services/loggerService";
 
 interface Supplier {
   id: string;
@@ -125,7 +127,73 @@ export default function AccountsPayableModal({ onClose }: AccountsPayableModalPr
       setPaymentNotes("");
   };
 
-  const printThermalTicket = (debt: Debt, payAmt: number, newBalance: number) => {
+  const printThermalTicket = async (debt: Debt, payAmt: number, newBalance: number) => {
+      // Mismo bug que "Imprimir Estado" en Clientes y Credito (ver
+      // CustomersModule.tsx): esto usaba solo window.print(), que no tiene
+      // a donde mandar nada si la impresora esta vinculada por Bluetooth
+      // sin driver de sistema. Ahora revisa ERIKA_PRINTER_TYPE igual que
+      // el resto del POS.
+      if (localStorage.getItem("ERIKA_PRINTER_TYPE") === "bluetooth") {
+        try {
+          const paperSize = localStorage.getItem("ERIKA_PRINTER_PAPER_SIZE") || "80mm";
+          const maxCols = paperSize === "58mm" ? 30 : 42;
+          const divider = "-".repeat(maxCols) + "\n";
+
+          const encoder = new TextEncoder();
+          const chunks: Uint8Array[] = [];
+          const write = (b: number[]) => chunks.push(new Uint8Array(b));
+          const writeText = (t: string) => chunks.push(encoder.encode(sanitizeForThermal(t)));
+          const formatRow = (label: string, value: string) => {
+            const spaces = maxCols - label.length - value.length;
+            return label + (spaces > 0 ? " ".repeat(spaces) : " ") + value + "\n";
+          };
+
+          write([0x1b, 0x40]);
+          write([0x1b, 0x61, 0x01]);
+          write([0x1b, 0x45, 0x01]);
+          writeText(`${businessProfile.name.toUpperCase()}\n`);
+          write([0x1b, 0x45, 0x00]);
+          writeText("TICKET DE ABONO A PROVEEDOR\n");
+          writeText(divider);
+
+          write([0x1b, 0x61, 0x00]);
+          writeText(`Fecha: ${new Date().toLocaleString()}\n`);
+          writeText(`Proveedor: ${debt.supplier_name}\n`);
+          writeText(`Concepto: ${debt.concept}\n`);
+          writeText(divider);
+
+          writeText(formatRow("Total Abonado:", `$${payAmt.toFixed(2)}`));
+          writeText(formatRow("Nuevo Saldo:", `$${newBalance.toFixed(2)}`));
+          writeText(divider);
+
+          write([0x1b, 0x61, 0x01]);
+          writeText("Firma de Recibido:\n\n\n\n");
+          writeText("_______________________\n");
+          writeText("Gracias por su preferencia\n");
+
+          const bottomLines = Number(localStorage.getItem("ERIKA_PRINTER_BOTTOM_LINES")) || 1;
+          if (bottomLines > 0) write([0x1b, 0x64, bottomLines]);
+          if (localStorage.getItem("ERIKA_PRINTER_ENABLE_AUTOCUT") !== "false") write([0x1d, 0x56, 0x41, 0x00]);
+
+          const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
+          const bytes = new Uint8Array(totalLength);
+          let offset = 0;
+          chunks.forEach((c) => { bytes.set(c, offset); offset += c.length; });
+
+          const chunkSize = Number(localStorage.getItem("ERIKA_PRINTER_BLE_CHUNK_SIZE")) || 20;
+          const printResult = await printEscPosBytes(bytes, chunkSize, 20);
+          if (!printResult.success) {
+            alert("Fallo al imprimir por Bluetooth: " + printResult.error);
+            LoggerService.logError("Print_AbonoProveedor_Bluetooth", printResult.error);
+          }
+        } catch (err: any) {
+          console.error(err);
+          alert("Fallo al imprimir por Bluetooth: " + err.message);
+          LoggerService.logError("Print_AbonoProveedor_Bluetooth", err.message);
+        }
+        return;
+      }
+
       const newWindow = window.open("", "_blank", "width=300,height=600");
       if (!newWindow) return;
       newWindow.document.write(`

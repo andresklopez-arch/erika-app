@@ -349,6 +349,37 @@ export async function sendBleBytes(
   return true;
 }
 
+export interface PrintEscPosResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Conecta (o reconecta) a la impresora Bluetooth y manda los bytes ya
+ * armados por el llamador. Centraliza el patrón de conectar+enviar+manejar
+ * error que antes se repetía completo en cada lugar que imprimía un ticket
+ * (POSModule.tsx, caja/page.tsx, CustomersModule.tsx, AccountsPayableModal.tsx,
+ * lib/receiptPrinting.ts, SettingsModule.tsx) -- lo único que cambia entre
+ * ellos es el contenido del ticket (los `bytes`), no cómo se conecta o
+ * transmite.
+ */
+export async function printEscPosBytes(
+  bytes: Uint8Array,
+  chunkSize: number = 20,
+  delayMs: number = 20,
+): Promise<PrintEscPosResult> {
+  const result = await getOrReconnectBlePrinter(undefined, true);
+  if (!result.success || !result.char) {
+    return { success: false, error: result.error || "No se pudo conectar a la impresora." };
+  }
+  try {
+    await sendBleBytes(result.char, bytes, chunkSize, delayMs, result.allVendorChars);
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Error al transmitir a la impresora." };
+  }
+}
+
 export type BleStatusType = "connected" | "standby" | "disconnected" | "unsupported";
 
 export function getBleStatus(cachedChar?: any): BleStatusType {
