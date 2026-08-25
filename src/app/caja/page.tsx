@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth, useBusinessProfile } from "../../components/AuthProvider";
 import ProtectedRoute from "../../components/ProtectedRoute";
-import { getOrReconnectBlePrinter, sendBleBytes } from "../../utils/bluetoothPrinter";
+import { getOrReconnectBlePrinter, sendBleBytes, sanitizeForThermal } from "../../utils/bluetoothPrinter";
 import { insertCashTransaction } from "../../lib/cashTransactionClient";
 
 interface Denominations {
@@ -251,18 +251,6 @@ export default function CajaModule() {
           alert("Fallo al imprimir por Bluetooth: " + (result.error || "No se pudo conectar a la impresora."));
           return;
         }
-
-        const sanitizeForThermal = (str: string): string => {
-          if (!str) return "";
-          return str
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .replace(/¡/g, "!")
-            .replace(/¿/g, "?")
-            .replace(/ñ/g, "n")
-            .replace(/Ñ/g, "N")
-            .replace(/[^\x20-\x7E\r\n\t]/g, "");
-        };
 
         const char = result.char;
         const encoder = new TextEncoder();

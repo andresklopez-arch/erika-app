@@ -21,6 +21,27 @@ export const KNOWN_SERVICES = [
 
 export const KNOWN_PATTERNS = ["fff2", "fff1", "ffe1", "e7e2", "ae01", "ae02", "18f1", "2af1", "4954", "ff02", "ff01", "fee7", "1101"];
 
+/**
+ * Limpia un texto para que un ticket ESC/POS lo imprima sin caracteres
+ * corruptos -- las impresoras térmicas baratas (EC-MP-300 y similares) no
+ * traen tabla de codificación UTF-8, así que acentos/ñ/¡¿ salen como
+ * basura si se mandan tal cual. Antes esto vivía copiado (idéntico) en
+ * caja/page.tsx y en POSModule.tsx; se centraliza aquí para que cualquier
+ * ticket nuevo que se agregue (ej. estado de cuenta de cliente) lo use sin
+ * volver a copiar la función.
+ */
+export function sanitizeForThermal(str: string): string {
+  if (!str) return "";
+  return str
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "") // á -> a, é -> e, etc. (quita marcas combinantes tras NFD)
+    .replace(/¡/g, "!")
+    .replace(/¿/g, "?")
+    .replace(/ñ/g, "n")
+    .replace(/Ñ/g, "N")
+    .replace(/[^\x20-\x7E\r\n\t]/g, ""); // Solo caracteres ASCII estándar
+}
+
 export interface BleConnectResult {
   success: boolean;
   char?: any;

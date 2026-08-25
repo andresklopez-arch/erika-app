@@ -7,6 +7,7 @@ import { useBusinessProfile, useAuth } from "./AuthProvider";
 import { saveCustomer, deleteCustomer } from "../lib/customersClient";
 import { payLayaway, cancelLayaway } from "../lib/layawaysClient";
 import { reduceInventoryStock } from "../lib/inventoryClient";
+import { getOrReconnectBlePrinter, sendBleBytes, sanitizeForThermal } from "../utils/bluetoothPrinter";
 
 export default function CustomersModule() {
   const businessProfile = useBusinessProfile();
@@ -439,6 +440,98 @@ export default function CustomersModule() {
     const loyaltyRedeemRate = parseFloat(localStorage.getItem("ERIKA_REDEEM_RATE") || "10");
     const pointsMoney = ((customer.points || 0) / loyaltyRedeemRate).toFixed(2);
     const availableCredit = Math.max(0, (customer.credit_limit || 0) - (customer.balance || 0));
+
+    // Antes esta función SIEMPRE usaba window.print() (a través de un
+    // iframe oculto), sin importar el tipo de impresora configurado en
+    // Ajustes. Eso funciona si hay una impresora "system" con driver de
+    // Windows/Android, pero una impresora térmica vinculada solo por
+    // Bluetooth (sin driver de sistema, como la EC-MP-300 de esta tienda)
+    // nunca aparece como destino de impresión del navegador -- el diálogo
+    // de imprimir no tiene a quién mandarle nada, así que "no imprime
+    // nada" aunque la impresora esté bien vinculada. El resto del POS
+    // (venta, corte de caja) ya revisa ERIKA_PRINTER_TYPE y manda bytes
+    // ESC/POS directo por Bluetooth cuando corresponde; esto le da a
+    // "Imprimir Estado" el mismo camino.
+    if (localStorage.getItem("ERIKA_PRINTER_TYPE") === "bluetooth") {
+      try {
+        const result = await getOrReconnectBlePrinter(undefined, true);
+        if (!result.success || !result.char) {
+          alert("Fallo al imprimir por Bluetooth: " + (result.error || "No se pudo conectar a la impresora."));
+          return;
+        }
+
+        const paperSize = localStorage.getItem("ERIKA_PRINTER_PAPER_SIZE") || "80mm";
+        const maxCols = paperSize === "58mm" ? 30 : 42;
+        const divider = "-".repeat(maxCols) + "\n";
+
+        const char = result.char;
+        const encoder = new TextEncoder();
+        const chunks: Uint8Array[] = [];
+        const write = (b: number[]) => chunks.push(new Uint8Array(b));
+        const writeText = (t: string) => chunks.push(encoder.encode(sanitizeForThermal(t)));
+        const formatRow = (label: string, value: string) => {
+          const spaces = maxCols - label.length - value.length;
+          return label + (spaces > 0 ? " ".repeat(spaces) : " ") + value + "\n";
+        };
+
+        write([0x1b, 0x40]);
+        write([0x1b, 0x61, 0x01]);
+        write([0x1b, 0x45, 0x01]);
+        write([0x1d, 0x21, 0x11]);
+        writeText(`${(businessProfile.name || "Ferreteria Erika").toUpperCase()}\n`);
+        write([0x1d, 0x21, 0x00]);
+        writeText("ESTADO DE CUENTA\n");
+        write([0x1b, 0x45, 0x00]);
+        writeText(divider);
+
+        write([0x1b, 0x61, 0x00]);
+        writeText(`Fecha: ${new Date().toLocaleString()}\n`);
+        writeText(`Cliente: ${customer.name}\n`);
+        if (customer.phone) writeText(`Tel: ${customer.phone}\n`);
+        writeText(divider);
+
+        writeText(formatRow("Limite Credito:", `$${(customer.credit_limit || 0).toFixed(2)}`));
+        writeText(formatRow("Saldo Deudor:", `$${(customer.balance || 0).toFixed(2)}`));
+        writeText(formatRow("Credito Disponible:", `$${availableCredit.toFixed(2)}`));
+        writeText(divider);
+        writeText(formatRow("Puntos Acumulados:", `${customer.points || 0} pts`));
+        writeText(formatRow("Dinero Ganado:", `$${pointsMoney}`));
+        if (totalPurchases > 0) {
+          writeText(formatRow("Compras Historicas:", `$${totalPurchases.toFixed(2)}`));
+        }
+
+        if (currentTxs && currentTxs.length > 0) {
+          writeText(divider);
+          writeText("ULTIMOS MOVIMIENTOS\n");
+          for (const tx of currentTxs.slice(0, 8)) {
+            const tipo = tx.type === "charge" ? "CARGO" : "ABONO";
+            const signo = tx.type === "charge" ? "+" : "-";
+            writeText(formatRow(`${new Date(tx.created_at).toLocaleDateString()} ${tipo}`, `${signo}$${Number(tx.amount || 0).toFixed(2)}`));
+          }
+        }
+
+        writeText(divider);
+        write([0x1b, 0x61, 0x01]);
+        writeText("Gracias por su preferencia!\n");
+
+        const bottomLines = Number(localStorage.getItem("ERIKA_PRINTER_BOTTOM_LINES")) || 1;
+        if (bottomLines > 0) write([0x1b, 0x64, bottomLines]);
+        if (localStorage.getItem("ERIKA_PRINTER_ENABLE_AUTOCUT") !== "false") write([0x1d, 0x56, 0x41, 0x00]);
+
+        const totalLength = chunks.reduce((acc, c) => acc + c.length, 0);
+        const bytes = new Uint8Array(totalLength);
+        let offset = 0;
+        chunks.forEach((c) => { bytes.set(c, offset); offset += c.length; });
+
+        const chunkSize = Number(localStorage.getItem("ERIKA_PRINTER_BLE_CHUNK_SIZE")) || 20;
+        await sendBleBytes(char, bytes, chunkSize, 20);
+        toast.success("🖨️ Estado de Cuenta enviado a la impresora Bluetooth.");
+      } catch (err: any) {
+        console.error(err);
+        alert("Fallo al imprimir por Bluetooth: " + err.message);
+      }
+      return;
+    }
 
     const movementsHtml = (currentTxs || [])
       .slice(0, 8)

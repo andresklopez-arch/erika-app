@@ -14,7 +14,7 @@ import PosScannerModal from "./PosScannerModal";
 import PosCreditModal from "./PosCreditModal";
 import { useAuth, useBusinessProfile } from "./AuthProvider";
 import { CustomerSchema, CashSessionSchema } from "../lib/schemas";
-import { getOrReconnectBlePrinter, sendBleBytes, startBleKeepAlive, getBleStatus, BleStatusType } from "../utils/bluetoothPrinter";
+import { getOrReconnectBlePrinter, sendBleBytes, startBleKeepAlive, getBleStatus, BleStatusType, sanitizeForThermal } from "../utils/bluetoothPrinter";
 import { insertCashTransaction } from "../lib/cashTransactionClient";
 import { saveCustomer, adjustCustomerPoints, fetchActiveCustomers } from "../lib/customersClient";
 import { createLayaway } from "../lib/layawaysClient";
@@ -2642,18 +2642,6 @@ export default function POSModule() {
       const chunks: Uint8Array[] = [];
       const encoder = new TextEncoder();
 
-      const sanitizeForThermal = (str: string): string => {
-        if (!str) return "";
-        return str
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "") // á -> a, é -> e, etc.
-          .replace(/¡/g, "!")
-          .replace(/¿/g, "?")
-          .replace(/ñ/g, "n")
-          .replace(/Ñ/g, "N")
-          .replace(/[^\x20-\x7E\r\n\t]/g, ""); // Keep only clean standard ASCII characters
-      };
-      
       const write = (bytes: number[]) => {
         chunks.push(new Uint8Array(bytes));
       };
