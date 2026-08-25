@@ -11,7 +11,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Sesión inválida. Vuelve a iniciar sesión." }, { status: 401 });
     }
 
-    const { customer_id, customer_name, total_amount, down_payment, balance, due_date, items } = await request.json();
+    const { customer_id, customer_name, total_amount, down_payment, balance, due_date, items, discount_pct, apply_iva } = await request.json();
     if (typeof total_amount !== "number" || typeof down_payment !== "number" || typeof balance !== "number") {
       return NextResponse.json({ error: "Datos de apartado inválidos." }, { status: 400 });
     }
@@ -26,6 +26,11 @@ export async function POST(request: Request) {
         balance,
         due_date,
         items,
+        // No se recalculan después (a diferencia de una cotización, un
+        // apartado nunca vuelve a leer `items` para recomputar su total) --
+        // se guardan solo para trazabilidad de con qué ajuste se cotizó.
+        discount_pct: typeof discount_pct === "number" ? discount_pct : 0,
+        apply_iva: Boolean(apply_iva),
         status: "pending",
       })
       .select("*")

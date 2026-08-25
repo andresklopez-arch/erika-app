@@ -10,6 +10,7 @@ import { reduceInventoryStock } from "../lib/inventoryClient";
 import { printEscPosBytes, sanitizeForThermal } from "../utils/bluetoothPrinter";
 import { LoggerService } from "../services/loggerService";
 import { showPrintFailureToast } from "../lib/printFailureToast";
+import { getQuoteTotalMismatch } from "../lib/quoteTotalCheck";
 
 export default function CustomersModule() {
   const businessProfile = useBusinessProfile();
@@ -1391,7 +1392,21 @@ export default function CustomersModule() {
                                   <div key={idx}>{i.qty} {i.unit || 'pz'} - {i.name}</div>
                                 ))}
                               </td>
-                              <td style={{ padding: "10px", fontWeight: "bold", color: "#3b82f6" }}>${q.total.toFixed(2)}</td>
+                              <td style={{ padding: "10px", fontWeight: "bold", color: "#3b82f6" }}>
+                                ${q.total.toFixed(2)}
+                                {/* status "ticket" son ventas normales de caja (no cotizaciones) que
+                                    también viven en esta tabla -- el chequeo de mismatch no aplica ahí
+                                    (esas sí pueden llevar descuento de mayoreo/volumen legítimo que este
+                                    chequeo no reproduce a propósito, ver quoteTotalCheck.ts). */}
+                                {q.status !== "ticket" && getQuoteTotalMismatch(q).mismatch && (
+                                  <span
+                                    title={`El total guardado no coincide con artículos + ajustes (debería ser $${getQuoteTotalMismatch(q).expectedTotal.toFixed(2)})`}
+                                    style={{ marginLeft: "4px", color: "#f87171", cursor: "help" }}
+                                  >
+                                    ⚠️
+                                  </span>
+                                )}
+                              </td>
                               <td style={{ padding: "10px", textAlign: "center" }}>
                                 <span style={{
                                   background: q.status === "converted" ? "rgba(16, 185, 129, 0.1)" : q.status === "expired" ? "rgba(239, 68, 68, 0.1)" : "rgba(245, 158, 11, 0.1)",

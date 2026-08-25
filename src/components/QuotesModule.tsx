@@ -7,6 +7,7 @@ import { cleanMexicanPhone, openWhatsAppChat, formatMexicanPhoneDisplay } from "
 import { fetchActiveCustomers } from "../lib/customersClient";
 import { saveQuote } from "../lib/quotesClient";
 import { getSmartVolumeDiscount } from "./POSModule";
+import { getQuoteTotalMismatch } from "../lib/quoteTotalCheck";
 
 export default function QuotesModule() {
   const businessProfile = useBusinessProfile();
@@ -580,6 +581,39 @@ export default function QuotesModule() {
                         </div>
                       </div>
                     </div>
+
+                    {(() => {
+                      const ivaRate = businessSettings?.config?.iva_rate ?? 0.16;
+                      const { expectedTotal, storedTotal, mismatch } = getQuoteTotalMismatch(q, ivaRate);
+                      const discountPct = q.discount_pct || 0;
+                      const applyIva = Boolean(q.apply_iva);
+                      return (
+                        <div
+                          style={{
+                            marginBottom: "15px",
+                            padding: "10px 14px",
+                            borderRadius: "8px",
+                            fontSize: "0.85rem",
+                            background: mismatch ? "rgba(239,68,68,0.1)" : "rgba(255,255,255,0.03)",
+                            border: mismatch ? "1px solid rgba(239,68,68,0.4)" : "1px solid rgba(255,255,255,0.08)",
+                            color: mismatch ? "#f87171" : "rgba(255,255,255,0.7)",
+                          }}
+                        >
+                          {mismatch ? (
+                            <strong>
+                              ⚠️ El total guardado (${storedTotal.toFixed(2)}) no coincide con lo que suman los artículos + ajustes (${expectedTotal.toFixed(2)}).
+                              {q.status === "pending" && " Si se cobra ahora, el sistema cobrará el monto correcto (recalculado), no el que se muestra arriba."}
+                            </strong>
+                          ) : (
+                            <span>
+                              {discountPct !== 0 && `${discountPct < 0 ? "Aumento" : "Descuento"}: ${Math.abs(discountPct)}% · `}
+                              {applyIva && "IVA incluido · "}
+                              Total verificado (coincide con artículos + ajustes).
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     <h3 style={{ marginBottom: "10px" }}>
                       Artículos Cotizados
