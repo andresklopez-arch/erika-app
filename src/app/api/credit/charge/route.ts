@@ -18,10 +18,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Sesión inválida. Vuelve a iniciar sesión." }, { status: 401 });
     }
 
-    const { customerId, amount, ticketId, adminPin } = await request.json();
+    const { customerId, amount, ticketId, adminPin, itemsSummary } = await request.json();
     if (!customerId || typeof amount !== "number" || isNaN(amount) || amount <= 0) {
       return NextResponse.json({ error: "Datos de cargo inválidos." }, { status: 400 });
     }
+    // El Historial de Movimientos (Cuentas por Cobrar) y el Estado de Cuenta
+    // impreso solo mostraban "Venta a Crédito Ticket #X" -- se le agrega un
+    // resumen corto de artículos para que sí se vea qué se vendió a crédito.
+    // Recortado a 300 caracteres: es una nota de bitácora, no el ticket
+    // completo (ese ya se imprimió aparte con el detalle real).
+    const itemsNote = typeof itemsSummary === "string" && itemsSummary.trim() ? `: ${itemsSummary.trim().slice(0, 300)}` : "";
 
     const { data: customer, error: customerError } = await supabaseAdmin
       .from("customers")
@@ -61,7 +67,7 @@ export async function POST(request: Request) {
       customer_id: customerId,
       type: "charge",
       amount,
-      notes: `Venta a Crédito Ticket #${ticketId ?? ""}`.trim(),
+      notes: `Venta a Crédito Ticket #${ticketId ?? ""}${itemsNote}`.trim(),
     });
     if (txError) {
       return NextResponse.json({ error: "Error al cobrar a crédito: " + txError.message }, { status: 500 });

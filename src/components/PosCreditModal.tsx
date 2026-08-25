@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { reduceInventoryStock } from "../lib/inventoryClient";
+import { matchesProduct } from "../lib/posItemMatch";
 
 interface Props {
   show: boolean;
@@ -79,14 +80,14 @@ export default function PosCreditModal({
     // negativo, algo que en efectivo/tarjeta sí quedaba bloqueado con PIN).
     const itemsExceedingStock = items.filter((item) => {
       if (item.price < 0) return false;
-      const invItem = globalCatalog.find((i) => i.name === item.name);
+      const invItem = globalCatalog.find((i) => matchesProduct(item, i));
       return !invItem || item.qty > invItem.stock;
     });
     if (itemsExceedingStock.length > 0) {
       const itemNames = itemsExceedingStock
         .map(
           (i) =>
-            `• ${i.name} (Venta: ${i.qty}, Stock: ${globalCatalog.find((cat) => cat.name === i.name)?.stock ?? 0})`,
+            `• ${i.name} (Venta: ${i.qty}, Stock: ${globalCatalog.find((cat) => matchesProduct(i, cat))?.stock ?? 0})`,
         )
         .join("\n");
       const stockPin = window.prompt(
@@ -114,6 +115,13 @@ export default function PosCreditModal({
       // a validar ahí mismo el límite de crédito/PIN de sobregiro — antes
       // cualquiera con la consola del navegador abierta podía forjar un
       // cargo a cualquier cliente saltándose por completo esa validación.
+      // Antes el "Historial de Movimientos" de Cuentas por Cobrar solo
+      // mostraba "Venta a Crédito Ticket #X" -- sin decir qué se vendió, el
+      // dueño no podía saber a qué correspondía el cargo sin ir a buscar el
+      // ticket original. Se manda un resumen corto de los artículos para
+      // que quede en la nota del cargo (y por lo tanto en el Estado de
+      // Cuenta impreso).
+      const itemsSummary = items.map((i) => `${i.qty}x ${i.name}`).join(", ");
       const res = await fetch("/api/credit/charge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -122,6 +130,7 @@ export default function PosCreditModal({
           amount: finalTotal,
           ticketId: activeTicketId,
           adminPin: overdraftPin,
+          itemsSummary,
         }),
       });
       const json = await res.json();
@@ -138,7 +147,7 @@ export default function PosCreditModal({
       try {
         const { error: invErr } = await reduceInventoryStock(
           items.map((item) => {
-            const invItem = globalCatalog.find((i) => i.name === item.name);
+            const invItem = globalCatalog.find((i) => matchesProduct(item, i));
             return { id: invItem ? invItem.id : null, qty: item.qty };
           }).filter((item): item is { id: string; qty: number } => item.id !== null),
           "sale",
