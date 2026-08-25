@@ -21,6 +21,7 @@ import { createLayaway } from "../lib/layawaysClient";
 import { reduceInventoryStock } from "../lib/inventoryClient";
 import { saveQuote } from "../lib/quotesClient";
 import { cleanMexicanPhone, openWhatsAppChat } from "../lib/whatsapp";
+import { matchesProduct } from "../lib/posItemMatch";
 
 // Único valor de método de pago que dispara lógica especial de crédito
 // (segunda copia, etiqueta "VENTA A CRÉDITO", validaciones). Se compara
@@ -737,7 +738,7 @@ export default function POSModule() {
      
      // Validación de Stock en tiempo real al clonar (Sugerencia 1)
      for (const item of ticketItems) {
-        const invItem = globalCatalog.find(i => i.name === item.name || (i.code && i.code === item.code));
+        const invItem = globalCatalog.find(i => matchesProduct(item, i));
         let qtyToLoad = item.qty;
         
         if (invItem) {
@@ -1613,9 +1614,16 @@ export default function POSModule() {
     cost: number = price * 0.7,
     addedQty: number = 1,
     image_url: string = "",
+    code: string = "",
   ) => {
     // Check stock warning when adding product (Sugerencia 1)
-    const invItem = globalCatalog.find(i => i.name === productName);
+    // Se empareja por código (no por nombre): varios productos de esta
+    // tienda comparten nombre a propósito (distintas presentaciones, ej.
+    // "X-TRONG BLANCO DIRECTO BRILLANTE" en 4 códigos con precio y stock
+    // distintos) -- por nombre, esto agarraba cualquiera de las 4 casi al
+    // azar. Ver src/lib/posItemMatch.ts para el detalle del bug real que
+    // esto causaba (2026-08-25).
+    const invItem = globalCatalog.find(i => matchesProduct({ name: productName, code }, i));
     if (invItem) {
        if (addedQty > invItem.stock) {
           toast.error(`⚠️ Existencias insuficientes para "${productName}". Se requerirá PIN de Administrador para cobrar.`);
@@ -1637,12 +1645,12 @@ export default function POSModule() {
     setTickets(
       tickets.map((t) => {
         if (t.id === activeTicketId) {
-          const existing = t.items.find((i) => i.name === productName);
+          const existing = t.items.find((i) => matchesProduct({ name: productName, code }, i));
           if (existing)
             return {
               ...t,
               items: t.items.map((i) =>
-                i.name === productName ? { ...i, qty: i.qty + addedQty } : i,
+                matchesProduct({ name: productName, code }, i) ? { ...i, qty: i.qty + addedQty } : i,
               ),
             };
           return {
@@ -1651,6 +1659,7 @@ export default function POSModule() {
               ...t.items,
               {
                 id: Date.now().toString(),
+                code,
                 name: productName,
                 price,
                 cost,
@@ -1678,7 +1687,7 @@ export default function POSModule() {
   const addProductToCart = (product: any) => {
     const saleUnit = product.sale_unit || "pieza";
     if (saleUnit === "pieza") {
-      addToCart(product.name, product.price, "pz", product.cost, 1, product.image_url);
+      addToCart(product.name, product.price, "pz", product.cost, 1, product.image_url, product.code);
       return;
     }
     const unitLabel = SALE_UNIT_SHORT[saleUnit] || saleUnit;
@@ -1689,7 +1698,7 @@ export default function POSModule() {
       alert("⚠️ Cantidad inválida.");
       return;
     }
-    addToCart(product.name, product.price, unitLabel, product.cost, qty, product.image_url);
+    addToCart(product.name, product.price, unitLabel, product.cost, qty, product.image_url, product.code);
   };
 
   const updateItemQty = (itemId: string, newQty: number) => {
@@ -1700,7 +1709,7 @@ export default function POSModule() {
     if (currentTicket) {
       const item = currentTicket.items.find(i => i.id === itemId);
       if (item) {
-        const invItem = globalCatalog.find(i => i.name === item.name);
+        const invItem = globalCatalog.find(i => matchesProduct(item, i));
         if (invItem) {
            if (newQty > invItem.stock && newQty > item.qty) {
               toast.error(`⚠️ Existencias insuficientes para "${item.name}". Se requerirá PIN de Administrador para cobrar.`);
@@ -2065,12 +2074,12 @@ export default function POSModule() {
     if (!isOffline) {
       const itemsExceedingStock = activeTicket.items.filter(item => {
          if (item.price < 0) return false;
-         const invItem = globalCatalog.find(i => i.name === item.name);
+         const invItem = globalCatalog.find(i => matchesProduct(item, i));
          return !invItem || item.qty > invItem.stock;
       });
 
       if (itemsExceedingStock.length > 0) {
-         const itemNames = itemsExceedingStock.map(i => `• ${i.name} (Venta: ${i.qty}, Stock: ${globalCatalog.find(cat => cat.name === i.name)?.stock ?? 0})`).join("\n");
+         const itemNames = itemsExceedingStock.map(i => `• ${i.name} (Venta: ${i.qty}, Stock: ${globalCatalog.find(cat => matchesProduct(i, cat))?.stock ?? 0})`).join("\n");
          
          const pin = await getPinAsync(
            "⚠️ STOCK INSUFICIENTE",
@@ -2098,7 +2107,7 @@ export default function POSModule() {
           description: `Venta Offline Ticket #${activeTicket.id} [Método: ${selectedMethod}]`,
           device_info: navigator.userAgent,
           items: activeTicket.items.map(item => {
-             const invItem = globalCatalog.find(i => i.name === item.name);
+             const invItem = globalCatalog.find(i => matchesProduct(item, i));
              return { id: invItem ? invItem.id : null, qty: item.qty };
           }).filter(item => item.id !== null)
         });
@@ -2211,6 +2220,20 @@ export default function POSModule() {
              const fallback = await saveQuote({ fields: insertObj });
              if (fallback.data) {
                 realTicketId = Number(fallback.data.id);
+             } else if (fallback.error) {
+                console.error("También falló el fallback de guardado de ticket en quotes:", fallback.error);
+                // Antes esto quedaba en silencio total (ver bug de producción del
+                // 2026-08-25: 4 días de tickets sin guardarse y nadie se enteró
+                // hasta que la clienta reportó por WhatsApp). Un SCHEMA_DRIFT es
+                // un problema de fondo en la base de datos, no un error normal de
+                // un ticket específico -- amerita avisar aunque la venta ya se
+                // haya cobrado bien (no se bloquea nada, solo se hace visible).
+                if (quoteErr.code === "SCHEMA_DRIFT" || fallback.error.code === "SCHEMA_DRIFT") {
+                   toast.error(
+                      "⚠️ La venta se cobró bien, pero el ticket no se pudo guardar en el historial (desfase de esquema en la base de datos). Avisa a soporte.",
+                      { duration: 12000 },
+                   );
+                }
              }
           } else if (quoteData) {
              realTicketId = Number(quoteData.id);
@@ -2275,7 +2298,7 @@ export default function POSModule() {
         try {
           const { error: invStockErr } = await reduceInventoryStock(
             activeTicket.items.map(item => {
-              const invItem = globalCatalog.find(i => i.name === item.name);
+              const invItem = globalCatalog.find(i => matchesProduct(item, i));
               return { id: invItem ? invItem.id : null, qty: item.qty };
             }).filter((item): item is { id: string; qty: number } => item.id !== null),
             "sale",
@@ -2326,7 +2349,7 @@ export default function POSModule() {
       // Update local state globalCatalog (Descontar existencias localmente)
       setGlobalCatalog(prevCatalog =>
         prevCatalog.map(invItem => {
-           const soldItem = activeTicket.items.find(item => item.name === invItem.name);
+           const soldItem = activeTicket.items.find(item => matchesProduct(item, invItem));
            if (soldItem) {
               return { ...invItem, stock: invItem.stock - soldItem.qty };
            }
@@ -4230,7 +4253,7 @@ export default function POSModule() {
         >
           <ul style={{ listStyle: "none" }}>
             {activeTicket.items.map((item) => {
-              const invItem = globalCatalog.find(i => i.name === item.name);
+              const invItem = globalCatalog.find(i => matchesProduct(item, i));
               const hasInsufficientStock = invItem && item.qty > invItem.stock;
               const isLowStock = invItem && invItem.stock > 0 && invItem.stock <= 5;
               return (
@@ -5134,12 +5157,12 @@ export default function POSModule() {
               if (!isOffline) {
                 const itemsExceedingStock = activeTicket.items.filter(item => {
                   if (item.price < 0) return false;
-                  const invItem = globalCatalog.find(i => i.name === item.name);
+                  const invItem = globalCatalog.find(i => matchesProduct(item, i));
                   return !invItem || item.qty > invItem.stock;
                 });
 
                 if (itemsExceedingStock.length > 0) {
-                  const itemNames = itemsExceedingStock.map(i => `• ${i.name} (Apartar: ${i.qty}, Stock: ${globalCatalog.find(cat => cat.name === i.name)?.stock ?? 0})`).join("\n");
+                  const itemNames = itemsExceedingStock.map(i => `• ${i.name} (Apartar: ${i.qty}, Stock: ${globalCatalog.find(cat => matchesProduct(i, cat))?.stock ?? 0})`).join("\n");
 
                   const pin = await getPinAsync(
                     "⚠️ STOCK INSUFICIENTE",
@@ -5170,7 +5193,7 @@ export default function POSModule() {
                   try {
                      const { error: invStockErr } = await reduceInventoryStock(
                        activeTicket.items.map(item => {
-                         const invItem = globalCatalog.find(i => i.name === item.name);
+                         const invItem = globalCatalog.find(i => matchesProduct(item, i));
                          return { id: invItem ? invItem.id : null, qty: item.qty };
                        }).filter((item): item is { id: string; qty: number } => item.id !== null),
                        "layaway",
@@ -5188,7 +5211,7 @@ export default function POSModule() {
                  // Update local state globalCatalog
                  setGlobalCatalog(prevCatalog =>
                     prevCatalog.map(invItem => {
-                       const soldItem = activeTicket.items.find(item => item.name === invItem.name);
+                       const soldItem = activeTicket.items.find(item => matchesProduct(item, invItem));
                        if (soldItem) {
                           return { ...invItem, stock: invItem.stock - soldItem.qty };
                        }
@@ -5407,7 +5430,7 @@ export default function POSModule() {
         onInventoryReduced={() => {
           setGlobalCatalog(prevCatalog =>
             prevCatalog.map(invItem => {
-              const soldItem = activeTicket.items.find(item => item.name === invItem.name);
+              const soldItem = activeTicket.items.find(item => matchesProduct(item, invItem));
               if (soldItem) {
                 return { ...invItem, stock: invItem.stock - soldItem.qty };
               }

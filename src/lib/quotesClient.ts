@@ -4,7 +4,7 @@
 // tocar el resto de su lógica de reintentos/fallback.
 export interface QuoteSaveResult {
   data: { id: string | number } | null;
-  error: { message: string } | null;
+  error: { message: string; code?: string } | null;
 }
 
 export async function saveQuote(payload: { id?: string | number; fields: Record<string, any> }): Promise<QuoteSaveResult> {
@@ -16,7 +16,7 @@ export async function saveQuote(payload: { id?: string | number; fields: Record<
     });
     const json = await res.json();
     if (!res.ok) {
-      return { data: null, error: { message: json.error || "Error al guardar la cotización." } };
+      return { data: null, error: { message: json.error || "Error al guardar la cotización.", code: json.code } };
     }
     return { data: json.item, error: null };
   } catch (e: any) {

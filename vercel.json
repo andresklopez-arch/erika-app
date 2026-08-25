@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/health/quotes-sync?secret=6ab2cd65ea171af8ca05a4e771dbbbb3dc63fb4552bd5625",
+      "schedule": "0 12 * * *"
+    }
+  ]
+}

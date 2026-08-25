@@ -3,6 +3,18 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getSessionUserId } from "@/lib/session";
 import { pickAllowedQuoteFields } from "@/lib/quotesFields";
 
+// El bug de producción del 2026-08-25 (customer_id/discount_pct/apply_iva/
+// notes referenciados por el código pero inexistentes en la tabla real)
+// devolvía un 400 genérico que POSModule.tsx solo mandaba a console.warn —
+// nadie se enteraba hasta que el cliente reportaba por WhatsApp. Este
+// detector reconoce las dos formas en que PostgREST reporta una columna
+// faltante ("does not exist" de Postgres directo, "Could not find the
+// column" de la caché de esquema de PostgREST) y las marca con un código
+// distinto para que el front SÍ pueda mostrar una alerta visible.
+function isSchemaDriftError(message: string): boolean {
+  return /column .* does not exist/i.test(message) || /Could not find the '.*' column/i.test(message);
+}
+
 // Crea o edita una fila de `quotes` (cotización, ticket de venta, o el
 // cambio de estado/notas de uno ya existente — todo vive en esta misma
 // tabla). Antes esto se escribía directo desde el navegador con la llave
@@ -33,11 +45,17 @@ export async function POST(request: Request) {
     let savedItem;
     if (id) {
       const { data, error } = await supabaseAdmin.from("quotes").update(cleanFields).eq("id", id).select("id").single();
-      if (error) return NextResponse.json({ error: "Error al actualizar la cotización: " + error.message }, { status: 400 });
+      if (error) {
+        const code = isSchemaDriftError(error.message) ? "SCHEMA_DRIFT" : undefined;
+        return NextResponse.json({ error: "Error al actualizar la cotización: " + error.message, code }, { status: 400 });
+      }
       savedItem = data;
     } else {
       const { data, error } = await supabaseAdmin.from("quotes").insert(cleanFields).select("id").single();
-      if (error) return NextResponse.json({ error: "Error al crear la cotización: " + error.message }, { status: 400 });
+      if (error) {
+        const code = isSchemaDriftError(error.message) ? "SCHEMA_DRIFT" : undefined;
+        return NextResponse.json({ error: "Error al crear la cotización: " + error.message, code }, { status: 400 });
+      }
       savedItem = data;
     }
 
