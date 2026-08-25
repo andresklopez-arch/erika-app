@@ -1443,8 +1443,22 @@ export default function POSModule() {
        }
     };
 
+    // Abre "Consulta de Tickets Anteriores" con la búsqueda ya rellena
+    // cuando se llega aquí desde el botón "Ver Ticket Original" (Cuentas
+    // por Cobrar → Historial de Movimientos). Mismo patrón de bandera en
+    // localStorage que ERIKA_RESTORE_QUOTE.
+    const openTicketSearchFromUrl = () => {
+      const ticketRef = localStorage.getItem("ERIKA_OPEN_TICKET_SEARCH");
+      if (ticketRef) {
+        localStorage.removeItem("ERIKA_OPEN_TICKET_SEARCH");
+        openTicketsHistoryModal();
+        setTicketSearchQuery(ticketRef);
+      }
+    };
+
     fetchInventoryAndCustomers();
     restoreQuote();
+    openTicketSearchFromUrl();
   }, []);
 
   // Sincronización de inventario en tiempo real entre cajas/terminales.
@@ -2117,6 +2131,94 @@ export default function POSModule() {
     }
   };
 
+  // Guarda el ticket en `quotes` (historial/reimpresión/facturación) +
+  // invoice_claims. Extraído del checkout de efectivo/tarjeta para que la
+  // venta a crédito también lo use -- antes una venta a crédito NUNCA
+  // quedaba en `quotes`: no aparecía en "Consulta de Tickets Anteriores",
+  // no se podía reimprimir, y la nota del cargo en Cuentas por Cobrar
+  // ("Venta a Crédito Ticket #N") en realidad citaba el id interno de la
+  // pestaña del carrito (casi siempre "1"), no un folio real y buscable.
+  const saveTicketToQuotes = async (params: {
+    customerName: string;
+    customerId: string | null;
+    items: any[];
+    total: number;
+    discountPct: number;
+    applyIva: boolean;
+    notes: string;
+  }): Promise<{ realTicketId: number; quoteNumber: number | null }> => {
+    let realTicketId = Date.now();
+    // quote_number es el folio entero real y buscable en "Consulta de
+    // Tickets Anteriores" -- a diferencia de `id` (uuid: Number(uuid) da
+    // NaN, así que realTicketId nunca sirvió para nada que necesitara un
+    // número real más allá de formatTicketFolio, que hashea cualquier
+    // string igual).
+    let quoteNumber: number | null = null;
+    try {
+      const insertObj: any = {
+        customer_name: params.customerName,
+        customer_id: params.customerId,
+        items: params.items,
+        total: params.total,
+        status: "ticket",
+        discount_pct: params.discountPct,
+        apply_iva: params.applyIva,
+        notes: params.notes,
+      };
+      const { data: quoteData, error: quoteErr } = await saveQuote({ fields: insertObj });
+      let finalQuoteData = quoteData;
+
+      if (quoteErr) {
+        console.warn("Falla al insertar quotes con columnas de descuento, reintentando con fallback...");
+        delete insertObj.discount_pct;
+        delete insertObj.apply_iva;
+        delete insertObj.notes;
+        const fallback = await saveQuote({ fields: insertObj });
+        if (fallback.data) {
+          realTicketId = Number(fallback.data.id);
+          finalQuoteData = fallback.data;
+        } else if (fallback.error) {
+          console.error("También falló el fallback de guardado de ticket en quotes:", fallback.error);
+          if (quoteErr.code === "SCHEMA_DRIFT" || fallback.error.code === "SCHEMA_DRIFT") {
+            toast.error(
+              "⚠️ La venta se cobró bien, pero el ticket no se pudo guardar en el historial (desfase de esquema en la base de datos). Avisa a soporte.",
+              { duration: 12000 },
+            );
+          }
+        }
+      } else if (quoteData) {
+        realTicketId = Number(quoteData.id);
+      }
+
+      if (finalQuoteData) {
+        realTicketId = Number(finalQuoteData.id);
+        quoteNumber = typeof (finalQuoteData as any).quote_number === "number" ? (finalQuoteData as any).quote_number : null;
+
+        try {
+          const { error: insertErr } = await supabase.from("invoice_claims").insert({
+            ticket_id: realTicketId,
+            token: invoiceToken,
+            claimed: false,
+          });
+          if (insertErr) {
+            console.warn("Error insertando claim en la nube, guardando offline:", insertErr);
+            saveInvoiceClaimOffline({ ticket_id: realTicketId, token: invoiceToken, claimed: false }).catch((idbErr) =>
+              console.error("Fallo al guardar reclamo offline en IndexedDB:", idbErr),
+            );
+          }
+        } catch (err) {
+          console.warn("No se pudo registrar token de facturacion en invoice_claims, guardando offline:", err);
+          saveInvoiceClaimOffline({ ticket_id: realTicketId, token: invoiceToken, claimed: false }).catch((idbErr) =>
+            console.error("Fallo al guardar reclamo offline en IndexedDB:", idbErr),
+          );
+        }
+      }
+    } catch (quoteErr) {
+      console.error("Error al registrar el ticket en quotes:", quoteErr);
+    }
+    return { realTicketId, quoteNumber };
+  };
+
   const handleCheckoutSubmit = async (selectedMethod: "efectivo" | "tarjeta" | "transferencia" | "mixto", cashAmt: number, cardAmt: number, transferAmt: number, reference: string) => {
     if (activeTicket.items.length === 0)
       return alert("El ticket está vacío.");
@@ -2258,79 +2360,15 @@ export default function POSModule() {
           }
         }
 
-        let realTicketId = Date.now();
-        
-        // Registrar en quotes (completamente aislado)
-        try {
-          const insertObj: any = {
-             customer_name: selectedCustomerId ? (customers.find(c => c.id === selectedCustomerId)?.name || "Venta Registrada") : "Venta Mostrador",
-             customer_id: selectedCustomerId || null,
-             items: activeTicket.items,
-             total: totalAmt,
-             status: "ticket",
-             discount_pct: activeTicket.discountPct || 0,
-             apply_iva: applyIva,
-             notes: `Pago: ${selectedMethod.toUpperCase()}${reference ? ` (Ref: ${reference})` : ""}`
-          };
-          const { data: quoteData, error: quoteErr } = await saveQuote({ fields: insertObj });
-
-          if (quoteErr) {
-             console.warn("Falla al insertar quotes con columnas de descuento, reintentando con fallback...");
-             delete insertObj.discount_pct;
-             delete insertObj.apply_iva;
-             delete insertObj.notes;
-             const fallback = await saveQuote({ fields: insertObj });
-             if (fallback.data) {
-                realTicketId = Number(fallback.data.id);
-             } else if (fallback.error) {
-                console.error("También falló el fallback de guardado de ticket en quotes:", fallback.error);
-                // Antes esto quedaba en silencio total (ver bug de producción del
-                // 2026-08-25: 4 días de tickets sin guardarse y nadie se enteró
-                // hasta que la clienta reportó por WhatsApp). Un SCHEMA_DRIFT es
-                // un problema de fondo en la base de datos, no un error normal de
-                // un ticket específico -- amerita avisar aunque la venta ya se
-                // haya cobrado bien (no se bloquea nada, solo se hace visible).
-                if (quoteErr.code === "SCHEMA_DRIFT" || fallback.error.code === "SCHEMA_DRIFT") {
-                   toast.error(
-                      "⚠️ La venta se cobró bien, pero el ticket no se pudo guardar en el historial (desfase de esquema en la base de datos). Avisa a soporte.",
-                      { duration: 12000 },
-                   );
-                }
-             }
-          } else if (quoteData) {
-             realTicketId = Number(quoteData.id);
-          }
-
-          if (quoteData) {
-             realTicketId = Number(quoteData.id);
-             
-             // Registrar en invoice_claims (completamente aislado)
-             try {
-                const { error: insertErr } = await supabase.from("invoice_claims").insert({
-                   ticket_id: realTicketId,
-                   token: invoiceToken,
-                   claimed: false
-                });
-                if (insertErr) {
-                   console.warn("Error insertando claim en la nube, guardando offline:", insertErr);
-                   saveInvoiceClaimOffline({
-                      ticket_id: realTicketId,
-                      token: invoiceToken,
-                      claimed: false
-                   }).catch(idbErr => console.error("Fallo al guardar reclamo offline en IndexedDB:", idbErr));
-                }
-             } catch (err) {
-                console.warn("No se pudo registrar token de facturacion en invoice_claims, guardando offline:", err);
-                saveInvoiceClaimOffline({
-                   ticket_id: realTicketId,
-                   token: invoiceToken,
-                   claimed: false
-                }).catch(idbErr => console.error("Fallo al guardar reclamo offline en IndexedDB:", idbErr));
-             }
-          }
-        } catch (quoteErr) {
-          console.error("Error al registrar el ticket en quotes:", quoteErr);
-        }
+        const { realTicketId } = await saveTicketToQuotes({
+          customerName: selectedCustomerId ? (customers.find(c => c.id === selectedCustomerId)?.name || "Venta Registrada") : "Venta Mostrador",
+          customerId: selectedCustomerId || null,
+          items: activeTicket.items,
+          total: totalAmt,
+          discountPct: activeTicket.discountPct || 0,
+          applyIva: applyIva,
+          notes: `Pago: ${selectedMethod.toUpperCase()}${reference ? ` (Ref: ${reference})` : ""}`,
+        });
 
         // Puntos de lealtad (completamente aislado)
         let puntosGanados = 0;
@@ -5576,10 +5614,12 @@ export default function POSModule() {
         onClose={() => setShowCreditModal(false)}
         finalTotal={finalTotal}
         customers={customers}
-        activeTicketId={activeTicket.id}
         items={activeTicket.items}
         globalCatalog={globalCatalog}
         currentUserName={currentUser?.name}
+        discountPct={activeTicket.discountPct || 0}
+        applyIva={applyIva}
+        saveTicketToQuotes={saveTicketToQuotes}
         onInventoryReduced={() => {
           setGlobalCatalog(prevCatalog =>
             prevCatalog.map(invItem => {
@@ -5591,16 +5631,23 @@ export default function POSModule() {
             })
           );
         }}
-        onSuccess={(customer) => {
+        onSuccess={(customer, realTicketId) => {
           // Antes una venta a crédito nunca disparaba ninguna impresión
           // (ni siquiera el primer ticket) — PosCreditModal solo cerraba
           // el modal. "Doble copia para Apartados y Crédito" nunca podía
           // funcionar en crédito porque este triggerPrint no existía.
+          //
+          // realTicketId ahora es el id REAL guardado en quotes (vía
+          // saveTicketToQuotes, llamado dentro de PosCreditModal antes de
+          // cobrar) -- antes se usaba activeTicketId (el id interno de la
+          // pestaña del carrito, casi siempre "1"), que no correspondía a
+          // ningún ticket real ni aparecía en "Consulta de Tickets
+          // Anteriores".
           try {
             triggerPrint({
               type: "ticket",
               data: {
-                realTicketId: activeTicketId,
+                realTicketId,
                 items: [...activeTicket.items],
                 finalTotal,
                 paymentMethod: PAYMENT_METHOD_CREDITO,
@@ -6621,13 +6668,18 @@ export default function POSModule() {
                     if (ticketSearchQuery.trim()) {
                       const q = ticketSearchQuery.trim().toLowerCase();
                       const matchId = ticket.id ? ticket.id.toString().includes(q) : false;
+                      // quote_number es el folio real y buscable (ver "Ver
+                      // Ticket Original" en Cuentas por Cobrar) -- match
+                      // exacto, no substring, para no confundir el folio
+                      // #1 con el #100 solo por compartir dígitos.
+                      const matchQuoteNumber = ticket.quote_number != null && ticket.quote_number.toString() === q;
                       const matchCustomer = ticket.customer_name ? ticket.customer_name.toLowerCase().includes(q) : false;
                       const matchNotes = ticket.notes ? ticket.notes.toLowerCase().includes(q) : false;
-                      const matchArticle = itemsArr.some((it: any) => 
-                        (it.name && it.name.toLowerCase().includes(q)) || 
+                      const matchArticle = itemsArr.some((it: any) =>
+                        (it.name && it.name.toLowerCase().includes(q)) ||
                         (it.code && it.code.toLowerCase().includes(q))
                       );
-                      return matchId || matchCustomer || matchNotes || matchArticle;
+                      return matchId || matchQuoteNumber || matchCustomer || matchNotes || matchArticle;
                     }
 
                     return true;

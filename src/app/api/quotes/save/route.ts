@@ -44,14 +44,18 @@ export async function POST(request: Request) {
 
     let savedItem;
     if (id) {
-      const { data, error } = await supabaseAdmin.from("quotes").update(cleanFields).eq("id", id).select("id").single();
+      // Se agrega quote_number: es el folio real y buscable (entero
+      // secuencial). `id` es un uuid -- Number(uuid) da NaN, así que nunca
+      // sirvió para nada que necesitara un número real (ver
+      // POSModule.tsx/saveTicketToQuotes).
+      const { data, error } = await supabaseAdmin.from("quotes").update(cleanFields).eq("id", id).select("id, quote_number").single();
       if (error) {
         const code = isSchemaDriftError(error.message) ? "SCHEMA_DRIFT" : undefined;
         return NextResponse.json({ error: "Error al actualizar la cotización: " + error.message, code }, { status: 400 });
       }
       savedItem = data;
     } else {
-      const { data, error } = await supabaseAdmin.from("quotes").insert(cleanFields).select("id").single();
+      const { data, error } = await supabaseAdmin.from("quotes").insert(cleanFields).select("id, quote_number").single();
       if (error) {
         const code = isSchemaDriftError(error.message) ? "SCHEMA_DRIFT" : undefined;
         return NextResponse.json({ error: "Error al crear la cotización: " + error.message, code }, { status: 400 });

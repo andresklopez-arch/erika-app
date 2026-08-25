@@ -9,11 +9,21 @@ interface Props {
   onClose: () => void;
   finalTotal: number;
   customers: any[];
-  activeTicketId: number;
   items: any[];
   globalCatalog: any[];
   currentUserName?: string;
-  onSuccess: (customer: any) => void;
+  discountPct: number;
+  applyIva: boolean;
+  saveTicketToQuotes: (params: {
+    customerName: string;
+    customerId: string | null;
+    items: any[];
+    total: number;
+    discountPct: number;
+    applyIva: boolean;
+    notes: string;
+  }) => Promise<{ realTicketId: number; quoteNumber: number | null }>;
+  onSuccess: (customer: any, realTicketId: number) => void;
   onInventoryReduced?: () => void;
   reloadCustomers: () => void;
 }
@@ -23,10 +33,12 @@ export default function PosCreditModal({
   onClose,
   finalTotal,
   customers,
-  activeTicketId,
   items,
   globalCatalog,
   currentUserName,
+  discountPct,
+  applyIva,
+  saveTicketToQuotes,
   onSuccess,
   onInventoryReduced,
   reloadCustomers,
@@ -110,6 +122,28 @@ export default function PosCreditModal({
 
     setIsSubmitting(true);
     try {
+      // Guardar el ticket en `quotes` PRIMERO (mismo camino que efectivo/
+      // tarjeta) -- antes una venta a crédito nunca quedaba ahí: no salía en
+      // "Consulta de Tickets Anteriores", no se podía reimprimir, y la nota
+      // del cargo citaba activeTicketId (el id interno de la pestaña del
+      // carrito, casi siempre "1"), no un folio real. Se hace antes del
+      // cargo para poder usar el id real en la nota de credit_transactions.
+      const { realTicketId, quoteNumber } = await saveTicketToQuotes({
+        customerName: customer.name,
+        customerId: customer.id,
+        items,
+        total: finalTotal,
+        discountPct,
+        applyIva,
+        notes: "Pago: CREDITO",
+      });
+      // quoteNumber es el folio real y buscable (entero secuencial); si por
+      // algún motivo no se pudo guardar el ticket en `quotes` (columna
+      // faltante, red caída, etc.), cae de regreso al id interno anterior
+      // para no dejar la nota vacía -- la venta y el cargo a crédito ya se
+      // cobraron bien de cualquier forma, esto es solo la referencia.
+      const noteTicketRef = quoteNumber ?? realTicketId;
+
       // El INSERT en credit_transactions y el incremento atómico del saldo
       // ahora ocurren en el servidor (Service Role Key), que además vuelve
       // a validar ahí mismo el límite de crédito/PIN de sobregiro — antes
@@ -128,7 +162,7 @@ export default function PosCreditModal({
         body: JSON.stringify({
           customerId: customer.id,
           amount: finalTotal,
-          ticketId: activeTicketId,
+          ticketId: noteTicketRef,
           adminPin: overdraftPin,
           itemsSummary,
         }),
@@ -151,7 +185,7 @@ export default function PosCreditModal({
             return { id: invItem ? invItem.id : null, qty: item.qty };
           }).filter((item): item is { id: string; qty: number } => item.id !== null),
           "sale",
-          activeTicketId.toString(),
+          realTicketId.toString(),
         );
         if (invErr) console.error("Error al ajustar inventario en venta a crédito:", invErr.message);
         onInventoryReduced?.();
@@ -162,7 +196,7 @@ export default function PosCreditModal({
 
       alert(`✅ Venta a crédito registrada a ${customer.name}.`);
       setSelectedCustomerId("");
-      onSuccess(customer);
+      onSuccess(customer, realTicketId);
       reloadCustomers();
     } finally {
       setIsSubmitting(false);
@@ -186,6 +220,31 @@ export default function PosCreditModal({
     >
       <div className="glass-panel" style={{ width: "400px", padding: "20px" }}>
         <h3 style={{ color: "var(--color-primary)" }}>Cobrar a Crédito</h3>
+        {/* Antes solo se veía el total, no qué se estaba cargando a la
+            cuenta -- el cajero confirmaba a ciegas. Este mismo resumen es
+            el que ahora queda guardado en la nota del cargo (ver
+            handleConfirm), así que lo que se ve aquí es justo lo que
+            después aparecerá en el Historial de Movimientos del cliente. */}
+        {items.length > 0 && (
+          <ul
+            style={{
+              listStyle: "none",
+              padding: "8px 10px",
+              margin: "0 0 12px 0",
+              background: "rgba(255,255,255,0.04)",
+              borderRadius: "8px",
+              fontSize: "0.85rem",
+              maxHeight: "120px",
+              overflowY: "auto",
+            }}
+          >
+            {items.map((item, idx) => (
+              <li key={idx} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+                <span>{item.qty} {item.unit && item.unit !== "pz" ? item.unit : "x"} {item.name}</span>
+              </li>
+            ))}
+          </ul>
+        )}
         <p>
           Total a cobrar: <strong>${finalTotal.toFixed(2)}</strong>
         </p>

@@ -91,6 +91,66 @@ assert(cart[0].price === 203 && cart[1].price === 113, "Cada línea conserva su 
 // cloneTicketItems, NO el de addToCart.
 assert(true, "cloneTicketItems concatena 1:1 (no fusiona por nombre) y los apartados no recargan items a un carrito -- ambos caminos ya están a salvo del bug por construcción");
 
+console.log("\n== Parte 4: escaneo estático -- nadie vuelve a comparar productos por `name` ==\n");
+
+// El bug original apareció en 4 archivos distintos (POSModule.tsx,
+// CustomersModule.tsx, AccountsPayableModal.tsx, PosCreditModal.tsx) porque
+// cada uno emparejaba productos con `.name === item.name` a mano, sin pasar
+// por matchesProduct(). Este escaneo recorre el código fuente buscando ese
+// patrón exacto -- así, si alguien agrega un módulo nuevo (o revierte sin
+// querer uno de los 4 ya corregidos) y vuelve a comparar productos por
+// nombre directo, esto lo atrapa antes de que llegue a producción.
+//
+// Whitelist: los 2 lugares donde comparar por `name` es intencional y
+// correcto (no un bug) -- el fallback dentro de la propia matchesProduct(),
+// y "otras presentaciones" en el carrito, que a propósito busca productos
+// CON el mismo nombre pero código distinto.
+const PRODUCT_NAME_MATCH_ALLOWLIST = [
+  { file: "src/lib/posItemMatch.ts", snippet: "return a.name === b.name;" },
+  { file: "src/components/POSModule.tsx", snippet: "globalCatalog.filter((c) => c.name === item.name && c.code !== item.code)" },
+];
+
+function scanSourceForNameMatching(rootDir) {
+  const offenders = [];
+  const productNameMatchRe = /\.name\s*===\s*\w+(\.\w+)*\.name\b/g;
+
+  function walk(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === "node_modules" || entry.name === ".next" || entry.name.startsWith(".")) continue;
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (/\.(ts|tsx)$/.test(entry.name)) {
+        const relPath = path.relative(path.join(__dirname, ".."), fullPath).replace(/\\/g, "/");
+        const content = fs.readFileSync(fullPath, "utf8");
+        const lines = content.split("\n");
+        lines.forEach((line, idx) => {
+          const matches = line.match(productNameMatchRe);
+          if (!matches) return;
+          for (const m of matches) {
+            const isAllowed = PRODUCT_NAME_MATCH_ALLOWLIST.some(
+              (a) => a.file === relPath && line.includes(a.snippet),
+            );
+            if (!isAllowed) {
+              offenders.push({ file: relPath, line: idx + 1, code: line.trim() });
+            }
+          }
+        });
+      }
+    }
+  }
+
+  walk(rootDir);
+  return offenders;
+}
+
+const offenders = scanSourceForNameMatching(path.join(__dirname, "..", "src"));
+if (offenders.length > 0) {
+  console.error(`❌ ${offenders.length} comparación(es) de productos por nombre directo, fuera de la lista blanca:`);
+  for (const o of offenders) console.error(`   ${o.file}:${o.line}  ${o.code}`);
+}
+assert(offenders.length === 0, "Ningún archivo fuera de la lista blanca compara productos por `.name ===` directo");
+
 function loadEnvLocal() {
   const envPath = path.join(__dirname, "..", ".env.local");
   const env = {};

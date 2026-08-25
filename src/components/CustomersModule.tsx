@@ -1229,7 +1229,39 @@ export default function CustomersModule() {
                                   </span>
                                 )}
                               </td>
-                              <td style={{ padding: "10px" }}>{tx.notes}</td>
+                              <td style={{ padding: "10px" }}>
+                                {tx.notes}
+                                {(() => {
+                                  // "Ver Ticket Original": el folio real (quote_number) ahora
+                                  // viaja dentro de la nota ("Venta a Crédito Ticket #N: ...",
+                                  // ver PosCreditModal.tsx). Al hacer clic, se manda al Punto de
+                                  // Venta con la búsqueda de "Consulta de Tickets Anteriores" ya
+                                  // rellena con ese folio.
+                                  const match = tx.notes?.match(/Ticket #(\d+)/);
+                                  if (!match) return null;
+                                  return (
+                                    <button
+                                      onClick={() => {
+                                        localStorage.setItem("ERIKA_OPEN_TICKET_SEARCH", match[1]);
+                                        window.location.href = "/";
+                                      }}
+                                      style={{
+                                        display: "block",
+                                        marginTop: "4px",
+                                        background: "transparent",
+                                        border: "none",
+                                        color: "#3b82f6",
+                                        fontSize: "0.78rem",
+                                        cursor: "pointer",
+                                        padding: 0,
+                                        textDecoration: "underline",
+                                      }}
+                                    >
+                                      🎫 Ver Ticket Original
+                                    </button>
+                                  );
+                                })()}
+                              </td>
                               <td
                                 style={{
                                   padding: "10px",
