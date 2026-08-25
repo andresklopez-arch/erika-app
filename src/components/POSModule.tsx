@@ -2194,21 +2194,28 @@ export default function POSModule() {
         realTicketId = Number(finalQuoteData.id);
         quoteNumber = typeof (finalQuoteData as any).quote_number === "number" ? (finalQuoteData as any).quote_number : null;
 
+        // invoice_claims.ticket_id debe ser el uuid REAL de quotes.id --
+        // /facturacion/[id] lo usa después para buscar `.eq("id",
+        // claim.ticket_id)`. Antes se guardaba realTicketId (Number(uuid)
+        // = NaN), así que ese lookup nunca podía encontrar nada aunque la
+        // tabla hubiera existido.
+        const quoteUuid = String(finalQuoteData.id);
+
         try {
           const { error: insertErr } = await supabase.from("invoice_claims").insert({
-            ticket_id: realTicketId,
+            ticket_id: quoteUuid,
             token: invoiceToken,
             claimed: false,
           });
           if (insertErr) {
             console.warn("Error insertando claim en la nube, guardando offline:", insertErr);
-            saveInvoiceClaimOffline({ ticket_id: realTicketId, token: invoiceToken, claimed: false }).catch((idbErr) =>
+            saveInvoiceClaimOffline({ ticket_id: quoteUuid, token: invoiceToken, claimed: false }).catch((idbErr) =>
               console.error("Fallo al guardar reclamo offline en IndexedDB:", idbErr),
             );
           }
         } catch (err) {
           console.warn("No se pudo registrar token de facturacion en invoice_claims, guardando offline:", err);
-          saveInvoiceClaimOffline({ ticket_id: realTicketId, token: invoiceToken, claimed: false }).catch((idbErr) =>
+          saveInvoiceClaimOffline({ ticket_id: quoteUuid, token: invoiceToken, claimed: false }).catch((idbErr) =>
             console.error("Fallo al guardar reclamo offline en IndexedDB:", idbErr),
           );
         }
