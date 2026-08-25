@@ -3825,7 +3825,7 @@ export default function POSModule() {
                   cursor: "pointer"
                 }}
                 onClick={() => addProductToCart(c)}
-                title={`${c.name} • Precio: $${c.price} • Stock: ${c.stock ?? 0}`}
+                title={`${c.name}${c.code ? ` (${c.code})` : ""} • Precio: $${c.price} • Stock: ${c.stock ?? 0}`}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", width: "100%", gap: "3px" }}>
                   <span style={{ color: "var(--color-primary)", fontWeight: "bold", fontSize: "0.62rem" }}>
@@ -3845,6 +3845,20 @@ export default function POSModule() {
                 }}>
                   {c.name}
                 </span>
+                {c.code && (
+                  // Varios productos comparten nombre a propósito (distintas
+                  // presentaciones, ver src/lib/posItemMatch.ts) -- sin el
+                  // código visible aquí, un atajo rápido con el mismo nombre
+                  // que otro es indistinguible antes de darle clic.
+                  <span style={{
+                    fontSize: "0.56rem",
+                    fontFamily: "monospace",
+                    opacity: 0.55,
+                    display: "block",
+                  }}>
+                    {c.code}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -4287,6 +4301,20 @@ export default function POSModule() {
                     <div className="flex-between" style={{ flex: 1 }}>
                       <div>
                         <strong style={{ fontSize: "1.1rem" }}>{item.name}</strong>
+                        {item.code && (
+                          <span
+                            style={{
+                              marginLeft: "8px",
+                              fontSize: "0.72rem",
+                              color: "var(--color-secondary)",
+                              fontFamily: "monospace",
+                              opacity: 0.7,
+                            }}
+                            title="Código de esta presentación exacta — dos productos con el mismo nombre pueden tener código distinto (ver Existencias)."
+                          >
+                            {item.code}
+                          </span>
+                        )}
                         {(() => {
                           const smartDisc = getSmartVolumeDiscount(item, smartVolumeRules);
                           if (smartDisc.discountPct > 0) {

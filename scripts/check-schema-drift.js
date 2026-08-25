@@ -107,6 +107,32 @@ async function main() {
     }
   }
 
+  // Sugerencia adicional tras el bug del 2026-08-25 (POSModule.tsx emparejaba
+  // productos por `name`, y el catálogo real tiene 100+ productos con nombre
+  // duplicado -- ver src/lib/posItemMatch.ts). El fix empareja por `code`,
+  // pero cae de regreso a `name` cuando a un producto le falta código -- así
+  // que un producto sin código, si comparte nombre con otro, sigue expuesto
+  // al bug original. Esto NO hace fallar el script (no es "desfase de
+  // esquema"): es solo visibilidad de qué tan expuesto sigue el catálogo.
+  console.log("\n== Productos sin código (siguen expuestos al bug de emparejamiento por nombre) ==\n");
+  let emptyCodeCount = 0;
+  let emptyCodeSummaryLine = "";
+  try {
+    const { data: inv, error: invError } = await admin.from("inventory").select("name, code").or("deleted.is.null,deleted.eq.false");
+    if (invError) throw invError;
+    const emptyCodeItems = (inv || []).filter((i) => !i.code || String(i.code).trim() === "");
+    emptyCodeCount = emptyCodeItems.length;
+    if (emptyCodeCount === 0) {
+      console.log(`✅ 0 de ${inv.length} productos activos sin código.`);
+      emptyCodeSummaryLine = `✅ 0 de ${inv.length} productos activos sin código.`;
+    } else {
+      console.warn(`⚠️  ${emptyCodeCount} de ${inv.length} productos activos sin código: ${emptyCodeItems.slice(0, 10).map((i) => i.name).join(", ")}${emptyCodeCount > 10 ? "…" : ""}`);
+      emptyCodeSummaryLine = `⚠️ ${emptyCodeCount} de ${inv.length} productos activos sin código.`;
+    }
+  } catch (err) {
+    console.warn(`⚠️  No se pudo consultar inventory para contar códigos vacíos: ${err.message}`);
+  }
+
   if (process.env.GITHUB_STEP_SUMMARY) {
     const summary = [
       "## 🧬 Auditoría de desfase de esquema (código vs. base real)",
@@ -118,6 +144,8 @@ async function main() {
       totalMissing > 0
         ? `❌ **${totalMissing} columna(s) referenciada(s) por el código no existen en Supabase.**`
         : "✅ Todas las columnas que el código espera existen en la base real.",
+      "",
+      `**Productos sin código:** ${emptyCodeSummaryLine}`,
     ].join("\n");
     fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + "\n");
   }
