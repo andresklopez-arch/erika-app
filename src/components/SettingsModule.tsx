@@ -159,6 +159,10 @@ export default function SettingsModule() {
   }
   const [errorLogs, setErrorLogs] = useState<ErrorLogItem[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  // Fallas de impresión Bluetooth en las últimas 24h (ver LoggerService.logError
+  // en CustomersModule.tsx / AccountsPayableModal.tsx / receiptPrinting.tsx,
+  // todos usan el prefijo "Print_" en el módulo). null = aún no se consultó.
+  const [printFailureCount24h, setPrintFailureCount24h] = useState<number | null>(null);
 
   interface RlsTableStatus {
     table: string;
@@ -525,6 +529,20 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
     }
   };
 
+  const fetchPrintFailureCount = async () => {
+    try {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count, error } = await supabase
+        .from("error_logs")
+        .select("*", { count: "exact", head: true })
+        .like("module", "Print_%")
+        .gte("created_at", since);
+      if (!error) setPrintFailureCount24h(count ?? 0);
+    } catch (e) {
+      console.error("Error contando fallas de impresión:", e);
+    }
+  };
+
   const fetchErrorLogs = async () => {
     setIsLoadingLogs(true);
     try {
@@ -533,10 +551,11 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
         .select("*")
         .order("created_at", { ascending: false })
         .limit(10);
-      
+
       if (data && !error) {
         setErrorLogs(data);
       }
+      fetchPrintFailureCount();
     } catch (e) {
       console.error("Error fetching logs:", e);
     } finally {
@@ -2219,9 +2238,25 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
               <h3 style={{ margin: 0, color: "var(--color-primary)", display: "flex", alignItems: "center", gap: "10px" }}>
                 📋 Bitácora de Auditoría y Eventos del Sistema
+                {printFailureCount24h !== null && (
+                  <span
+                    title="Fallas de impresión Bluetooth registradas en las últimas 24 horas"
+                    style={{
+                      fontSize: "0.7rem",
+                      fontWeight: "bold",
+                      padding: "3px 8px",
+                      borderRadius: "10px",
+                      background: printFailureCount24h > 0 ? "rgba(239,68,68,0.15)" : "rgba(16,185,129,0.1)",
+                      color: printFailureCount24h > 0 ? "#f87171" : "#10b981",
+                      border: printFailureCount24h > 0 ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(16,185,129,0.2)",
+                    }}
+                  >
+                    🖨️ {printFailureCount24h} falla(s) de impresión (24h)
+                  </span>
+                )}
               </h3>
-              <button 
-                onClick={fetchErrorLogs} 
+              <button
+                onClick={fetchErrorLogs}
                 disabled={isLoadingLogs}
                 style={{ background: "rgba(16,185,129,0.15)", color: "var(--color-primary)", border: "1px solid var(--color-primary)", padding: "5px 10px", borderRadius: "4px", cursor: "pointer", fontSize: "0.8rem" }}
               >

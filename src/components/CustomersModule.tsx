@@ -9,6 +9,7 @@ import { payLayaway, cancelLayaway } from "../lib/layawaysClient";
 import { reduceInventoryStock } from "../lib/inventoryClient";
 import { printEscPosBytes, sanitizeForThermal } from "../utils/bluetoothPrinter";
 import { LoggerService } from "../services/loggerService";
+import { showPrintFailureToast } from "../lib/printFailureToast";
 
 export default function CustomersModule() {
   const businessProfile = useBusinessProfile();
@@ -520,14 +521,14 @@ export default function CustomersModule() {
         const chunkSize = Number(localStorage.getItem("ERIKA_PRINTER_BLE_CHUNK_SIZE")) || 20;
         const printResult = await printEscPosBytes(bytes, chunkSize, 20);
         if (!printResult.success) {
-          alert("Fallo al imprimir por Bluetooth: " + printResult.error);
+          showPrintFailureToast(printResult.error, () => printCustomerAccountStatement(customer));
           LoggerService.logError("Print_EstadoCuenta_Bluetooth", printResult.error, currentUser?.name || "Cajero");
           return;
         }
         toast.success("🖨️ Estado de Cuenta enviado a la impresora Bluetooth.");
       } catch (err: any) {
         console.error(err);
-        alert("Fallo al imprimir por Bluetooth: " + err.message);
+        showPrintFailureToast(err.message, () => printCustomerAccountStatement(customer));
         LoggerService.logError("Print_EstadoCuenta_Bluetooth", err.message, currentUser?.name || "Cajero");
       }
       return;

@@ -5,6 +5,7 @@
 
 import { printEscPosBytes, sanitizeForThermal } from "../utils/bluetoothPrinter";
 import { LoggerService } from "../services/loggerService";
+import { showPrintFailureToast } from "./printFailureToast";
 
 export interface AbonoReceiptData {
   businessName: string;
@@ -144,12 +145,12 @@ export async function printAbonoReceipt(data: AbonoReceiptData, config: Record<s
       const bytes = buildAbonoEscPosBytes(data, isDoubleCopyEnabled(config));
       const printResult = await printEscPosBytes(bytes, chunkSize, 20);
       if (!printResult.success) {
-        alert("Fallo al imprimir por Bluetooth: " + printResult.error);
+        showPrintFailureToast(printResult.error, () => printAbonoReceipt(data, config));
         LoggerService.logError("Print_AbonoApartado_Bluetooth", printResult.error);
       }
     } catch (err: any) {
       console.error(err);
-      alert("Fallo al imprimir por Bluetooth: " + err.message);
+      showPrintFailureToast(err.message, () => printAbonoReceipt(data, config));
       LoggerService.logError("Print_AbonoApartado_Bluetooth", err.message);
     }
     return;

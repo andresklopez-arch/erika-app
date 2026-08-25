@@ -1,0 +1,6 @@
+npm run test-bluetooth-print
+if [ -f .env.local ]; then
+  npm run check-schema && npm run test-pos-matching
+else
+  echo "Aviso: .env.local no encontrado, se omiten check-schema/test-pos-matching (requieren la base de datos real)."
+fi

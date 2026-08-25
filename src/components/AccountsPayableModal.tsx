@@ -5,6 +5,8 @@ import { useBusinessProfile } from "./AuthProvider";
 import { saveSupplierDebt, paySupplierDebt } from "../lib/supplierDebtsClient";
 import { printEscPosBytes, sanitizeForThermal } from "../utils/bluetoothPrinter";
 import { LoggerService } from "../services/loggerService";
+import { showPrintFailureToast } from "../lib/printFailureToast";
+import { isDoubleCopyEnabled } from "../lib/receiptPrinting";
 
 interface Supplier {
   id: string;
@@ -148,28 +150,45 @@ export default function AccountsPayableModal({ onClose }: AccountsPayableModalPr
             return label + (spaces > 0 ? " ".repeat(spaces) : " ") + value + "\n";
           };
 
+          // Mismo comportamiento de copia doble que ya tiene el comprobante
+          // de abono de apartado (ver receiptPrinting.tsx) -- útil aquí para
+          // que el proveedor se lleve una copia física del abono.
+          const writeCopy = (isCopyFlag: boolean) => {
+            if (isCopyFlag) {
+              write([0x1b, 0x61, 0x01]);
+              write([0x1b, 0x45, 0x01]);
+              writeText("*** COPIA PARA EL PROVEEDOR ***\n");
+              write([0x1b, 0x45, 0x00]);
+            }
+            write([0x1b, 0x61, 0x01]);
+            write([0x1b, 0x45, 0x01]);
+            writeText(`${businessProfile.name.toUpperCase()}\n`);
+            write([0x1b, 0x45, 0x00]);
+            writeText("TICKET DE ABONO A PROVEEDOR\n");
+            writeText(divider);
+
+            write([0x1b, 0x61, 0x00]);
+            writeText(`Fecha: ${new Date().toLocaleString()}\n`);
+            writeText(`Proveedor: ${debt.supplier_name}\n`);
+            writeText(`Concepto: ${debt.concept}\n`);
+            writeText(divider);
+
+            writeText(formatRow("Total Abonado:", `$${payAmt.toFixed(2)}`));
+            writeText(formatRow("Nuevo Saldo:", `$${newBalance.toFixed(2)}`));
+            writeText(divider);
+
+            write([0x1b, 0x61, 0x01]);
+            writeText("Firma de Recibido:\n\n\n\n");
+            writeText("_______________________\n");
+            writeText("Gracias por su preferencia\n");
+          };
+
           write([0x1b, 0x40]);
-          write([0x1b, 0x61, 0x01]);
-          write([0x1b, 0x45, 0x01]);
-          writeText(`${businessProfile.name.toUpperCase()}\n`);
-          write([0x1b, 0x45, 0x00]);
-          writeText("TICKET DE ABONO A PROVEEDOR\n");
-          writeText(divider);
-
-          write([0x1b, 0x61, 0x00]);
-          writeText(`Fecha: ${new Date().toLocaleString()}\n`);
-          writeText(`Proveedor: ${debt.supplier_name}\n`);
-          writeText(`Concepto: ${debt.concept}\n`);
-          writeText(divider);
-
-          writeText(formatRow("Total Abonado:", `$${payAmt.toFixed(2)}`));
-          writeText(formatRow("Nuevo Saldo:", `$${newBalance.toFixed(2)}`));
-          writeText(divider);
-
-          write([0x1b, 0x61, 0x01]);
-          writeText("Firma de Recibido:\n\n\n\n");
-          writeText("_______________________\n");
-          writeText("Gracias por su preferencia\n");
+          writeCopy(false);
+          if (isDoubleCopyEnabled(null)) {
+            write([0x1b, 0x64, 2]);
+            writeCopy(true);
+          }
 
           const bottomLines = Number(localStorage.getItem("ERIKA_PRINTER_BOTTOM_LINES")) || 1;
           if (bottomLines > 0) write([0x1b, 0x64, bottomLines]);
@@ -183,32 +202,19 @@ export default function AccountsPayableModal({ onClose }: AccountsPayableModalPr
           const chunkSize = Number(localStorage.getItem("ERIKA_PRINTER_BLE_CHUNK_SIZE")) || 20;
           const printResult = await printEscPosBytes(bytes, chunkSize, 20);
           if (!printResult.success) {
-            alert("Fallo al imprimir por Bluetooth: " + printResult.error);
+            showPrintFailureToast(printResult.error, () => printThermalTicket(debt, payAmt, newBalance));
             LoggerService.logError("Print_AbonoProveedor_Bluetooth", printResult.error);
           }
         } catch (err: any) {
           console.error(err);
-          alert("Fallo al imprimir por Bluetooth: " + err.message);
+          showPrintFailureToast(err.message, () => printThermalTicket(debt, payAmt, newBalance));
           LoggerService.logError("Print_AbonoProveedor_Bluetooth", err.message);
         }
         return;
       }
 
-      const newWindow = window.open("", "_blank", "width=300,height=600");
-      if (!newWindow) return;
-      newWindow.document.write(`
-        <html>
-          <head>
-            <style>
-              body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; width: 58mm; text-align: center; }
-              h2, h3, p { margin: 5px 0; }
-              .divider { border-bottom: 1px dashed black; margin: 10px 0; }
-              .text-left { text-align: left; }
-              .text-right { text-align: right; }
-              .bold { font-weight: bold; }
-            </style>
-          </head>
-          <body>
+      const renderHtmlBody = (isCopyFlag: boolean) => `
+            ${isCopyFlag ? `<h3 style="border: 2px dashed #000; padding: 4px; background: #eee;">*** COPIA PARA EL PROVEEDOR ***</h3>` : ""}
             <h2>${businessProfile.name.toUpperCase()}</h2>
             <p>TICKET DE ABONO A PROVEEDOR</p>
             <div class="divider"></div>
@@ -232,6 +238,29 @@ export default function AccountsPayableModal({ onClose }: AccountsPayableModalPr
             <br/><br/><br/>
             <p>_______________________</p>
             <p>Gracias por su preferencia</p>
+      `;
+      // Mismo comportamiento de copia doble que el comprobante de abono de
+      // apartado (ver receiptPrinting.tsx).
+      const bodyHtml = isDoubleCopyEnabled(null)
+        ? `${renderHtmlBody(false)}<div style="page-break-after: always; border-bottom: 2px dashed #000; margin: 15px 0;"></div>${renderHtmlBody(true)}`
+        : renderHtmlBody(false);
+
+      const newWindow = window.open("", "_blank", "width=300,height=600");
+      if (!newWindow) return;
+      newWindow.document.write(`
+        <html>
+          <head>
+            <style>
+              body { font-family: 'Courier New', Courier, monospace; margin: 0; padding: 10px; width: 58mm; text-align: center; }
+              h2, h3, p { margin: 5px 0; }
+              .divider { border-bottom: 1px dashed black; margin: 10px 0; }
+              .text-left { text-align: left; }
+              .text-right { text-align: right; }
+              .bold { font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            ${bodyHtml}
             <script>
               window.onload = function() { setTimeout(() => { window.print(); window.close(); }, 500); };
             </script>
