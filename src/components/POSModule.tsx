@@ -6808,47 +6808,27 @@ export default function POSModule() {
                   return (
                     <div style={{ display: "flex", flexDirection: "column", gap: "8px", height: "100%" }}>
                       <div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px", gap: "8px", flexWrap: "nowrap" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
-                            <h4 style={{ margin: 0, color: "white", fontSize: "1rem", whiteSpace: "nowrap" }} title={`Ticket #${selectedHistoryTicket.id}`}>
-                              Ticket #{displayTicketFolio}
-                            </h4>
-                            <span style={{
-                              background: selectedHistoryTicket.status === "cancelled" ? "rgba(239, 68, 68, 0.2)" : "rgba(16, 185, 129, 0.15)",
-                              color: selectedHistoryTicket.status === "cancelled" ? "#ef4444" : "var(--color-secondary)",
-                              padding: "2px 6px",
-                              borderRadius: "4px",
-                              fontSize: "0.72rem",
-                              fontWeight: "bold",
-                              whiteSpace: "nowrap"
-                            }}>
-                              {selectedHistoryTicket.status === "cancelled" ? "🚫 Cancelado" : (selectedHistoryTicket.status || "Venta")}
-                            </span>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleReprintHistoryTicket(selectedHistoryTicket)}
-                            className="btn-primary"
-                            style={{
-                              padding: "5px 12px",
-                              fontSize: "0.8rem",
-                              fontWeight: "bold",
-                              background: "linear-gradient(135deg, #10b981, #059669)",
-                              color: "white",
-                              border: "none",
-                              borderRadius: "6px",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "5px",
-                              cursor: "pointer",
-                              boxShadow: "0 2px 8px rgba(16, 185, 129, 0.4)",
-                              whiteSpace: "nowrap",
-                              flexShrink: 0
-                            }}
-                          >
-                            🖨️ Reimprimir Ticket
-                          </button>
+                        {/* El botón de reimprimir para este mismo ticket ya
+                            está destacado abajo, junto al total -- antes
+                            había uno también aquí arriba, duplicado (mismo
+                            handleReprintHistoryTicket), y el cajero veía dos
+                            botones idénticos para una sola acción (reporte
+                            de Ferretería Erika, 2026-08-26). */}
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px", minWidth: 0 }}>
+                          <h4 style={{ margin: 0, color: "white", fontSize: "1rem", whiteSpace: "nowrap" }} title={`Ticket #${selectedHistoryTicket.id}`}>
+                            Ticket #{displayTicketFolio}
+                          </h4>
+                          <span style={{
+                            background: selectedHistoryTicket.status === "cancelled" ? "rgba(239, 68, 68, 0.2)" : "rgba(16, 185, 129, 0.15)",
+                            color: selectedHistoryTicket.status === "cancelled" ? "#ef4444" : "var(--color-secondary)",
+                            padding: "2px 6px",
+                            borderRadius: "4px",
+                            fontSize: "0.72rem",
+                            fontWeight: "bold",
+                            whiteSpace: "nowrap"
+                          }}>
+                            {selectedHistoryTicket.status === "cancelled" ? "🚫 Cancelado" : (selectedHistoryTicket.status || "Venta")}
+                          </span>
                         </div>
                         <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.6)", display: "flex", gap: "10px", flexWrap: "wrap" }}>
                           <span>📅 {new Date(selectedHistoryTicket.created_at).toLocaleString()}</span>
