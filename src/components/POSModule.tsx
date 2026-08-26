@@ -13,7 +13,6 @@ import {
 import PosScannerModal from "./PosScannerModal";
 import PosCreditModal from "./PosCreditModal";
 import ReprintButton from "./ReprintButton";
-import IntelligenceNotifications from "./IntelligenceNotifications";
 import { useAuth, useBusinessProfile } from "./AuthProvider";
 import { CustomerSchema, CashSessionSchema } from "../lib/schemas";
 import { getOrReconnectBlePrinter, sendBleBytes, startBleKeepAlive, getBleStatus, BleStatusType, sanitizeForThermal } from "../utils/bluetoothPrinter";
@@ -4091,10 +4090,8 @@ export default function POSModule() {
             background: "rgba(18, 18, 28, 0.6)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <IntelligenceNotifications variant="inline" />
-
-            <span style={{ fontSize: "0.72rem", fontWeight: "bold", color: isOffline ? "#ef4444" : "var(--color-primary)", whiteSpace: "nowrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "0.78rem", fontWeight: "bold", color: isOffline ? "#ef4444" : "var(--color-primary)" }}>
               {isOffline ? "⚠️ Terminal Offline" : "☁️ Terminal Nube"}
             </span>
 
@@ -4106,16 +4103,15 @@ export default function POSModule() {
                 background: "rgba(239, 68, 68, 0.15)",
                 border: "1px solid #ef4444",
                 color: "#ef4444",
-                padding: "3px 7px",
-                fontSize: "0.7rem",
+                padding: "3px 8px",
+                fontSize: "0.74rem",
                 fontWeight: "bold",
                 borderRadius: "6px",
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "3px",
+                gap: "4px",
                 cursor: "pointer",
-                transition: "all 0.2s ease",
-                whiteSpace: "nowrap",
+                transition: "all 0.2s ease"
               }}
               title="Cancelar tickets impresos/ventas (Requiere clave de administrador)"
             >
@@ -4124,7 +4120,7 @@ export default function POSModule() {
             </button>
           </div>
 
-          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             <button
               onClick={() => setShowSyncLogModal(true)}
               className="btn-primary"
@@ -4132,10 +4128,9 @@ export default function POSModule() {
                 background: "rgba(255,255,255,0.05)",
                 border: "1px solid rgba(255,255,255,0.1)",
                 color: "white",
-                padding: "3px 8px",
-                fontSize: "0.7rem",
-                borderRadius: "6px",
-                whiteSpace: "nowrap",
+                padding: "4px 10px",
+                fontSize: "0.75rem",
+                borderRadius: "6px"
               }}
             >
               📋 Historial Sync
@@ -4165,13 +4160,12 @@ export default function POSModule() {
                 border: printerConnectionType === "bluetooth"
                   ? (bleStatus === "connected" ? "1px solid #10b981" : bleStatus === "standby" ? "1px solid #f59e0b" : "1px solid #f43f5e")
                   : (isPrinterConnected ? "1px solid var(--color-secondary)" : "1px solid var(--color-primary)"),
-                padding: "3px 8px",
-                fontSize: "0.7rem",
+                padding: "4px 10px",
+                fontSize: "0.75rem",
                 borderRadius: "6px",
                 display: "flex",
                 alignItems: "center",
-                gap: "4px",
-                whiteSpace: "nowrap",
+                gap: "5px",
               }}
             >
               <span>
@@ -4192,10 +4186,9 @@ export default function POSModule() {
               style={{
                 background: "rgba(255,255,255,0.05)",
                 border: "1px solid var(--color-secondary)",
-                padding: "3px 8px",
-                fontSize: "0.7rem",
-                borderRadius: "6px",
-                whiteSpace: "nowrap",
+                padding: "4px 10px",
+                fontSize: "0.75rem",
+                borderRadius: "6px"
               }}
             >
               📷 Visión

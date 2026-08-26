@@ -1,10 +1,9 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useAuth } from "./AuthProvider";
 import Image from "next/image";
-import { Z_INDEX } from "../lib/zIndex";
 
 interface AlertItem {
   id: string;
@@ -13,21 +12,8 @@ interface AlertItem {
   targetPath: string;
 }
 
-interface Props {
-  // "floating" (default): el badge fijo arriba al centro, visible en toda
-  // la app -- comportamiento de siempre. "inline": versión compacta para
-  // insertar dentro de una barra existente (ver POSModule.tsx, barra
-  // "Terminal Nube"), sin position:fixed y con textos/paddings más chicos
-  // para no crecer esa barra. Cuando el layout raíz (layout.tsx) renderiza
-  // la versión "floating" y la ruta actual es "/" (Punto de Venta, que ya
-  // trae su propia versión "inline" en la barra), se omite por completo
-  // para no duplicar el mismo badge dos veces en pantalla.
-  variant?: "floating" | "inline";
-}
-
-export default function IntelligenceNotifications({ variant = "floating" }: Props) {
+export default function IntelligenceNotifications() {
   const router = useRouter();
-  const pathname = usePathname();
   const { currentUser, logout } = useAuth();
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -313,21 +299,10 @@ export default function IntelligenceNotifications({ variant = "floating" }: Prop
 
   const hasUrgentAlerts = alerts.some(a => a.type === "critical" || a.type === "warning");
 
-  // La versión "inline" de Punto de Venta ya cubre este mismo badge dentro
-  // de su propia barra -- evita mostrarlo dos veces en esa pantalla.
-  if (variant === "floating" && pathname === "/") return null;
-
-  const isInline = variant === "inline";
-
   return (
-    <div
+    <div 
       ref={dropdownRef}
-      style={isInline ? {
-        position: "relative",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-start",
-      } : {
+      style={{
         position: "fixed",
         top: "8px",
         left: "50%",
@@ -339,12 +314,12 @@ export default function IntelligenceNotifications({ variant = "floating" }: Prop
       }}
       className="no-print"
     >
-      <div
+      <div 
         onClick={() => setIsOpen(!isOpen)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: isInline ? "5px" : "8px",
+        style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: "8px",
           cursor: "pointer",
           transition: "transform 0.2s ease"
         }}
@@ -360,78 +335,73 @@ export default function IntelligenceNotifications({ variant = "floating" }: Prop
           style={{
             display: "flex",
             alignItems: "center",
-            gap: isInline ? "4px" : "6px",
-            background: isInline ? "transparent" : "rgba(22, 22, 34, 0.75)",
-            backdropFilter: isInline ? "none" : "blur(10px)",
-            border: isInline ? "none" : "1px solid var(--glass-border)",
-            padding: isInline ? "0" : "3px 8px 3px 6px",
+            gap: "6px",
+            background: "rgba(22, 22, 34, 0.75)",
+            backdropFilter: "blur(10px)",
+            border: "1px solid var(--glass-border)",
+            padding: "3px 8px 3px 6px",
             borderRadius: "16px",
-            boxShadow: isInline ? "none" : "0 2px 8px rgba(0,0,0,0.3)"
+            boxShadow: "0 2px 8px rgba(0,0,0,0.3)"
           }}
         >
           <Image
             src="/erika_avatar.png"
             alt="ERIKA"
-            width={isInline ? 14 : 18}
-            height={isInline ? 14 : 18}
+            width={18}
+            height={18}
             style={{
               borderRadius: "50%",
               border: "1.5px solid var(--color-primary)",
               objectFit: "cover"
             }}
           />
-          {!isInline && (
-            <span style={{ fontSize: "0.75rem", fontWeight: "bold", color: "white" }}>
-              {currentUser?.name || "ERIKA"}
-            </span>
-          )}
-          <span style={{
-            fontSize: isInline ? "0.62rem" : "0.65rem",
+          <span style={{ fontSize: "0.75rem", fontWeight: "bold", color: "white" }}>
+            {currentUser?.name || "ERIKA"}
+          </span>
+          <span style={{ 
+            fontSize: "0.65rem", 
             background: currentUser?.role === "admin" ? "rgba(244, 63, 94, 0.15)" : "rgba(16, 185, 129, 0.15)",
             color: currentUser?.role === "admin" ? "var(--color-primary)" : "var(--color-secondary)",
-            border: isInline ? (currentUser?.role === "admin" ? "1px solid #f43f5e" : "1px solid var(--color-secondary)") : "none",
-            padding: isInline ? "1px 4px" : "1px 5px",
-            borderRadius: isInline ? "5px" : "8px",
-            fontWeight: "600",
-            whiteSpace: "nowrap",
+            padding: "1px 5px",
+            borderRadius: "8px",
+            fontWeight: "600"
           }}>
             {currentUser?.role?.toUpperCase() || "OFFLINE"}
           </span>
         </div>
 
-        {/* Botón de Erika Inteligencia / Alertas */}
+        {/* Botón flotante de Erika Inteligencia */}
         <div
           style={{
-            background: hasUrgentAlerts
+            background: hasUrgentAlerts 
               ? "linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(220, 38, 38, 0.95))"
               : "linear-gradient(135deg, rgba(16, 185, 129, 0.85), rgba(5, 150, 105, 0.85))",
             backdropFilter: "blur(10px)",
             border: "1px solid rgba(255,255,255,0.1)",
             color: "white",
-            padding: isInline ? "3px 7px" : "3px 10px",
-            borderRadius: isInline ? "6px" : "16px",
-            fontSize: isInline ? "0.68rem" : "0.75rem",
+            padding: "3px 10px",
+            borderRadius: "16px",
+            fontSize: "0.75rem",
             fontWeight: "bold",
             display: "flex",
             alignItems: "center",
-            gap: isInline ? "4px" : "6px",
-            whiteSpace: "nowrap",
-            boxShadow: hasUrgentAlerts
+            gap: "6px",
+            boxShadow: hasUrgentAlerts 
               ? "0 3px 10px rgba(239, 68, 68, 0.4), 0 0 0 1px rgba(239,68,68,0.2)"
               : "0 2px 8px rgba(0,0,0,0.3)",
             animation: hasUrgentAlerts ? "pulse-alert 2s infinite" : "none"
           }}
         >
-          <span style={{ fontSize: isInline ? "0.68rem" : "0.75rem" }}>{hasUrgentAlerts ? "🚨" : "🧠"}</span>
-          <span>{hasUrgentAlerts ? `${alerts.length} Alertas` : (isInline ? "Erika" : "Erika Inteligencia")}</span>
+          <span style={{ fontSize: "0.75rem" }}>{hasUrgentAlerts ? "🚨" : "🧠"}</span>
+          <span>{hasUrgentAlerts ? `${alerts.length} Alertas` : "Erika Inteligencia"}</span>
           {alerts.length > 0 && alerts[0].id !== "erika-ok" && (
             <span style={{
               background: "white",
               color: "#ef4444",
               borderRadius: "50%",
-              width: isInline ? "12px" : "15px",
-              height: isInline ? "12px" : "15px",
-              fontSize: isInline ? "0.58rem" : "0.65rem",
+              width: "15px",
+              height: "15px",
+              fontSize: "0.65rem",
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
@@ -450,9 +420,7 @@ export default function IntelligenceNotifications({ variant = "floating" }: Prop
           onClick={(e) => e.stopPropagation()}
           style={{
             position: "absolute",
-            top: isInline ? "28px" : "38px",
-            left: isInline ? "0" : "auto",
-            zIndex: Z_INDEX.MODAL,
+            top: "38px",
             width: "360px",
             background: "rgba(22, 22, 34, 0.96)",
             border: "1px solid var(--glass-border)",
