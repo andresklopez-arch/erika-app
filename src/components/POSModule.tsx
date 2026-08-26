@@ -12,6 +12,7 @@ import {
 } from "../lib/offlineSync";
 import PosScannerModal from "./PosScannerModal";
 import PosCreditModal from "./PosCreditModal";
+import ReprintButton from "./ReprintButton";
 import { useAuth, useBusinessProfile } from "./AuthProvider";
 import { CustomerSchema, CashSessionSchema } from "../lib/schemas";
 import { getOrReconnectBlePrinter, sendBleBytes, startBleKeepAlive, getBleStatus, BleStatusType, sanitizeForThermal } from "../utils/bluetoothPrinter";
@@ -827,7 +828,9 @@ export default function POSModule() {
        currentUser?.name || currentUser?.role || "Cajero"
      );
 
-     toast.success(`🖨️ Reenviando Copia Reimpresa Ticket #${ticket.id}`);
+     // Se muestra el folio formateado (ej. XU-XQ*ZW), no el id crudo de la
+     // base -- es lo que el cajero ve en pantalla y en el ticket impreso.
+     toast.success(`🖨️ Reenviando Copia Reimpresa Ticket #${formatTicketFolio(ticket.id)}`);
   };
 
   const handleSaveTicketNote = async (ticketId: number, currentNotes: string) => {
@@ -6471,14 +6474,7 @@ export default function POSModule() {
                           >
                             🔄 Clonar
                           </button>
-                          <button
-                            type="button"
-                            className="btn-primary"
-                            onClick={() => handleReprintHistoryTicket(ticket)}
-                            style={{ padding: "5px 10px", fontSize: "0.8rem", background: "transparent", border: "1px solid #10b981", color: "#10b981" }}
-                          >
-                            🖨️ Imprimir
-                          </button>
+                          <ReprintButton ticket={ticket} onReprint={handleReprintHistoryTicket} variant="pill-outline" />
                           <button
                             type="button"
                             className="btn-primary"
@@ -6748,31 +6744,7 @@ export default function POSModule() {
                             👤 {ticket.customer_name || "Venta Mostrador"}
                           </span>
                           <div style={{ display: "flex", gap: "6px", alignItems: "center", flexShrink: 0 }}>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleReprintHistoryTicket(ticket);
-                              }}
-                              className="btn-primary"
-                              style={{
-                                padding: "3px 8px",
-                                fontSize: "0.72rem",
-                                background: "linear-gradient(135deg, #10b981, #059669)",
-                                color: "white",
-                                border: "none",
-                                borderRadius: "4px",
-                                fontWeight: "bold",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "3px",
-                                cursor: "pointer",
-                                boxShadow: "0 2px 6px rgba(16, 185, 129, 0.3)"
-                              }}
-                              title="Reimprimir este ticket directamente"
-                            >
-                              🖨️ Reimprimir
-                            </button>
+                            <ReprintButton ticket={ticket} onReprint={handleReprintHistoryTicket} variant="row" stopPropagation />
                             <span style={{ color: "var(--color-primary)", fontWeight: "600", fontSize: "0.72rem" }}>
                               {isSelected ? "▶ Activo" : "Ver"}
                             </span>
@@ -6881,28 +6853,12 @@ export default function POSModule() {
                       </div>
 
                       {/* Botón Reimprimir Destacado Inferior */}
-                      <button
-                        type="button"
-                        onClick={() => handleReprintHistoryTicket(selectedHistoryTicket)}
-                        className="btn-primary"
-                        style={{
-                          width: "100%",
-                          padding: "8px",
-                          fontSize: "0.85rem",
-                          fontWeight: "bold",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: "6px",
-                          background: "linear-gradient(135deg, #10b981, #059669)",
-                          border: "none",
-                          borderRadius: "6px",
-                          cursor: "pointer",
-                          boxShadow: "0 3px 10px rgba(16, 185, 129, 0.3)"
-                        }}
-                      >
-                        🖨️ Reimprimir Ticket #{displayTicketFolio}
-                      </button>
+                      <ReprintButton
+                        ticket={selectedHistoryTicket}
+                        folio={displayTicketFolio}
+                        onReprint={handleReprintHistoryTicket}
+                        variant="featured"
+                      />
                     </div>
                   );
                 })() : (

@@ -1,5 +1,6 @@
 npm run test-bluetooth-print
 npm run test-decimal-discount
+npm run test-reprint-single-button
 if [ -f .env.local ]; then
   npm run check-schema && npm run test-pos-matching && npm run test-quote-total
 else
