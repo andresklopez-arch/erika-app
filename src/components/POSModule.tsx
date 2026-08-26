@@ -1025,8 +1025,23 @@ export default function POSModule() {
         fields: { status: "cancelled", notes: newNotes },
       });
 
+      // Antes esto solo hacía console.warn y seguía adelante -- la función
+      // igual mostraba "✅ CANCELADO exitosamente" y actualizaba la lista en
+      // pantalla como si hubiera funcionado, aunque el guardado real
+      // hubiera fallado. Así pasó con TODOS los intentos de cancelación
+      // hasta ahora: una restricción de la base de datos (quotes_status_check,
+      // ver supabase/migrations/20260828010000_allow_cancelled_quote_status.sql)
+      // nunca permitió status='cancelled', así que el ticket se veía
+      // cancelado un momento y, al refrescar, volvía a aparecer como venta
+      // vigente (reporte de Ferretería Erika, 2026-08-24: "finalmente no
+      // los elimina, siguen en la base de datos").
       if (updErr) {
-        console.warn("Falla al actualizar status de ticket:", updErr);
+        console.error("Falla al actualizar status de ticket:", updErr);
+        alert(
+          `❌ No se pudo guardar la cancelación del Ticket #${folioFormatted} en la base de datos: ${updErr.message}` +
+          (shouldReturnStock ? "\n\n⚠️ El stock de este ticket SÍ se regresó al inventario -- verifica manualmente antes de reintentar, para no duplicar existencias." : "")
+        );
+        return;
       }
 
       // Registrar retiro en caja por la porción en EFECTIVO de la venta anulada
@@ -6079,7 +6094,15 @@ export default function POSModule() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          zIndex: 9999,
+          // getPinAsync() se puede disparar desde CUALQUIER pantalla,
+          // incluyendo modales que ya están abiertos (ej. Cancelación de
+          // Tickets, zIndex 99999) -- con 9999 el PIN quedaba renderizado
+          // DETRÁS de esos modales: invisible e imposible de tocar, así
+          // que el usuario nunca podía autorizar nada (reporte de
+          // Ferretería Erika, 2026-08-24: la ventana de autorización se
+          // veía detrás y el ticket nunca se cancelaba). Debe quedar por
+          // encima de cualquier otro zIndex del archivo.
+          zIndex: 999999,
           backdropFilter: "blur(5px)"
         }}>
           <div className="glass-panel" style={{

@@ -2,7 +2,7 @@ npm run test-bluetooth-print
 npm run test-decimal-discount
 npm run test-reprint-single-button
 if [ -f .env.local ]; then
-  npm run check-schema && npm run test-pos-matching && npm run test-quote-total
+  npm run check-schema && npm run test-pos-matching && npm run test-quote-total && npm run test-cancel-status
 else
-  echo "Aviso: .env.local no encontrado, se omiten check-schema/test-pos-matching/test-quote-total (requieren la base de datos real)."
+  echo "Aviso: .env.local no encontrado, se omiten check-schema/test-pos-matching/test-quote-total/test-cancel-status (requieren la base de datos real)."
 fi
