@@ -603,7 +603,10 @@ export default function InventoryModule() {
 
   const handleSavePromoDiscount = async () => {
     if (!editingDiscountItem) return;
-    const pct = parseInt(promoDiscountPct, 10) || 0;
+    // parseInt truncaba decimales (10.5% -> 10%) -- discount_pct es
+    // `numeric` en la base, así que sí los soporta; redondeamos a 2
+    // decimales para evitar arrastrar errores de punto flotante.
+    const pct = Math.round((parseFloat(promoDiscountPct) || 0) * 100) / 100;
     if (isNaN(pct) || pct < 0 || pct > 100) {
       alert("⚠️ El descuento debe estar entre 0% y 100%.");
       return;
@@ -644,7 +647,8 @@ export default function InventoryModule() {
   };
 
   const handleApplyBulkPromo = async () => {
-    const pct = parseInt(bulkPromoPct, 10) || 0;
+    // Mismo fix que handleSavePromoDiscount: parseInt truncaba decimales.
+    const pct = Math.round((parseFloat(bulkPromoPct) || 0) * 100) / 100;
     if (isNaN(pct) || pct < 0 || pct > 100) {
       alert("⚠️ El descuento debe estar entre 0% y 100%.");
       return;
@@ -991,7 +995,7 @@ export default function InventoryModule() {
         return;
       }
     } else if (field === "discount_pct") {
-      finalValue = parseInt(value);
+      finalValue = Math.round((parseFloat(value) || 0) * 100) / 100;
       if (isNaN(finalValue)) finalValue = 0;
       if (finalValue < 0 || finalValue > 100) {
         alert("⚠️ El descuento debe estar entre 0% y 100%.");
@@ -3118,6 +3122,7 @@ export default function InventoryModule() {
                 type="number"
                 min="0"
                 max="100"
+                step="0.01"
                 value={promoDiscountPct}
                 onChange={(e) => setPromoDiscountPct(e.target.value)}
                 placeholder="Ej. 15"
@@ -3701,6 +3706,7 @@ export default function InventoryModule() {
                     type="number"
                     min="0"
                     max="100"
+                    step="0.01"
                     value={bulkPromoPct}
                     placeholder="Ej. 10"
                     onChange={(e) => setBulkPromoPct(e.target.value)}
