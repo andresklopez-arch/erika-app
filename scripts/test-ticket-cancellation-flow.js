@@ -12,6 +12,17 @@
 // caja real, así que nunca debe apuntar a producción.
 //
 // Uso: 1) en otra terminal, `npm run dev`  2) `node scripts/test-ticket-cancellation-flow.js`
+//
+// Por qué NO está en .husky/pre-push (evaluado el 2026-08-26): "local"
+// aquí solo significa que el servidor Next.js corre en localhost -- sigue
+// usando las MISMAS credenciales de Supabase de producción que el resto
+// de .env.local (no hay una base de datos de prueba separada en este
+// proyecto). Automatizarlo en cada push abriría/cerraría una caja real
+// sin supervisión: si coincidiera con un turno real abierto (el guardado
+// más abajo lo detecta y se omite, pero solo si nadie corre el pre-push
+// justo cuando el turno abre después) o si el proceso se interrumpe a
+// medio correr, podría dejar estado real a medias. Mientras no exista una
+// base de datos de prueba aislada para este proyecto, se queda manual.
 
 const fs = require("fs");
 const path = require("path");
@@ -167,7 +178,24 @@ async function main() {
     const { data: afterSaleStock } = await admin.from("inventory").select("stock").eq("id", createdInventoryId).single();
     check("El stock bajó a 7 tras la venta simulada", afterSaleStock?.stock === 7, `stock: ${afterSaleStock?.stock}`);
 
-    // 4. Cancelar: reincorporar stock (mismo endpoint/moveType que usa
+    // 4. Cancelar: guardar status='cancelled' en quotes -- mismo endpoint
+    //    (/api/quotes/save) y ORDEN que usa handleExecuteCancelTicket() en
+    //    POSModule.tsx (el guardado va PRIMERO, antes de tocar
+    //    inventario/caja). Este paso faltaba en la prueba: verificaba
+    //    inventario y caja pero nunca el guardado real del status, que es
+    //    justo lo que estuvo roto en producción desde siempre (restricción
+    //    quotes_status_check sin 'cancelled', ver
+    //    supabase/migrations/20260828010000_allow_cancelled_quote_status.sql).
+    const cancelSave = await apiCall(cookie, "/api/quotes/save", {
+      id: TICKET_ID,
+      fields: { status: "cancelled", notes: "CANCELADO (prueba automatizada)" },
+    });
+    check("POST /api/quotes/save (status='cancelled') responde 200", cancelSave.ok, JSON.stringify(cancelSave.json));
+
+    const { data: afterCancelQuote } = await admin.from("quotes").select("status").eq("id", TICKET_ID).single();
+    check("El ticket de prueba quedó con status='cancelled' en la base", afterCancelQuote?.status === "cancelled", `status: ${afterCancelQuote?.status}`);
+
+    // 5. Cancelar: reincorporar stock (mismo endpoint/moveType que usa
     //    POSModule.tsx en handleExecuteCancelTicket)
     const cancelStock = await apiCall(cookie, "/api/inventory/reduce-stock", {
       items: [{ id: createdInventoryId, qty: -3 }],
@@ -179,7 +207,7 @@ async function main() {
     const { data: afterCancelStock } = await admin.from("inventory").select("stock").eq("id", createdInventoryId).single();
     check("El stock regresó a 10 tras cancelar el ticket", afterCancelStock?.stock === 10, `stock: ${afterCancelStock?.stock}`);
 
-    // 5. Cancelar: registrar el retiro de caja que compensa el efectivo de
+    // 6. Cancelar: registrar el retiro de caja que compensa el efectivo de
     //    la venta anulada (mismo endpoint que usa insertCashTransaction)
     const withdrawal = await apiCall(cookie, "/api/caja/transaction", {
       type: "withdrawal",
@@ -188,7 +216,7 @@ async function main() {
     });
     check("POST /api/caja/transaction (retiro por cancelación) responde 200", withdrawal.ok, JSON.stringify(withdrawal.json));
 
-    // 6. Cancelar: registrar la auditoría (mismo endpoint que usa
+    // 7. Cancelar: registrar la auditoría (mismo endpoint que usa
     //    LoggerService.logError)
     const auditLog = await apiCall(cookie, "/api/logs/error", {
       module: "Cancelacion_Ticket_TEST",
@@ -200,7 +228,7 @@ async function main() {
     const { data: logRow } = await admin.from("error_logs").select("id").eq("module", "Cancelacion_Ticket_TEST").limit(1).maybeSingle();
     check("La fila de auditoría de cancelación quedó guardada en error_logs", !!logRow);
 
-    // 7. Cerrar caja: la venta (300 efectivo) y el retiro (300) deben
+    // 8. Cerrar caja: la venta (300 efectivo) y el retiro (300) deben
     //    cancelarse entre sí, dejando el esperado igual al fondo inicial.
     const { data: cred } = await admin.from("user_credentials").select("pin").eq("user_id", adminUser.id).maybeSingle();
     if (!cred?.pin) {

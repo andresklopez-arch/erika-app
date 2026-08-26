@@ -170,6 +170,11 @@ export default function SettingsModule() {
   // silencio (restricción de base de datos incompleta) sin dejar ningún
   // rastro visible para el dueño del negocio.
   const [cancelFailureCount24h, setCancelFailureCount24h] = useState<number | null>(null);
+  // Cancelaciones que sí se guardaron (24h) -- módulo "Cancelacion_Ticket"
+  // (auditoría que ya existía desde antes del fix). Ahora que la
+  // restricción de la base lo permite, sirve para ver el volumen real de
+  // cancelaciones junto al de fallidas, no solo si algo se rompió.
+  const [cancelSuccessCount24h, setCancelSuccessCount24h] = useState<number | null>(null);
 
   interface RlsTableStatus {
     table: string;
@@ -564,6 +569,20 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
     }
   };
 
+  const fetchCancelSuccessCount = async () => {
+    try {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count, error } = await supabase
+        .from("error_logs")
+        .select("*", { count: "exact", head: true })
+        .eq("module", "Cancelacion_Ticket")
+        .gte("created_at", since);
+      if (!error) setCancelSuccessCount24h(count ?? 0);
+    } catch (e) {
+      console.error("Error contando cancelaciones exitosas:", e);
+    }
+  };
+
   const fetchErrorLogs = async () => {
     setIsLoadingLogs(true);
     try {
@@ -578,6 +597,7 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
       }
       fetchPrintFailureCount();
       fetchCancelFailureCount();
+      fetchCancelSuccessCount();
     } catch (e) {
       console.error("Error fetching logs:", e);
     } finally {
@@ -2290,6 +2310,22 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
                     }}
                   >
                     🚫 {cancelFailureCount24h} cancelación(es) fallida(s) (24h)
+                  </span>
+                )}
+                {cancelSuccessCount24h !== null && cancelSuccessCount24h > 0 && (
+                  <span
+                    title="Cancelaciones de ticket guardadas exitosamente en las últimas 24 horas"
+                    style={{
+                      fontSize: "0.7rem",
+                      fontWeight: "bold",
+                      padding: "3px 8px",
+                      borderRadius: "10px",
+                      background: "rgba(255,255,255,0.06)",
+                      color: "rgba(255,255,255,0.7)",
+                      border: "1px solid rgba(255,255,255,0.15)",
+                    }}
+                  >
+                    ✅ {cancelSuccessCount24h} cancelación(es) exitosa(s) (24h)
                   </span>
                 )}
               </h3>

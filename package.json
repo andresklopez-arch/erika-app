@@ -10,6 +10,7 @@
     "smoke-check": "node scripts/smoke-check.js",
     "check-rls": "node scripts/check-rls-lockdown.js",
     "audit-schema": "node scripts/audit-full-schema.js",
+    "audit-unchecked-errors": "node scripts/audit-unchecked-errors.js",
     "check-schema": "node scripts/check-schema-drift.js",
     "test-pos-matching": "node --experimental-strip-types scripts/test-duplicate-name-products.js",
     "test-bluetooth-print": "node --experimental-strip-types scripts/test-bluetooth-print.js",
