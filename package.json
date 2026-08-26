@@ -14,7 +14,7 @@
     "test-pos-matching": "node --experimental-strip-types scripts/test-duplicate-name-products.js",
     "test-bluetooth-print": "node --experimental-strip-types scripts/test-bluetooth-print.js",
     "test-quote-total": "node --experimental-strip-types scripts/test-quote-total.js",
-    "test-cancel-status": "node --experimental-strip-types scripts/test-cancel-ticket-status.js",
+    "test-quote-status-values": "node --experimental-strip-types scripts/test-quote-status-values.js",
     "test-decimal-discount": "node --experimental-strip-types scripts/test-decimal-discount.js",
     "test-reprint-single-button": "node scripts/test-reprint-single-button.js",
     "test-caja": "node scripts/test-caja-checkout-flow.js",

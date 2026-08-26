@@ -23,6 +23,7 @@ import { reduceInventoryStock } from "../lib/inventoryClient";
 import { saveQuote } from "../lib/quotesClient";
 import { cleanMexicanPhone, openWhatsAppChat } from "../lib/whatsapp";
 import { matchesProduct } from "../lib/posItemMatch";
+import { Z_INDEX } from "../lib/zIndex";
 
 // Único valor de método de pago que dispara lógica especial de crédito
 // (segunda copia, etiqueta "VENTA A CRÉDITO", validaciones). Se compara
@@ -989,6 +990,36 @@ export default function POSModule() {
         itemsArr = ticket.items;
       }
 
+      const cancelNote = `CANCELADO por Administrador el ${new Date().toLocaleString()}`;
+      const newNotes = ticket.notes ? `${ticket.notes} | ${cancelNote}` : cancelNote;
+
+      // El guardado en `quotes` va PRIMERO, antes de tocar inventario/caja --
+      // antes iba al final, así que un fallo aquí (ej. el bug del
+      // 2026-08-24: quotes_status_check nunca permitió 'cancelled') dejaba
+      // el stock YA regresado al inventario físico mientras el ticket
+      // seguía "vigente" en la base, una inconsistencia real que solo se
+      // podía corregir a mano. Con este orden, si el guardado falla no se
+      // mueve nada más: no hay nada que verificar ni deshacer.
+      const { error: updErr } = await saveQuote({
+        id: ticket.id,
+        fields: { status: "cancelled", notes: newNotes },
+      });
+
+      if (updErr) {
+        console.error("Falla al actualizar status de ticket:", updErr);
+        // Se registra en error_logs con el mismo prefijo "Cancelacion_" que
+        // usa la auditoría de éxito -- SettingsModule.tsx cuenta estas
+        // fallas (24h) en el panel de Salud del Catálogo, mismo patrón que
+        // el contador de "fallas de impresión" (módulo "Print_%").
+        LoggerService.logError(
+          "Cancelacion_Ticket_Fallida",
+          `Ticket #${folioFormatted} (ID: ${ticket.id}): ${updErr.message}`,
+          currentUser?.name
+        );
+        alert(`❌ No se pudo guardar la cancelación del Ticket #${folioFormatted} en la base de datos: ${updErr.message}\n\nNo se movió inventario ni caja -- puedes reintentar sin riesgo de duplicar nada.`);
+        return;
+      }
+
       // Reincorporar existencias en el inventario físico
       if (shouldReturnStock && itemsArr.length > 0) {
         const stockFailures: string[] = [];
@@ -1017,33 +1048,6 @@ export default function POSModule() {
         }
       }
 
-      const cancelNote = `CANCELADO por Administrador el ${new Date().toLocaleString()}`;
-      const newNotes = ticket.notes ? `${ticket.notes} | ${cancelNote}` : cancelNote;
-
-      const { error: updErr } = await saveQuote({
-        id: ticket.id,
-        fields: { status: "cancelled", notes: newNotes },
-      });
-
-      // Antes esto solo hacía console.warn y seguía adelante -- la función
-      // igual mostraba "✅ CANCELADO exitosamente" y actualizaba la lista en
-      // pantalla como si hubiera funcionado, aunque el guardado real
-      // hubiera fallado. Así pasó con TODOS los intentos de cancelación
-      // hasta ahora: una restricción de la base de datos (quotes_status_check,
-      // ver supabase/migrations/20260828010000_allow_cancelled_quote_status.sql)
-      // nunca permitió status='cancelled', así que el ticket se veía
-      // cancelado un momento y, al refrescar, volvía a aparecer como venta
-      // vigente (reporte de Ferretería Erika, 2026-08-24: "finalmente no
-      // los elimina, siguen en la base de datos").
-      if (updErr) {
-        console.error("Falla al actualizar status de ticket:", updErr);
-        alert(
-          `❌ No se pudo guardar la cancelación del Ticket #${folioFormatted} en la base de datos: ${updErr.message}` +
-          (shouldReturnStock ? "\n\n⚠️ El stock de este ticket SÍ se regresó al inventario -- verifica manualmente antes de reintentar, para no duplicar existencias." : "")
-        );
-        return;
-      }
-
       // Registrar retiro en caja por la porción en EFECTIVO de la venta anulada
       // (solo el efectivo afecta el total físico esperado del corte; tarjeta y
       // transferencia no salen del cajón, así que no se tocan). El monto exacto
@@ -1070,10 +1074,14 @@ export default function POSModule() {
             amount: cashPortion,
             description: `🚫 Cancelación de Ticket #${folioFormatted} (${ticket.customer_name || "Mostrador"})`,
           }, cashPortion > 2000 ? pin : undefined);
-          if (txErr) console.warn("Falla al registrar retiro de caja por anulación:", txErr.message);
+          if (txErr) {
+            console.warn("Falla al registrar retiro de caja por anulación:", txErr.message);
+            toast.error(`⚠️ El ticket se canceló, pero el retiro de $${cashPortion.toFixed(2)} en caja no se pudo registrar: ${txErr.message}. Ajusta el corte manualmente.`, { duration: 8000 });
+          }
         }
-      } catch (txErr) {
+      } catch (txErr: any) {
         console.warn("Falla al registrar transacción de anulación:", txErr);
+        toast.error(`⚠️ El ticket se canceló, pero el retiro en caja no se pudo registrar: ${txErr?.message || txErr}. Ajusta el corte manualmente.`, { duration: 8000 });
       }
 
       // Auditoría en error_logs
@@ -2197,12 +2205,19 @@ export default function POSModule() {
           finalQuoteData = fallback.data;
         } else if (fallback.error) {
           console.error("También falló el fallback de guardado de ticket en quotes:", fallback.error);
-          if (quoteErr.code === "SCHEMA_DRIFT" || fallback.error.code === "SCHEMA_DRIFT") {
-            toast.error(
-              "⚠️ La venta se cobró bien, pero el ticket no se pudo guardar en el historial (desfase de esquema en la base de datos). Avisa a soporte.",
-              { duration: 12000 },
-            );
-          }
+          // Antes solo avisaba si el error era específicamente de
+          // SCHEMA_DRIFT -- cualquier otro motivo (red caída, RLS, etc.)
+          // fallaba en el mismo silencio que el bug de cancelación de
+          // tickets (ver commit del 2026-08-26): la venta ya se había
+          // cobrado, pero el cajero nunca se enteraba de que el ticket no
+          // quedó en el historial ni sería reimprimible/cancelable.
+          const isSchemaDrift = quoteErr.code === "SCHEMA_DRIFT" || fallback.error.code === "SCHEMA_DRIFT";
+          toast.error(
+            isSchemaDrift
+              ? "⚠️ La venta se cobró bien, pero el ticket no se pudo guardar en el historial (desfase de esquema en la base de datos). Avisa a soporte."
+              : `⚠️ La venta se cobró bien, pero el ticket no se pudo guardar en el historial: ${fallback.error.message}. No podrás reimprimirlo ni cancelarlo desde el historial.`,
+            { duration: 12000 },
+          );
         }
       } else if (quoteData) {
         realTicketId = Number(quoteData.id);
@@ -2429,7 +2444,10 @@ export default function POSModule() {
             "sale",
             realTicketId.toString(),
           );
-          if (invStockErr) console.warn("Falla al ajustar inventario en checkout:", invStockErr.message);
+          if (invStockErr) {
+            console.warn("Falla al ajustar inventario en checkout:", invStockErr.message);
+            toast.error(`⚠️ El cobro se realizó, pero el inventario no se pudo ajustar: ${invStockErr.message}. Revisa el stock manualmente.`, { duration: 8000 });
+          }
         } catch (invErr) {
           console.error("Error crítico al actualizar inventario:", invErr);
           toast.error(
@@ -5322,7 +5340,10 @@ export default function POSModule() {
                             const qty = parseFloat((qtyStr || "").replace(",", "."));
                             if (!isNaN(qty) && qty > 0) {
                                const { error: invErr } = await reduceInventoryStock([{ id: product.id, qty: -qty }], "adjustment", `RET-${Date.now()}`);
-                               if (invErr) console.warn("Falla al ajustar inventario en devolución:", invErr.message);
+                               if (invErr) {
+                                 console.warn("Falla al ajustar inventario en devolución:", invErr.message);
+                                 toast.error(`⚠️ La devolución se registró, pero el inventario no se pudo ajustar: ${invErr.message}. Revisa el stock manualmente.`, { duration: 8000 });
+                               }
                                setGlobalCatalog(prev => prev.map(i => i.id === product.id ? { ...i, stock: i.stock + qty } : i));
                             }
                          }
@@ -5415,7 +5436,10 @@ export default function POSModule() {
                        "layaway",
                        `LAY-${Date.now()}`,
                      );
-                     if (invStockErr) console.warn("Falla al ajustar inventario en apartado:", invStockErr.message);
+                     if (invStockErr) {
+                       console.warn("Falla al ajustar inventario en apartado:", invStockErr.message);
+                       toast.error(`⚠️ El apartado se creó, pero el inventario no se pudo ajustar: ${invStockErr.message}. Revisa el stock manualmente.`, { duration: 8000 });
+                     }
                   } catch (invErr) {
                      console.error("Error crítico al actualizar inventario en layaway:", invErr);
                      toast.error(
@@ -5713,7 +5737,7 @@ export default function POSModule() {
             right: 0,
             bottom: 0,
             background: "rgba(0,0,0,0.85)",
-            zIndex: 9999,
+            zIndex: Z_INDEX.MODAL,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -6102,7 +6126,7 @@ export default function POSModule() {
           // Ferretería Erika, 2026-08-24: la ventana de autorización se
           // veía detrás y el ticket nunca se cancelaba). Debe quedar por
           // encima de cualquier otro zIndex del archivo.
-          zIndex: 999999,
+          zIndex: Z_INDEX.AUTHORIZATION,
           backdropFilter: "blur(5px)"
         }}>
           <div className="glass-panel" style={{
@@ -6180,7 +6204,7 @@ export default function POSModule() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          zIndex: 9999,
+          zIndex: Z_INDEX.MODAL,
           backdropFilter: "blur(5px)"
         }}>
           <div className="glass-panel" style={{
@@ -6270,7 +6294,7 @@ export default function POSModule() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          zIndex: 9999,
+          zIndex: Z_INDEX.MODAL,
           backdropFilter: "blur(5px)"
         }}>
           <div className="glass-panel" style={{
@@ -6360,7 +6384,7 @@ export default function POSModule() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          zIndex: 9999,
+          zIndex: Z_INDEX.MODAL,
           backdropFilter: "blur(5px)"
         }}>
           <div className="glass-panel" style={{
@@ -6537,7 +6561,7 @@ export default function POSModule() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          zIndex: 99999,
+          zIndex: Z_INDEX.MODAL_LARGE,
           backdropFilter: "blur(6px)"
         }}>
           <div className="glass-panel animate-fade-in" style={{
@@ -6937,7 +6961,7 @@ export default function POSModule() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          zIndex: 99999,
+          zIndex: Z_INDEX.MODAL_LARGE,
           backdropFilter: "blur(8px)"
         }}>
           <div className="glass-panel animate-fade-in" style={{

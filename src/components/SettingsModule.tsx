@@ -163,6 +163,13 @@ export default function SettingsModule() {
   // en CustomersModule.tsx / AccountsPayableModal.tsx / receiptPrinting.tsx,
   // todos usan el prefijo "Print_" en el módulo). null = aún no se consultó.
   const [printFailureCount24h, setPrintFailureCount24h] = useState<number | null>(null);
+  // Cancelaciones de ticket que fallaron al guardarse (24h) -- ver
+  // handleExecuteCancelTicket() en POSModule.tsx, módulo
+  // "Cancelacion_Ticket_Fallida". Mismo patrón que printFailureCount24h;
+  // nace del bug del 2026-08-24 donde CADA cancelación fallaba en
+  // silencio (restricción de base de datos incompleta) sin dejar ningún
+  // rastro visible para el dueño del negocio.
+  const [cancelFailureCount24h, setCancelFailureCount24h] = useState<number | null>(null);
 
   interface RlsTableStatus {
     table: string;
@@ -543,6 +550,20 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
     }
   };
 
+  const fetchCancelFailureCount = async () => {
+    try {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count, error } = await supabase
+        .from("error_logs")
+        .select("*", { count: "exact", head: true })
+        .eq("module", "Cancelacion_Ticket_Fallida")
+        .gte("created_at", since);
+      if (!error) setCancelFailureCount24h(count ?? 0);
+    } catch (e) {
+      console.error("Error contando cancelaciones fallidas:", e);
+    }
+  };
+
   const fetchErrorLogs = async () => {
     setIsLoadingLogs(true);
     try {
@@ -556,6 +577,7 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
         setErrorLogs(data);
       }
       fetchPrintFailureCount();
+      fetchCancelFailureCount();
     } catch (e) {
       console.error("Error fetching logs:", e);
     } finally {
@@ -2252,6 +2274,22 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
                     }}
                   >
                     🖨️ {printFailureCount24h} falla(s) de impresión (24h)
+                  </span>
+                )}
+                {cancelFailureCount24h !== null && (
+                  <span
+                    title="Cancelaciones de ticket que fallaron al guardarse en las últimas 24 horas"
+                    style={{
+                      fontSize: "0.7rem",
+                      fontWeight: "bold",
+                      padding: "3px 8px",
+                      borderRadius: "10px",
+                      background: cancelFailureCount24h > 0 ? "rgba(239,68,68,0.15)" : "rgba(16,185,129,0.1)",
+                      color: cancelFailureCount24h > 0 ? "#f87171" : "#10b981",
+                      border: cancelFailureCount24h > 0 ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(16,185,129,0.2)",
+                    }}
+                  >
+                    🚫 {cancelFailureCount24h} cancelación(es) fallida(s) (24h)
                   </span>
                 )}
               </h3>
