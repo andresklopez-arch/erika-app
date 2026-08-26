@@ -89,7 +89,7 @@ async function main() {
       while (true) {
         const { data, error } = await admin
           .from("quotes")
-          .select("quote_number, total, items, discount_pct, apply_iva, status")
+          .select("quote_number, total, items, discount_pct, apply_iva, status, created_at")
           .range(from, from + 999);
         if (error) throw error;
         all = all.concat(data);
@@ -101,7 +101,7 @@ async function main() {
       console.log(`${all.length} cotizaciones revisadas, ${mismatched.length} con desfase entre total y artículos+ajustes.`);
       for (const q of mismatched.slice(0, 15)) {
         const { expectedTotal } = getQuoteTotalMismatch(q);
-        console.log(`  ⚠️  #${q.quote_number} (${q.status}): guardado $${q.total} vs esperado $${expectedTotal}`);
+        console.log(`  ⚠️  #${q.quote_number} (${q.status}, ${q.created_at?.slice(0, 10)}): guardado $${q.total} vs esperado $${expectedTotal}`);
       }
       // Informativo, no falla el script: las desfasadas de ANTES del fix
       // (ya vendidas) se quedan así para siempre -- no hay forma de
@@ -109,6 +109,20 @@ async function main() {
       // PENDIENTES (aún cobrables) no tengan desfase.
       const mismatchedPending = mismatched.filter((q) => q.status === "pending");
       assert(mismatchedPending.length === 0, `${mismatchedPending.length} cotización(es) PENDIENTE(S) (aún por cobrar) con desfase -- esas sí importan`);
+
+      // El fix (discount_pct/apply_iva persistidos al cobrar) se desplegó
+      // el 2026-08-25 -- cualquier ticket/cotización desfasada CREADA
+      // después de esa fecha indicaría que el bug no quedó cerrado del
+      // todo, a diferencia de las históricas (de antes del fix), que se
+      // quedan desfasadas para siempre y no son motivo de alarma.
+      const FIX_DEPLOYED_AT = new Date("2026-08-25T00:00:00Z");
+      const mismatchedAfterFix = mismatched.filter((q) => q.created_at && new Date(q.created_at) >= FIX_DEPLOYED_AT);
+      assert(
+        mismatchedAfterFix.length === 0,
+        mismatchedAfterFix.length === 0
+          ? "Ninguna cotización desfasada es posterior al fix del 2026-08-25 -- todas son históricas"
+          : `${mismatchedAfterFix.length} cotización(es) desfasada(s) posteriores al fix: ${mismatchedAfterFix.map((q) => "#" + q.quote_number).join(", ")}`,
+      );
     } catch (err) {
       console.warn(`⚠️  No se pudo correr la Parte 2 (datos reales): ${err.message}`);
     }

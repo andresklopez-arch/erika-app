@@ -14,6 +14,7 @@ import InboundModal from "./InboundModal";
 import AuditModule from "./AuditModule";
 import { useAuth } from "./AuthProvider";
 import { LoggerService } from "../services/loggerService";
+import { parsePercentInput } from "../lib/parsePercent";
 import { saveInventoryItem, bulkUpdateInventory, deleteInventoryItem, reduceInventoryStock, bulkImportInventory } from "../lib/inventoryClient";
 
 const normalizeString = (str: string) => {
@@ -603,10 +604,7 @@ export default function InventoryModule() {
 
   const handleSavePromoDiscount = async () => {
     if (!editingDiscountItem) return;
-    // parseInt truncaba decimales (10.5% -> 10%) -- discount_pct es
-    // `numeric` en la base, así que sí los soporta; redondeamos a 2
-    // decimales para evitar arrastrar errores de punto flotante.
-    const pct = Math.round((parseFloat(promoDiscountPct) || 0) * 100) / 100;
+    const pct = parsePercentInput(promoDiscountPct);
     if (isNaN(pct) || pct < 0 || pct > 100) {
       alert("⚠️ El descuento debe estar entre 0% y 100%.");
       return;
@@ -647,8 +645,7 @@ export default function InventoryModule() {
   };
 
   const handleApplyBulkPromo = async () => {
-    // Mismo fix que handleSavePromoDiscount: parseInt truncaba decimales.
-    const pct = Math.round((parseFloat(bulkPromoPct) || 0) * 100) / 100;
+    const pct = parsePercentInput(bulkPromoPct);
     if (isNaN(pct) || pct < 0 || pct > 100) {
       alert("⚠️ El descuento debe estar entre 0% y 100%.");
       return;
@@ -700,7 +697,7 @@ export default function InventoryModule() {
     if (error) {
       alert("❌ Error al aplicar descuento masivo: " + error.message);
     } else {
-      alert(`✅ Descuento masivo del ${pct}% aplicado a ${itemsToLog.length} productos con éxito.`);
+      alert(`✅ Descuento masivo del ${pct.toFixed(2).replace(/\.?0+$/, "")}% aplicado a ${itemsToLog.length} productos con éxito.`);
       setShowBulkPromoModal(false);
       setBulkPromoPct("");
       setBulkPromoStartAt("");
@@ -995,8 +992,7 @@ export default function InventoryModule() {
         return;
       }
     } else if (field === "discount_pct") {
-      finalValue = Math.round((parseFloat(value) || 0) * 100) / 100;
-      if (isNaN(finalValue)) finalValue = 0;
+      finalValue = parsePercentInput(value);
       if (finalValue < 0 || finalValue > 100) {
         alert("⚠️ El descuento debe estar entre 0% y 100%.");
         setEditingCell(null);
@@ -3125,6 +3121,10 @@ export default function InventoryModule() {
                 step="0.01"
                 value={promoDiscountPct}
                 onChange={(e) => setPromoDiscountPct(e.target.value)}
+                onBlur={(e) => {
+                  if (!e.target.value.trim()) return;
+                  setPromoDiscountPct(String(parsePercentInput(e.target.value)));
+                }}
                 placeholder="Ej. 15"
                 style={{
                   width: "100%",
@@ -3710,6 +3710,10 @@ export default function InventoryModule() {
                     value={bulkPromoPct}
                     placeholder="Ej. 10"
                     onChange={(e) => setBulkPromoPct(e.target.value)}
+                    onBlur={(e) => {
+                      if (!e.target.value.trim()) return;
+                      setBulkPromoPct(String(parsePercentInput(e.target.value)));
+                    }}
                     style={{
                       width: "100%",
                       padding: "10px 14px",
