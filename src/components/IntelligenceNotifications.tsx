@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "./AuthProvider";
 import Image from "next/image";
 import { Z_INDEX } from "../lib/zIndex";
@@ -15,19 +15,19 @@ interface AlertItem {
 
 interface Props {
   // "floating" (default): el badge fijo arriba al centro, visible en toda
-  // la app -- comportamiento de siempre (montado vía
-  // IntelligenceNotificationsGate.tsx, que ya evita montarlo en "/").
-  // "inline": versión compacta para insertar dentro de una barra
-  // existente (ver POSModule.tsx, barra "Terminal Nube"), sin
-  // position:fixed y con textos/paddings más chicos para no crecer esa
-  // barra. Solo cambia estilos -- la decisión de SI se monta o no vive en
-  // el gate, no aquí (montar dos instancias a la vez duplicaría la
-  // suscripción Realtime al canal "erika-alerts-channel").
+  // la app -- comportamiento de siempre. "inline": versión compacta para
+  // insertar dentro de una barra existente (ver POSModule.tsx, barra
+  // "Terminal Nube"), sin position:fixed y con textos/paddings más chicos
+  // para no crecer esa barra. Cuando el layout raíz (layout.tsx) renderiza
+  // la versión "floating" y la ruta actual es "/" (Punto de Venta, que ya
+  // trae su propia versión "inline" en la barra), se omite por completo
+  // para no duplicar el mismo badge dos veces en pantalla.
   variant?: "floating" | "inline";
 }
 
 export default function IntelligenceNotifications({ variant = "floating" }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
   const { currentUser, logout } = useAuth();
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -312,6 +312,11 @@ export default function IntelligenceNotifications({ variant = "floating" }: Prop
   };
 
   const hasUrgentAlerts = alerts.some(a => a.type === "critical" || a.type === "warning");
+
+  // La versión "inline" de Punto de Venta ya cubre este mismo badge dentro
+  // de su propia barra -- evita mostrarlo dos veces en esa pantalla.
+  if (variant === "floating" && pathname === "/") return null;
+
   const isInline = variant === "inline";
 
   return (

@@ -3,7 +3,7 @@ import "./globals.css";
 import AuthProvider from "../components/AuthProvider";
 import Sidebar from "../components/Sidebar";
 import HomeButton from "../components/HomeButton";
-import IntelligenceNotificationsGate from "../components/IntelligenceNotificationsGate";
+import IntelligenceNotifications from "../components/IntelligenceNotifications";
 import TasksWidget from "../components/TasksWidget";
 import VersionUpdateNotifier from "../components/VersionUpdateNotifier";
 import { Toaster } from "react-hot-toast";
@@ -40,7 +40,7 @@ export default function RootLayout({
           >
             <Sidebar />
             <main className="main-content" style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-              <IntelligenceNotificationsGate />
+              <IntelligenceNotifications />
               <HomeButton />
               {children}
             </main>
