@@ -14,6 +14,7 @@
     "audit-nan-inventory-refs": "node scripts/audit-nan-inventory-refs.js",
     "audit-suspicious-codes": "node scripts/audit-suspicious-inventory-codes.js",
     "check-schema": "node scripts/check-schema-drift.js",
+    "check-rpc": "node scripts/check-rpc-drift.js",
     "test-pos-matching": "node --experimental-strip-types scripts/test-duplicate-name-products.js",
     "test-bluetooth-print": "node --experimental-strip-types scripts/test-bluetooth-print.js",
     "test-quote-total": "node --experimental-strip-types scripts/test-quote-total.js",
@@ -24,6 +25,7 @@
     "test-caja": "node scripts/test-caja-checkout-flow.js",
     "test-cancelacion": "node scripts/test-ticket-cancellation-flow.js",
     "checkpoint": "node scripts/create-checkpoint.js",
+    "checkpoint-status": "node scripts/check-checkpoint-due.js",
     "prepare": "husky"
   },
   "dependencies": {

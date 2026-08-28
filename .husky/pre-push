@@ -1,8 +1,18 @@
 npm run test-bluetooth-print
 npm run test-decimal-discount
 npm run test-reprint-single-button
+npm run test-sell-quote-routing
 if [ -f .env.local ]; then
   npm run check-schema && npm run test-pos-matching && npm run test-quote-total && npm run test-quote-status-values
 else
   echo "Aviso: .env.local no encontrado, se omiten check-schema/test-pos-matching/test-quote-total/test-quote-status-values (requieren la base de datos real)."
 fi
+gate_status=$?
+
+# Solo informativo (regla global #5) -- corre SIEMPRE, pero nunca debe
+# cambiar si el push se bloquea o no (por eso se guarda gate_status
+# arriba y se sale con ese código explícitamente al final, en vez de
+# dejar que el status de este último comando sea el que decida).
+npm run checkpoint-status
+
+exit $gate_status
