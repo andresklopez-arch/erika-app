@@ -10,6 +10,7 @@ import {
   getOfflineTransactions,
   saveInvoiceClaimOffline,
 } from "../lib/offlineSync";
+import IntelligenceNotifications from "./IntelligenceNotifications";
 import PosScannerModal from "./PosScannerModal";
 import PosCreditModal from "./PosCreditModal";
 import ReprintButton from "./ReprintButton";
@@ -4011,6 +4012,12 @@ export default function POSModule() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {/* Antes vivía flotando arriba de toda la pantalla (ver
+                GlobalIntelligenceWidget.tsx, que la oculta solo en esta
+                ruta); aquí usa la variante compacta "inline" para no
+                agrandar esta barra. */}
+            <IntelligenceNotifications variant="inline" />
+
             <span style={{ fontSize: "0.78rem", fontWeight: "bold", color: isOffline ? "#ef4444" : "var(--color-primary)" }}>
               {isOffline ? "⚠️ Terminal Offline" : "☁️ Terminal Nube"}
             </span>

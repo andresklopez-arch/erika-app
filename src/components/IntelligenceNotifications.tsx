@@ -12,12 +12,24 @@ interface AlertItem {
   targetPath: string;
 }
 
-export default function IntelligenceNotifications() {
+interface IntelligenceNotificationsProps {
+  // "floating": overlay fijo centrado arriba de toda la pantalla (comportamiento
+  // original, usado por el layout global en el resto de la app).
+  // "inline": versión compacta en flujo normal, pensada para vivir DENTRO de
+  // una barra ya existente (ver la barra inferior de POSModule.tsx) sin
+  // agrandarla -- mismo tamaño de fuente/padding que los demás botones de esa
+  // barra, y el panel desplegable abre hacia ARRIBA en vez de hacia abajo
+  // porque, a diferencia del flotante, aquí no hay espacio debajo.
+  variant?: "floating" | "inline";
+}
+
+export default function IntelligenceNotifications({ variant = "floating" }: IntelligenceNotificationsProps) {
   const router = useRouter();
   const { currentUser, logout } = useAuth();
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const isInline = variant === "inline";
 
   const fetchAlerts = async () => {
     try {
@@ -300,26 +312,30 @@ export default function IntelligenceNotifications() {
   const hasUrgentAlerts = alerts.some(a => a.type === "critical" || a.type === "warning");
 
   return (
-    <div 
+    <div
       ref={dropdownRef}
-      style={{
-        position: "fixed",
-        top: "8px",
-        left: "50%",
-        transform: "translateX(-50%)",
-        zIndex: 9999,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center"
-      }}
+      style={
+        isInline
+          ? { position: "relative", display: "inline-flex", alignItems: "center" }
+          : {
+              position: "fixed",
+              top: "8px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 9999,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center"
+            }
+      }
       className="no-print"
     >
-      <div 
+      <div
         onClick={() => setIsOpen(!isOpen)}
-        style={{ 
-          display: "flex", 
-          alignItems: "center", 
-          gap: "8px",
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: isInline ? "6px" : "8px",
           cursor: "pointer",
           transition: "transform 0.2s ease"
         }}
@@ -335,31 +351,33 @@ export default function IntelligenceNotifications() {
           style={{
             display: "flex",
             alignItems: "center",
-            gap: "6px",
+            gap: isInline ? "4px" : "6px",
             background: "rgba(22, 22, 34, 0.75)",
             backdropFilter: "blur(10px)",
             border: "1px solid var(--glass-border)",
-            padding: "3px 8px 3px 6px",
-            borderRadius: "16px",
+            padding: isInline ? "2px 6px 2px 5px" : "3px 8px 3px 6px",
+            borderRadius: isInline ? "6px" : "16px",
             boxShadow: "0 2px 8px rgba(0,0,0,0.3)"
           }}
         >
           <Image
             src="/erika_avatar.png"
             alt="ERIKA"
-            width={18}
-            height={18}
+            width={isInline ? 14 : 18}
+            height={isInline ? 14 : 18}
             style={{
               borderRadius: "50%",
               border: "1.5px solid var(--color-primary)",
               objectFit: "cover"
             }}
           />
-          <span style={{ fontSize: "0.75rem", fontWeight: "bold", color: "white" }}>
-            {currentUser?.name || "ERIKA"}
-          </span>
-          <span style={{ 
-            fontSize: "0.65rem", 
+          {!isInline && (
+            <span style={{ fontSize: "0.75rem", fontWeight: "bold", color: "white" }}>
+              {currentUser?.name || "ERIKA"}
+            </span>
+          )}
+          <span style={{
+            fontSize: isInline ? "0.62rem" : "0.65rem",
             background: currentUser?.role === "admin" ? "rgba(244, 63, 94, 0.15)" : "rgba(16, 185, 129, 0.15)",
             color: currentUser?.role === "admin" ? "var(--color-primary)" : "var(--color-secondary)",
             padding: "1px 5px",
@@ -370,30 +388,30 @@ export default function IntelligenceNotifications() {
           </span>
         </div>
 
-        {/* Botón flotante de Erika Inteligencia */}
+        {/* Botón de Erika Inteligencia */}
         <div
           style={{
-            background: hasUrgentAlerts 
+            background: hasUrgentAlerts
               ? "linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(220, 38, 38, 0.95))"
               : "linear-gradient(135deg, rgba(16, 185, 129, 0.85), rgba(5, 150, 105, 0.85))",
             backdropFilter: "blur(10px)",
             border: "1px solid rgba(255,255,255,0.1)",
             color: "white",
-            padding: "3px 10px",
-            borderRadius: "16px",
-            fontSize: "0.75rem",
+            padding: isInline ? "2px 8px" : "3px 10px",
+            borderRadius: isInline ? "6px" : "16px",
+            fontSize: isInline ? "0.7rem" : "0.75rem",
             fontWeight: "bold",
             display: "flex",
             alignItems: "center",
-            gap: "6px",
-            boxShadow: hasUrgentAlerts 
+            gap: isInline ? "4px" : "6px",
+            boxShadow: hasUrgentAlerts
               ? "0 3px 10px rgba(239, 68, 68, 0.4), 0 0 0 1px rgba(239,68,68,0.2)"
               : "0 2px 8px rgba(0,0,0,0.3)",
             animation: hasUrgentAlerts ? "pulse-alert 2s infinite" : "none"
           }}
         >
-          <span style={{ fontSize: "0.75rem" }}>{hasUrgentAlerts ? "🚨" : "🧠"}</span>
-          <span>{hasUrgentAlerts ? `${alerts.length} Alertas` : "Erika Inteligencia"}</span>
+          <span style={{ fontSize: isInline ? "0.7rem" : "0.75rem" }}>{hasUrgentAlerts ? "🚨" : "🧠"}</span>
+          <span>{hasUrgentAlerts ? `${alerts.length} Alertas` : (isInline ? "Erika" : "Erika Inteligencia")}</span>
           {alerts.length > 0 && alerts[0].id !== "erika-ok" && (
             <span style={{
               background: "white",
@@ -420,7 +438,10 @@ export default function IntelligenceNotifications() {
           onClick={(e) => e.stopPropagation()}
           style={{
             position: "absolute",
-            top: "38px",
+            // Inline vive en la barra INFERIOR del POS -- no hay espacio
+            // debajo, así que el panel abre hacia arriba. El flotante sigue
+            // abriendo hacia abajo como siempre.
+            ...(isInline ? { bottom: "38px", left: 0 } : { top: "38px" }),
             width: "360px",
             background: "rgba(22, 22, 34, 0.96)",
             border: "1px solid var(--glass-border)",
