@@ -23,6 +23,7 @@ import { reduceInventoryStock } from "../lib/inventoryClient";
 import { saveQuote } from "../lib/quotesClient";
 import { cleanMexicanPhone, openWhatsAppChat } from "../lib/whatsapp";
 import { matchesProduct } from "../lib/posItemMatch";
+import { getSmartVolumeDiscount, getNextSmartVolumeTier } from "../lib/smartVolumeDiscount";
 import { Z_INDEX } from "../lib/zIndex";
 import { usePinPrompt } from "../hooks/usePinPrompt";
 
@@ -161,134 +162,9 @@ export const formatTicketFolio = (rawId: any): string => {
   return `${res.slice(0, 2)}-${res.slice(2, 4)}*${res.slice(4, 6)}`;
 };
 
-// 🧠 Evaluador de Descuento Inteligente por Volumen y Escalas (ej. Pijas a partir de 20 pz -> 5%, 30 pz -> 30%)
-export const getSmartVolumeDiscount = (
-  item: any,
-  rules: any[]
-): { discountPct: number; tierQty?: number; ruleName?: string } => {
-  if (!item || !rules || !Array.isArray(rules) || rules.length === 0) {
-    return { discountPct: 0 };
-  }
-
-  const itemNameNorm = (item.name || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
-  const itemCodeNorm = (item.code || "").toLowerCase().trim();
-  const itemSupplierNorm = (item.supplier || "").toLowerCase().trim();
-  const qty = Number(item.qty || 1);
-
-  let bestDiscount = 0;
-  let bestTierQty = 0;
-  let bestRuleName = "";
-
-  for (const rule of rules) {
-    if (!rule || !rule.active || !Array.isArray(rule.tiers) || rule.tiers.length === 0) continue;
-
-    let matches = false;
-    const targetValNorm = (rule.targetValue || "")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .trim();
-
-    if (rule.targetType === "all") {
-      matches = true;
-    } else if (rule.targetType === "keyword") {
-      matches = targetValNorm !== "" && itemNameNorm.includes(targetValNorm);
-    } else if (rule.targetType === "supplier") {
-      matches = targetValNorm !== "" && itemSupplierNorm.includes(targetValNorm);
-    } else if (rule.targetType === "product") {
-      matches =
-        targetValNorm !== "" &&
-        (String(item.id || "") === rule.targetValue ||
-          itemCodeNorm === targetValNorm ||
-          itemNameNorm === targetValNorm);
-    }
-
-    if (matches) {
-      // Ordenar escalas de mayor cantidad a menor para aplicar el tramo más alto alcanzado
-      const sortedTiers = [...rule.tiers].sort((a: any, b: any) => b.minQty - a.minQty);
-      for (const tier of sortedTiers) {
-        if (qty >= tier.minQty) {
-          if (tier.discountPct > bestDiscount) {
-            bestDiscount = tier.discountPct;
-            bestTierQty = tier.minQty;
-            bestRuleName = rule.name;
-          }
-          break;
-        }
-      }
-    }
-  }
-
-  return { discountPct: bestDiscount, tierQty: bestTierQty, ruleName: bestRuleName };
-};
-
-// 💡 Detecta la siguiente escala de volumen alcanzable para sugerir al cajero (Upsell)
-export const getNextSmartVolumeTier = (
-  item: any,
-  rules: any[]
-): { nextQty: number; discountPct: number; diff: number; ruleName: string } | null => {
-  if (!item || !rules || !Array.isArray(rules) || rules.length === 0) return null;
-
-  const itemNameNorm = (item.name || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim();
-  const itemCodeNorm = (item.code || "").toLowerCase().trim();
-  const itemSupplierNorm = (item.supplier || "").toLowerCase().trim();
-  const qty = Number(item.qty || 1);
-
-  let bestNextTier: { nextQty: number; discountPct: number; diff: number; ruleName: string } | null = null;
-
-  for (const rule of rules) {
-    if (!rule || !rule.active || !Array.isArray(rule.tiers) || rule.tiers.length === 0) continue;
-
-    let matches = false;
-    const targetValNorm = (rule.targetValue || "")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .trim();
-
-    if (rule.targetType === "all") {
-      matches = true;
-    } else if (rule.targetType === "keyword") {
-      matches = targetValNorm !== "" && itemNameNorm.includes(targetValNorm);
-    } else if (rule.targetType === "supplier") {
-      matches = targetValNorm !== "" && itemSupplierNorm.includes(targetValNorm);
-    } else if (rule.targetType === "product") {
-      matches =
-        targetValNorm !== "" &&
-        (String(item.id || "") === rule.targetValue ||
-          itemCodeNorm === targetValNorm ||
-          itemNameNorm === targetValNorm);
-    }
-
-    if (matches) {
-      const sortedTiers = [...rule.tiers].sort((a: any, b: any) => a.minQty - b.minQty);
-      for (const tier of sortedTiers) {
-        if (tier.minQty > qty) {
-          const diff = tier.minQty - qty;
-          if (!bestNextTier || diff < bestNextTier.diff) {
-            bestNextTier = {
-              nextQty: tier.minQty,
-              discountPct: tier.discountPct,
-              diff,
-              ruleName: rule.name
-            };
-          }
-          break;
-        }
-      }
-    }
-  }
-
-  return bestNextTier;
-};
+// Se re-exporta getSmartVolumeDiscount aqui (ver import arriba) para no
+// romper el import existente en QuotesModule.tsx (`from "./POSModule"`).
+export { getSmartVolumeDiscount, getNextSmartVolumeTier };
 
 const getItemFinalPrice = (item: any, wholesaleRules: any, smartVolumeRules?: any[]): number => {
   const isWholesale = item.qty >= wholesaleRules.minQty;

@@ -232,6 +232,9 @@ export default function InventoryModule() {
     } catch (e) {}
   };
 
+  const normalizeRuleTarget = (s: string) =>
+    (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
   const handleAddSmartRule = () => {
     if (!newRuleName.trim()) {
       alert("⚠️ Por favor ingresa un nombre para la regla.");
@@ -248,6 +251,40 @@ export default function InventoryModule() {
     if (validTiers.length === 0) {
       alert("⚠️ Por favor agrega al menos una escala válida (ej. A partir de 20 pz -> 5%).");
       return;
+    }
+
+    // Dos escalas con la misma cantidad mínima son ambiguas -- solo una
+    // "gana" en getSmartVolumeDiscount() (la de mayor % entre las que
+    // empatan en minQty), y no hay forma de saber cuál desde la UI. Mejor
+    // bloquear y pedir que se corrija antes de guardar una regla confusa.
+    const seenQty = new Map<number, number>();
+    for (const t of validTiers) seenQty.set(t.minQty, (seenQty.get(t.minQty) || 0) + 1);
+    const duplicateQty = [...seenQty.entries()].find(([, count]) => count > 1)?.[0];
+    if (duplicateQty !== undefined) {
+      alert(`⚠️ Hay dos escalas con la misma cantidad mínima (${duplicateQty} piezas) -- solo se aplicaría una de las dos. Corrígelo antes de guardar.`);
+      return;
+    }
+
+    // Dos reglas ACTIVAS apuntando al mismo objetivo (misma palabra clave,
+    // proveedor, producto o "todo el catálogo") no se combinan -- solo
+    // prevalece el % más alto en cada tramo (ver getSmartVolumeDiscount en
+    // src/lib/smartVolumeDiscount.ts). No es un error necesariamente
+    // (puede ser intencional), pero es fácil que termine siendo confuso,
+    // así que se avisa y se deja decidir.
+    const newTargetNorm = normalizeRuleTarget(newRuleTargetValue);
+    const conflictingRule = smartVolumeRules.find(
+      (r) =>
+        r.active &&
+        r.targetType === newRuleTargetType &&
+        (newRuleTargetType === "all" || normalizeRuleTarget(r.targetValue) === newTargetNorm),
+    );
+    if (conflictingRule) {
+      const targetDesc = newRuleTargetType === "all" ? "todo el catálogo" : `"${newRuleTargetValue}"`;
+      const proceed = window.confirm(
+        `⚠️ Ya existe una regla activa ("${conflictingRule.name}") para ${targetDesc}.\n\n` +
+          `Con dos reglas activas para lo mismo, el sistema solo aplica el % más alto en cada tramo, no ambas combinadas -- puede ser confuso para revisar después.\n\n¿Guardar de todos modos?`,
+      );
+      if (!proceed) return;
     }
 
     const newRule = {
@@ -3486,6 +3523,42 @@ export default function InventoryModule() {
                       ))}
                     </div>
                     {(() => {
+                      // Vista previa con un precio de ejemplo -- antes había
+                      // que guardar la regla e ir a probarla en el POS para
+                      // ver el efecto real de un %; esto lo muestra al
+                      // momento de capturar la escala.
+                      const previewTiers = newRuleTiers
+                        .filter((t) => t.minQty > 0 && t.discountPct > 0)
+                        .sort((a, b) => a.minQty - b.minQty);
+                      if (previewTiers.length === 0) return null;
+                      const examplePrice = 100;
+                      return (
+                        <div
+                          style={{
+                            marginTop: "10px",
+                            background: "rgba(255,255,255,0.03)",
+                            border: "1px solid var(--glass-border)",
+                            borderRadius: "6px",
+                            padding: "8px 10px",
+                            fontSize: "0.78rem",
+                            color: "rgba(255,255,255,0.7)"
+                          }}
+                        >
+                          <strong style={{ color: "white" }}>👁️ Vista previa</strong> (con un producto de ejemplo de ${examplePrice.toFixed(2)}):
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginTop: "6px" }}>
+                            {previewTiers.map((t, idx) => {
+                              const finalPrice = examplePrice * (1 - Math.min(100, Math.max(0, Number(t.discountPct) || 0)) / 100);
+                              return (
+                                <span key={idx}>
+                                  {t.minQty}+ pz: ${examplePrice.toFixed(2)} ➔ <strong style={{ color: "#34d399" }}>${finalPrice.toFixed(2)}</strong>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {(() => {
                       const maxDisc = Math.max(...newRuleTiers.map(t => Number(t.discountPct) || 0), 0);
                       if (maxDisc >= 25) {
                         return (
@@ -3587,6 +3660,28 @@ export default function InventoryModule() {
                                 </span>
                               ))}
                             </div>
+                            {rule.active && (() => {
+                              // Otra regla activa apuntando al mismo objetivo --
+                              // no se combinan, solo prevalece el % más alto en
+                              // cada tramo (ver getSmartVolumeDiscount). Se avisa
+                              // aquí también (no solo al crear) para que un
+                              // conflicto ya guardado antes de este aviso no
+                              // quede invisible.
+                              const targetNorm = normalizeRuleTarget(rule.targetValue);
+                              const conflict = smartVolumeRules.find(
+                                (r) =>
+                                  r.id !== rule.id &&
+                                  r.active &&
+                                  r.targetType === rule.targetType &&
+                                  (rule.targetType === "all" || normalizeRuleTarget(r.targetValue) === targetNorm),
+                              );
+                              if (!conflict) return null;
+                              return (
+                                <div style={{ fontSize: "0.72rem", color: "#fbbf24", marginTop: "2px" }}>
+                                  ⚠️ Conflicto con: &quot;{conflict.name}&quot; (mismo objetivo, solo aplica el % más alto)
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
