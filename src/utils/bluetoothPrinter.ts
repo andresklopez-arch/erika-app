@@ -292,53 +292,78 @@ export async function sendBleBytes(
     for (let i = 0; i < bytes.length; i += chunkSize) {
       const chunk = bytes.slice(i, i + chunkSize);
 
-      const device = currentChar.service?.device;
-      if (device && !device.gatt?.connected) {
-        console.warn("[BLE] Conexión caída durante transmisión, reconectando...");
-        const server = await reconnectGattServer(device);
-        const chars = await getCharacteristicsFromGattServer(server);
-        const newChar = findWriteCharacteristic(chars);
-        if (newChar) currentChar = newChar;
-      }
-
       let written = false;
+      let lastErr: any = null;
+      const maxRounds = 3;
 
-      // 1. Probar writeValueWithResponse primero (garantizado para EC Line EC-MP-300 en Android/Windows)
-      if (currentChar.properties && currentChar.properties.write) {
-        try {
-          await currentChar.writeValueWithResponse(chunk);
-          written = true;
-        } catch (errWithResp) {
-          console.warn("[BLE] writeValueWithResponse falló, probando writeValueWithoutResponse...", errWithResp);
+      // Cada ronda prueba los 3 métodos de escritura (igual que antes), pero
+      // ahora una ronda que falla por completo espera con backoff antes de
+      // reintentar, en vez de tirar el error de inmediato. La falla más común
+      // en la práctica ("GATT operation already in progress") es que la cola
+      // Bluetooth del sistema operativo sigue ocupada con el chunk anterior,
+      // no que la impresora rechace el dato -- probar los 3 métodos sin pausa
+      // entre sí los hace fallar juntos por la misma razón, así que la pausa
+      // real tiene que ir entre rondas.
+      for (let round = 1; round <= maxRounds && !written; round++) {
+        const device = currentChar.service?.device;
+        if (device && !device.gatt?.connected) {
+          console.warn(`[BLE] Conexión caída durante transmisión (ronda ${round}/${maxRounds}), reconectando...`);
+          try {
+            const server = await reconnectGattServer(device);
+            const chars = await getCharacteristicsFromGattServer(server);
+            const newChar = findWriteCharacteristic(chars);
+            if (newChar) currentChar = newChar;
+          } catch (reconnErr) {
+            lastErr = reconnErr;
+          }
+        }
+
+        // 1. Probar writeValueWithResponse primero (garantizado para EC Line EC-MP-300 en Android/Windows)
+        if (currentChar.properties && currentChar.properties.write) {
+          try {
+            await currentChar.writeValueWithResponse(chunk);
+            written = true;
+          } catch (errWithResp) {
+            lastErr = errWithResp;
+            console.warn(`[BLE] writeValueWithResponse falló (ronda ${round}/${maxRounds}), probando writeValueWithoutResponse...`, errWithResp);
+          }
+        }
+
+        // 2. Probar writeValueWithoutResponse
+        if (!written && currentChar.properties && currentChar.properties.writeWithoutResponse) {
+          try {
+            await currentChar.writeValueWithoutResponse(chunk);
+            written = true;
+          } catch (errNoResp) {
+            lastErr = errNoResp;
+            console.warn(`[BLE] writeValueWithoutResponse falló (ronda ${round}/${maxRounds})...`, errNoResp);
+          }
+        }
+
+        // 3. Fallback genérico
+        if (!written) {
+          try {
+            await currentChar.writeValue(chunk);
+            written = true;
+          } catch (fallbackErr) {
+            lastErr = fallbackErr;
+            console.warn(`[BLE] writeValue (fallback genérico) también falló (ronda ${round}/${maxRounds}).`, fallbackErr);
+          }
+        }
+
+        if (!written && round < maxRounds) {
+          await new Promise((r) => setTimeout(r, 200 * round));
         }
       }
 
-      // 2. Probar writeValueWithoutResponse
-      if (!written && currentChar.properties && currentChar.properties.writeWithoutResponse) {
-        try {
-          await currentChar.writeValueWithoutResponse(chunk);
-          written = true;
-        } catch (errNoResp) {
-          console.warn("[BLE] writeValueWithoutResponse falló...", errNoResp);
-        }
-      }
-
-      // 3. Fallback genérico
+      // Si las 3 rondas (cada una probando los 3 métodos de escritura)
+      // fallaron, el chunk nunca llegó a la impresora. Antes esto se
+      // ignoraba y la función igual devolvía `true`, haciendo creer que el
+      // ticket se imprimió completo cuando en realidad quedó parcial o en
+      // blanco.
       if (!written) {
-        try {
-          await currentChar.writeValue(chunk);
-          written = true;
-        } catch (fallbackErr) {
-          console.warn("[BLE] writeValue (fallback genérico) también falló.", fallbackErr);
-        }
-      }
-
-      // Si los tres métodos de escritura fallaron, el chunk nunca llegó a la
-      // impresora. Antes esto se ignoraba y la función igual devolvía `true`,
-      // haciendo creer que el ticket se imprimió completo cuando en realidad
-      // quedó parcial o en blanco.
-      if (!written) {
-        throw new Error("No se pudo enviar un fragmento de datos a la impresora Bluetooth tras 3 intentos.");
+        const detail = lastErr?.message ? ` (${lastErr.message})` : "";
+        throw new Error(`No se pudo enviar un fragmento de datos a la impresora Bluetooth tras ${maxRounds} intentos.${detail}`);
       }
 
       const effectiveDelay = Math.max(30, delayMs);
