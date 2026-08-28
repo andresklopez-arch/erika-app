@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { reduceInventoryStock } from "../lib/inventoryClient";
 import { matchesProduct } from "../lib/posItemMatch";
+import { usePinPrompt } from "../hooks/usePinPrompt";
 
 interface Props {
   show: boolean;
@@ -22,8 +23,8 @@ interface Props {
     discountPct: number;
     applyIva: boolean;
     notes: string;
-  }) => Promise<{ realTicketId: number; quoteNumber: number | null }>;
-  onSuccess: (customer: any, realTicketId: number) => void;
+  }) => Promise<{ realTicketId: number; quoteNumber: number | null; quoteUuid: string | null }>;
+  onSuccess: (customer: any, realTicketId: number, quoteUuid: string | null) => void;
   onInventoryReduced?: () => void;
   reloadCustomers: () => void;
 }
@@ -45,6 +46,7 @@ export default function PosCreditModal({
 }: Props) {
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { getPinAsync, PinModal } = usePinPrompt();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -102,8 +104,9 @@ export default function PosCreditModal({
             `• ${i.name} (Venta: ${i.qty}, Stock: ${globalCatalog.find((cat) => matchesProduct(i, cat))?.stock ?? 0})`,
         )
         .join("\n");
-      const stockPin = window.prompt(
-        `⚠️ STOCK INSUFICIENTE\nLos siguientes artículos superan las existencias físicas en inventario:\n${itemNames}\n\nIngresa el PIN de Administrador para autorizar:`,
+      const stockPin = await getPinAsync(
+        "⚠️ STOCK INSUFICIENTE",
+        `Los siguientes artículos superan las existencias físicas en inventario:\n${itemNames}\n\nIngresa el PIN de Administrador para autorizar:`,
       );
       if (!stockPin) return;
       if (!(await verifyAdminPinRemote(stockPin))) {
@@ -113,8 +116,9 @@ export default function PosCreditModal({
 
     let overdraftPin: string | undefined;
     if (customer.balance + finalTotal > customer.credit_limit) {
-      const pin = window.prompt(
-        `🚩 ALERTA ROJA: Límite de crédito excedido. Disponible: $${(customer.credit_limit - customer.balance).toFixed(2)}\n\nIngrese PIN Maestro para autorizar la venta (Sobregiro):`
+      const pin = await getPinAsync(
+        "🚩 ALERTA ROJA",
+        `Límite de crédito excedido. Disponible: $${(customer.credit_limit - customer.balance).toFixed(2)}\n\nIngrese PIN Maestro para autorizar la venta (Sobregiro):`
       );
       if (!pin) return alert("❌ Operación cancelada.");
       overdraftPin = pin;
@@ -128,7 +132,7 @@ export default function PosCreditModal({
       // del cargo citaba activeTicketId (el id interno de la pestaña del
       // carrito, casi siempre "1"), no un folio real. Se hace antes del
       // cargo para poder usar el id real en la nota de credit_transactions.
-      const { realTicketId, quoteNumber } = await saveTicketToQuotes({
+      const { realTicketId, quoteNumber, quoteUuid } = await saveTicketToQuotes({
         customerName: customer.name,
         customerId: customer.id,
         items,
@@ -196,7 +200,7 @@ export default function PosCreditModal({
 
       alert(`✅ Venta a crédito registrada a ${customer.name}.`);
       setSelectedCustomerId("");
-      onSuccess(customer, realTicketId);
+      onSuccess(customer, realTicketId, quoteUuid);
       reloadCustomers();
     } finally {
       setIsSubmitting(false);
@@ -286,6 +290,7 @@ export default function PosCreditModal({
           </button>
         </div>
       </div>
+      {PinModal}
     </div>
   );
 }

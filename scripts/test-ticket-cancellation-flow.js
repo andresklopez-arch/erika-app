@@ -157,23 +157,35 @@ async function main() {
     });
     check("POST /api/inventory/reduce-stock (venta) responde 200", reduce.ok, JSON.stringify(reduce.json));
 
+    // El ticket se guarda en `quotes` SIN especificar `id` -- igual que
+    // saveTicketToQuotes() en POSModule.tsx, que deja que Postgres genere el
+    // uuid real con gen_random_uuid(). Antes esta prueba forzaba
+    // `id: TICKET_ID` (un entero de Date.now(), igual al que se usaba en la
+    // descripción de la venta) y por eso pasaba en verde aunque el código
+    // real tuviera el bug: en producción `quotes.id` SIEMPRE es un uuid, no
+    // ese entero, así que la búsqueda de "Cancelar Ticket" nunca coincidía.
+    const { data: quote, error: quoteErr } = await admin
+      .from("quotes")
+      .insert({ customer_name: "Venta Mostrador", items: [{ name: "Producto Cancelación", price: 100, qty: 3 }], total: 300, status: "ticket", notes: "Pago: EFECTIVO" })
+      .select("id")
+      .single();
+    check("Se creó el ticket de prueba en quotes con un uuid real", !quoteErr && !!quote?.id, quoteErr?.message);
+    createdQuoteId = quote?.id || null;
+    if (!createdQuoteId) throw new Error("No se pudo crear el ticket de prueba en quotes, abortando.");
+
+    // La descripción de la venta usa el uuid REAL de `quotes.id` -- igual
+    // que descriptionText en POSModule.tsx desde el fix del 2026-08-27
+    // (antes usaba el id local de la pestaña del carrito en el POS, sin
+    // relación con esta fila).
     const sale = await apiCall(cookie, "/api/caja/transaction", {
       type: "sale",
       amount: 300,
-      description: `Venta Ticket #${TICKET_ID} [METODO:efectivo] [CASH:300] [CARD:0] [TRANS:0]`,
+      description: `Venta Ticket #${createdQuoteId} [METODO:efectivo] [CASH:300] [CARD:0] [TRANS:0]`,
       cash_amount: 300,
       card_amount: 0,
       transfer_amount: 0,
     });
     check("POST /api/caja/transaction (venta) responde 200", sale.ok, JSON.stringify(sale.json));
-
-    const { data: quote, error: quoteErr } = await admin
-      .from("quotes")
-      .insert({ id: TICKET_ID, customer_name: "Venta Mostrador", items: [{ name: "Producto Cancelación", price: 100, qty: 3 }], total: 300, status: "ticket", notes: "Pago: EFECTIVO" })
-      .select("id")
-      .single();
-    check("Se creó el ticket de prueba en quotes", !quoteErr && !!quote, quoteErr?.message);
-    createdQuoteId = quote?.id || null;
 
     const { data: afterSaleStock } = await admin.from("inventory").select("stock").eq("id", createdInventoryId).single();
     check("El stock bajó a 7 tras la venta simulada", afterSaleStock?.stock === 7, `stock: ${afterSaleStock?.stock}`);
@@ -187,12 +199,12 @@ async function main() {
     //    quotes_status_check sin 'cancelled', ver
     //    supabase/migrations/20260828010000_allow_cancelled_quote_status.sql).
     const cancelSave = await apiCall(cookie, "/api/quotes/save", {
-      id: TICKET_ID,
+      id: createdQuoteId,
       fields: { status: "cancelled", notes: "CANCELADO (prueba automatizada)" },
     });
     check("POST /api/quotes/save (status='cancelled') responde 200", cancelSave.ok, JSON.stringify(cancelSave.json));
 
-    const { data: afterCancelQuote } = await admin.from("quotes").select("status").eq("id", TICKET_ID).single();
+    const { data: afterCancelQuote } = await admin.from("quotes").select("status").eq("id", createdQuoteId).single();
     check("El ticket de prueba quedó con status='cancelled' en la base", afterCancelQuote?.status === "cancelled", `status: ${afterCancelQuote?.status}`);
 
     // 5. Cancelar: reincorporar stock (mismo endpoint/moveType que usa
@@ -200,23 +212,49 @@ async function main() {
     const cancelStock = await apiCall(cookie, "/api/inventory/reduce-stock", {
       items: [{ id: createdInventoryId, qty: -3 }],
       moveType: "cancellation",
-      refId: `TICKET-CANCEL-${TICKET_ID}`,
+      refId: `TICKET-CANCEL-${createdQuoteId}`,
     });
     check("POST /api/inventory/reduce-stock (cancelación) responde 200", cancelStock.ok, JSON.stringify(cancelStock.json));
 
     const { data: afterCancelStock } = await admin.from("inventory").select("stock").eq("id", createdInventoryId).single();
     check("El stock regresó a 10 tras cancelar el ticket", afterCancelStock?.stock === 10, `stock: ${afterCancelStock?.stock}`);
 
-    // 6. Cancelar: registrar el retiro de caja que compensa el efectivo de
-    //    la venta anulada (mismo endpoint que usa insertCashTransaction)
+    // 6. Cancelar: buscar la transacción de la venta original por su
+    //    descripción -- MISMA búsqueda que handleExecuteCancelTicket() hace
+    //    en POSModule.tsx antes de registrar el retiro compensatorio. Este
+    //    es el paso que estaba roto: con `activeTicket.id` (el id local de
+    //    la pestaña del carrito) en vez del uuid real de `quotes.id` en la
+    //    descripción, esta búsqueda nunca encontraba nada, `cashPortion`
+    //    se quedaba en 0 y el retiro de abajo JAMÁS se registraba -- el
+    //    corte de caja seguía contando la venta anulada como si siguiera
+    //    vigente. Ver POSModule.tsx: descriptionText / handleCheckoutSubmit.
+    const { data: origSaleTx } = await admin
+      .from("cash_transactions")
+      .select("cash_amount, description")
+      .eq("type", "sale")
+      .ilike("description", `%Venta Ticket #${createdQuoteId}%`)
+      .limit(1)
+      .maybeSingle();
+    check(
+      "La cancelación SÍ encuentra la transacción de la venta original por su uuid real",
+      origSaleTx?.cash_amount === 300,
+      `origSaleTx: ${JSON.stringify(origSaleTx)}`,
+    );
+    const cashPortion = Number(origSaleTx?.cash_amount ?? 0);
+
+    // 7. Cancelar: registrar el retiro de caja que compensa el efectivo de
+    //    la venta anulada (mismo endpoint que usa insertCashTransaction),
+    //    por el monto real que se acaba de encontrar arriba -- no un valor
+    //    fijo -- para que esta prueba falle si esa búsqueda alguna vez deja
+    //    de encontrar la venta original.
     const withdrawal = await apiCall(cookie, "/api/caja/transaction", {
       type: "withdrawal",
-      amount: 300,
-      description: `🚫 Cancelación de Ticket #${TICKET_ID} (Venta Mostrador)`,
+      amount: cashPortion,
+      description: `🚫 Cancelación de Ticket #${createdQuoteId} (Venta Mostrador)`,
     });
-    check("POST /api/caja/transaction (retiro por cancelación) responde 200", withdrawal.ok, JSON.stringify(withdrawal.json));
+    check("POST /api/caja/transaction (retiro por cancelación) responde 200", withdrawal.ok && cashPortion > 0, JSON.stringify(withdrawal.json));
 
-    // 7. Cancelar: registrar la auditoría (mismo endpoint que usa
+    // 8. Cancelar: registrar la auditoría (mismo endpoint que usa
     //    LoggerService.logError)
     const auditLog = await apiCall(cookie, "/api/logs/error", {
       module: "Cancelacion_Ticket_TEST",
@@ -228,7 +266,7 @@ async function main() {
     const { data: logRow } = await admin.from("error_logs").select("id").eq("module", "Cancelacion_Ticket_TEST").limit(1).maybeSingle();
     check("La fila de auditoría de cancelación quedó guardada en error_logs", !!logRow);
 
-    // 8. Cerrar caja: la venta (300 efectivo) y el retiro (300) deben
+    // 9. Cerrar caja: la venta (300 efectivo) y el retiro (300) deben
     //    cancelarse entre sí, dejando el esperado igual al fondo inicial.
     const { data: cred } = await admin.from("user_credentials").select("pin").eq("user_id", adminUser.id).maybeSingle();
     if (!cred?.pin) {

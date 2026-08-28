@@ -24,6 +24,7 @@ import { saveQuote } from "../lib/quotesClient";
 import { cleanMexicanPhone, openWhatsAppChat } from "../lib/whatsapp";
 import { matchesProduct } from "../lib/posItemMatch";
 import { Z_INDEX } from "../lib/zIndex";
+import { usePinPrompt } from "../hooks/usePinPrompt";
 
 // Único valor de método de pago que dispara lógica especial de crédito
 // (segunda copia, etiqueta "VENTA A CRÉDITO", validaciones). Se compara
@@ -79,6 +80,7 @@ interface ReceiptToPrint {
   // Cuántas veces debe llamarse window.print() en serie (copia doble en
   // impresora "system") — ver el useEffect que consume receiptToPrint.
   _printCopies?: number;
+  isCancelled?: boolean;
 }
 
 const levenshtein = (a: string, b: string) => {
@@ -582,13 +584,9 @@ export default function POSModule() {
   // existía forma de saber que ya se había intentado antes.
   const checkoutTokenRef = useRef<string | null>(null);
 
-  // Estados del Modal del PIN (Sugerencia 2)
-  const [showPinModal, setShowPinModal] = useState(false);
-  const [pinValue, setPinValue] = useState("");
-  const [pinModalCallback, setPinModalCallback] = useState<((pin: string) => void) | null>(null);
-  const [pinModalTitle, setPinModalTitle] = useState("AUTORIZACIÓN REQUERIDA");
-  const [pinModalMessage, setPinModalMessage] = useState("");
-  
+  // Modal del PIN, compartido con QuotesModule vía usePinPrompt()
+  const { getPinAsync, PinModal } = usePinPrompt();
+
   // Bitácora de Sincronización (Sugerencia 3)
   const [showSyncLogModal, setShowSyncLogModal] = useState(false);
 
@@ -807,12 +805,19 @@ export default function POSModule() {
         isReprint: true,
         data: {
            realTicketId: ticket.id,
+           quoteUuid: ticket.id,
            items: ticketItems,
            finalTotal: Number(ticket.total) || 0,
            discountPct: ticket.discount_pct || 0,
            applyIva: ticket.apply_iva || false,
            paymentMethod: ticket.notes ? (ticket.notes.toLowerCase().includes("efectivo") ? "efectivo" : ticket.notes.toLowerCase().includes("tarjeta") ? "tarjeta" : ticket.notes.toLowerCase().includes("transferencia") ? "transferencia" : "mixto") : "efectivo",
-           customerName: ticket.customer_name && ticket.customer_name !== "Venta Mostrador" ? ticket.customer_name : ""
+           customerName: ticket.customer_name && ticket.customer_name !== "Venta Mostrador" ? ticket.customer_name : "",
+           // Un ticket cancelado se puede seguir reimprimiendo (el cliente a
+           // veces lo pide como comprobante de la anulación), pero nunca sin
+           // que quede claro en el papel que ya no es una venta vigente --
+           // antes salía idéntico a un ticket cobrado de verdad, sin ningún
+           // aviso (reporte de Ferretería Erika).
+           isCancelled: ticket.status === "cancelled"
         }
      });
 
@@ -1126,22 +1131,6 @@ export default function POSModule() {
     toast.success(`Nota Cliente ${ticketId} cerrada.`);
   };
 
-  const requestPin = (title: string, message: string, callback: (pin: string) => void) => {
-    setPinModalTitle(title);
-    setPinModalMessage(message);
-    setPinValue("");
-    setPinModalCallback(() => callback);
-    setShowPinModal(true);
-  };
-
-  const getPinAsync = (title: string, message: string): Promise<string> => {
-    return new Promise((resolve) => {
-      requestPin(title, message, (pin) => {
-        resolve(pin);
-      });
-    });
-  };
-
   // Verifica un PIN de administrador del lado del servidor. Antes cada
   // pantalla de autorización comparaba el PIN directamente contra `users`
   // desde el navegador con la llave pública — ahora todas pasan por
@@ -1428,6 +1417,8 @@ export default function POSModule() {
                 // antes (antes se marcaba "converted" al solo enviarla a
                 // caja, aunque el cajero cancelara o nunca cobrara).
                 const savedQuoteId = localStorage.getItem("ERIKA_RESTORE_QUOTE_ID");
+                const savedQuoteNumber = localStorage.getItem("ERIKA_RESTORE_QUOTE_NUMBER");
+                localStorage.removeItem("ERIKA_RESTORE_QUOTE_NUMBER");
                 // Restaurar tambien el % de descuento/aumento y el IVA con
                 // los que se guardo la cotizacion -- antes discountPct se
                 // ponia en 0 a fuerza y el IVA se dejaba como estuviera en
@@ -1454,15 +1445,17 @@ export default function POSModule() {
                 localStorage.removeItem("ERIKA_RESTORE_QUOTE_ID");
 
                 const autoCheckout = localStorage.getItem("ERIKA_AUTO_OPEN_CHECKOUT");
+                const quoteLabel = savedQuoteNumber ? `Cotización #${savedQuoteNumber}` : "Cotización";
                 if (autoCheckout === "true") {
                    localStorage.removeItem("ERIKA_AUTO_OPEN_CHECKOUT");
                    setIsPrinterConnected(true);
                    localStorage.setItem("ERIKA_PRINTER_CONNECTED", "true");
+                   toast.success(`${quoteLabel} cargada. Completa el cobro para cerrarla.`);
                    setTimeout(() => {
                       setShowCheckoutModal(true);
                    }, 300);
                 } else {
-                   toast.success("Cotización cargada en la caja.");
+                   toast.success(`${quoteLabel} cargada en Punto de Venta.`);
                 }
              }
           } catch(e) {}
@@ -2172,8 +2165,14 @@ export default function POSModule() {
     discountPct: number;
     applyIva: boolean;
     notes: string;
-  }): Promise<{ realTicketId: number; quoteNumber: number | null }> => {
+  }): Promise<{ realTicketId: number; quoteNumber: number | null; quoteUuid: string | null }> => {
     let realTicketId = Date.now();
+    // uuid real de la fila en `quotes` (a diferencia de realTicketId, que
+    // para un guardado exitoso es Number(uuid) = NaN -- ver comentario
+    // abajo). Es el mismo valor que la pantalla de Cancelar Ticket usa como
+    // `ticket.id` para buscarlo, así que es lo único que sirve para que la
+    // transacción de caja de esta venta pueda encontrarse después al cancelar.
+    let quoteUuid: string | null = null;
     // quote_number es el folio entero real y buscable en "Consulta de
     // Tickets Anteriores" -- a diferencia de `id` (uuid: Number(uuid) da
     // NaN, así que realTicketId nunca sirvió para nada que necesitara un
@@ -2232,7 +2231,7 @@ export default function POSModule() {
         // claim.ticket_id)`. Antes se guardaba realTicketId (Number(uuid)
         // = NaN), así que ese lookup nunca podía encontrar nada aunque la
         // tabla hubiera existido.
-        const quoteUuid = String(finalQuoteData.id);
+        quoteUuid = String(finalQuoteData.id);
 
         try {
           const { error: insertErr } = await supabase.from("invoice_claims").insert({
@@ -2256,7 +2255,7 @@ export default function POSModule() {
     } catch (quoteErr) {
       console.error("Error al registrar el ticket en quotes:", quoteErr);
     }
-    return { realTicketId, quoteNumber };
+    return { realTicketId, quoteNumber, quoteUuid };
   };
 
   const handleCheckoutSubmit = async (selectedMethod: "efectivo" | "tarjeta" | "transferencia" | "mixto", cashAmt: number, cardAmt: number, transferAmt: number, reference: string) => {
@@ -2347,7 +2346,6 @@ export default function POSModule() {
         }
 
         const idempotencyToken = checkoutTokenRef.current;
-        const descriptionText = `Venta Ticket #${activeTicket.id}${selectedCustomerId ? ` (Cliente ID: ${selectedCustomerId})` : ""} [METODO:${selectedMethod}] [CASH:${cashAmt}] [CARD:${cardAmt}] [TRANS:${transferAmt}] [COSTO:${totalCost.toFixed(2)}]${reference ? ` [REF:${reference}]` : ""}${idempotencyToken ? ` [IDEMP:${idempotencyToken}]` : ""}`;
 
         // Si la respuesta de un intento anterior se perdió por una
         // desconexión momentánea, el cajero reintenta con el mismo botón
@@ -2374,6 +2372,28 @@ export default function POSModule() {
           }
         }
 
+        // El ticket se guarda en `quotes` ANTES de registrar la venta en
+        // caja (y no después, como antes) para poder referenciar su id REAL
+        // y buscable (quoteUuid) en descriptionText -- con el orden viejo,
+        // descriptionText usaba activeTicket.id (el id local de la pestaña
+        // del carrito en el POS, casi siempre "1", sin relación con la fila
+        // real en `quotes`). Como "Cancelar Ticket" busca la venta original
+        // por ese mismo uuid real, con el id local la búsqueda nunca
+        // encontraba nada: cancelar un ticket jamás generaba el retiro
+        // compensatorio en Arqueo de Caja, y la venta anulada seguía
+        // contando de más en el corte.
+        const { realTicketId, quoteUuid } = await saveTicketToQuotes({
+          customerName: selectedCustomerId ? (customers.find(c => c.id === selectedCustomerId)?.name || "Venta Registrada") : "Venta Mostrador",
+          customerId: selectedCustomerId || null,
+          items: activeTicket.items,
+          total: totalAmt,
+          discountPct: activeTicket.discountPct || 0,
+          applyIva: applyIva,
+          notes: `Pago: ${selectedMethod.toUpperCase()}${reference ? ` (Ref: ${reference})` : ""}`,
+        });
+
+        const descriptionText = `Venta Ticket #${quoteUuid || activeTicket.id}${selectedCustomerId ? ` (Cliente ID: ${selectedCustomerId})` : ""} [METODO:${selectedMethod}] [CASH:${cashAmt}] [CARD:${cardAmt}] [TRANS:${transferAmt}] [COSTO:${totalCost.toFixed(2)}]${reference ? ` [REF:${reference}]` : ""}${idempotencyToken ? ` [IDEMP:${idempotencyToken}]` : ""}`;
+
         const { error } = await insertCashTransaction({
           type: "sale",
           amount: totalAmt,
@@ -2399,16 +2419,6 @@ export default function POSModule() {
             return alert("Error al cobrar: " + fallbackError.message);
           }
         }
-
-        const { realTicketId } = await saveTicketToQuotes({
-          customerName: selectedCustomerId ? (customers.find(c => c.id === selectedCustomerId)?.name || "Venta Registrada") : "Venta Mostrador",
-          customerId: selectedCustomerId || null,
-          items: activeTicket.items,
-          total: totalAmt,
-          discountPct: activeTicket.discountPct || 0,
-          applyIva: applyIva,
-          notes: `Pago: ${selectedMethod.toUpperCase()}${reference ? ` (Ref: ${reference})` : ""}`,
-        });
 
         // Puntos de lealtad (completamente aislado)
         let puntosGanados = 0;
@@ -2463,6 +2473,8 @@ export default function POSModule() {
               type: "ticket",
               data: {
                 realTicketId,
+                quoteUuid,
+                invoiceToken,
                 items: [...activeTicket.items],
                 finalTotal: totalAmt,
                 paymentMethod: selectedMethod,
@@ -2823,9 +2835,26 @@ export default function POSModule() {
       writeText(divider);
       
       if (currentJob.type === "ticket") {
-        const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = currentJob.data;
+        const { realTicketId, quoteUuid, invoiceToken: jobInvoiceToken, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false, isCancelled } = currentJob.data;
+        // El folio impreso y el link de auto-facturación deben usar el uuid
+        // real de `quotes.id` (quoteUuid) y el token de reclamo real
+        // (jobInvoiceToken) -- realTicketId es Number(uuid) = NaN en toda
+        // venta guardada con éxito, así que usarlo aquí imprimía el mismo
+        // folio falso "TK-00*00" en cada ticket y un link roto
+        // (/facturacion/NaN) que nunca podía facturarse.
+        const printFolioId = quoteUuid || realTicketId;
+        const printInvoiceUrlToken = jobInvoiceToken || quoteUuid || realTicketId;
         const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
         const printDiscountPct = discountPct < 0 ? 0 : discountPct;
+
+        if (isCancelled) {
+          setAlign(1);
+          setBold(true);
+          writeText("*** TICKET CANCELADO ***\n");
+          writeText("*** NO VALIDO COMO COMPROBANTE DE VENTA ***\n");
+          setBold(false);
+          writeText(divider);
+        }
 
         if (paymentMethod === PAYMENT_METHOD_CREDITO) {
           setAlign(1);
@@ -2837,7 +2866,7 @@ export default function POSModule() {
 
         setAlign(1);
         setBold(true);
-        writeText(`Ticket: #${formatTicketFolio(realTicketId)}\n`);
+        writeText(`Ticket: #${formatTicketFolio(printFolioId)}\n`);
         setBold(false);
         writeText(`Fecha: ${new Date().toLocaleString()}\n`);
         
@@ -2935,7 +2964,7 @@ export default function POSModule() {
         if (showBilling) {
           setAlign(1);
           writeText("\nAuto-Facturacion Express:\n");
-          writeText(`${typeof window !== "undefined" ? window.location.origin : ""}/facturacion/${realTicketId}\n`);
+          writeText(`${typeof window !== "undefined" ? window.location.origin : ""}/facturacion/${printInvoiceUrlToken}\n`);
           setAlign(0);
         }
       } else if (currentJob.type === "layaway") {
@@ -3170,7 +3199,7 @@ export default function POSModule() {
       const printCopies = (doubleCopyEnabled && !job.isReprint) ? 2 : 1;
 
       if (job.type === "ticket") {
-        const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = job.data;
+        const { realTicketId, quoteUuid, invoiceToken: jobInvoiceToken, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false, isCancelled } = job.data;
         const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
         const printDiscountPct = discountPct < 0 ? 0 : discountPct;
         const subtotalVal = items.reduce((sum: number, item: any) => {
@@ -3183,7 +3212,11 @@ export default function POSModule() {
 
         setReceiptToPrint({
           type: "ticket",
-          ticketId: realTicketId,
+          // realTicketId es Number(uuid) = NaN en toda venta guardada con
+          // éxito (ver comentario en la rama de impresión Bluetooth) --
+          // ticketId se usa para mostrar el folio en pantalla/recibo, así
+          // que debe llevar el folio ya formateado a partir del uuid real.
+          ticketId: formatTicketFolio(quoteUuid || realTicketId),
           customerName: customers.find(c => c.id === selectedCustomerId)?.name || "",
           items: items.map((i: any) => ({
              ...i,
@@ -3195,9 +3228,10 @@ export default function POSModule() {
           discountPct: printDiscountPct,
           discountAmount: discountAmt,
           finalTotal: finalTotal,
-          invoiceToken: realTicketId,
+          invoiceToken: jobInvoiceToken || quoteUuid || realTicketId,
           paymentMethod,
-          _printCopies: printCopies
+          _printCopies: printCopies,
+          isCancelled
         });
       } else if (job.type === "layaway") {
         const { customer, items, finalTotal, downPayment, discountPct = 0, applyIva = false } = job.data;
@@ -3301,11 +3335,20 @@ export default function POSModule() {
       false;
 
     if (job.type === "ticket") {
-      const { realTicketId, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false } = job.data;
+      const { realTicketId, quoteUuid, invoiceToken: jobInvoiceToken, items, finalTotal, paymentMethod, discountPct = 0, applyIva = false, isCancelled } = job.data;
+      // Ver el comentario equivalente en la rama de impresión Bluetooth
+      // directa: realTicketId es Number(uuid) = NaN en toda venta guardada
+      // con éxito, así que el folio y el link de facturación deben usar el
+      // uuid/token reales en vez de ese valor roto.
+      const printFolioId = quoteUuid || realTicketId;
+      const printInvoiceUrlToken = jobInvoiceToken || quoteUuid || realTicketId;
       const increaseFactor = discountPct < 0 ? (1 + Math.abs(discountPct) / 100) : 1;
       const printDiscountPct = discountPct < 0 ? 0 : discountPct;
       const creditLabelHtml = paymentMethod === PAYMENT_METHOD_CREDITO
         ? `<div style="text-align:center; font-weight:bold; border: 2px solid #b91c1c; color: #b91c1c; padding: 6px; margin-bottom: 12px; font-size: 0.9em;">*** VENTA A CRÉDITO ***</div>`
+        : "";
+      const cancelledLabelHtml = isCancelled
+        ? `<div style="text-align:center; font-weight:bold; border: 2px solid #ef4444; color: #ef4444; padding: 8px; margin-bottom: 12px; font-size: 1em;">🚫 TICKET CANCELADO<br><span style="font-weight:normal; font-size:0.8em;">No válido como comprobante de venta</span></div>`
         : "";
 
       const itemsHtml = items.map((i: any) => {
@@ -3337,6 +3380,7 @@ export default function POSModule() {
         return `
           <div style="text-align: ${marginAlign}; width: 100%;">
             ${copyLabelHtml}
+            ${cancelledLabelHtml}
             ${creditLabelHtml}
             ${showLogo ? `<div class="center"><img src="${businessProfile.logo}" style="max-width: 80px; margin-bottom: 10px;" /></div>` : ""}
             ${showName ? `<div class="center bold" style="font-size: 1.2em; margin-bottom: 5px;">${businessProfile.name}</div>` : ""}
@@ -3346,7 +3390,7 @@ export default function POSModule() {
             ${showEmail ? `<div class="center" style="font-size: 0.9em; margin-bottom: 3px;">Email: ${businessProfile.email}</div>` : ""}
 
             <div class="divider"></div>
-            <div class="center bold" style="margin-bottom: 5px;">Ticket: #${formatTicketFolio(realTicketId)}</div>
+            <div class="center bold" style="margin-bottom: 5px;">Ticket: #${formatTicketFolio(printFolioId)}</div>
             <div style="font-size: 0.9em; margin-bottom: 5px;">Fecha: ${new Date().toLocaleString()}</div>
 
             ${showPaymentMethod && paymentMethod ? `<div style="font-size: 0.95em; margin-bottom: 5px;">Método de Pago: ${paymentMethod.toUpperCase()}</div>` : ""}
@@ -3396,7 +3440,7 @@ export default function POSModule() {
             ${showBilling ? `
             <div class="center" style="margin-top: 15px; font-size: 0.9em;">
               <strong>Auto-Facturación Express</strong><br>
-              <span>Entra a ${window.location.origin}/facturacion/${realTicketId} para facturar.</span>
+              <span>Entra a ${window.location.origin}/facturacion/${printInvoiceUrlToken} para facturar.</span>
             </div>
             ` : ""}
             ${showFooter ? `<div class="center bold" style="margin-top: 15px;">${footerMsg}</div>` : ""}
@@ -3650,6 +3694,7 @@ export default function POSModule() {
   const isPrintingJob = receiptToPrint !== null;
   const printType = isPrintingJob ? receiptToPrint.type : "quote";
   const printTitle = printType === "ticket" ? "TICKET DE VENTA" : (printType === "layaway" ? "COMPROBANTE DE APARTADO" : "COTIZACIÓN");
+  const printIsCancelled = isPrintingJob ? !!receiptToPrint.isCancelled : false;
   
   const rawPrintDiscountPct = isPrintingJob ? receiptToPrint.discountPct : activeTicket.discountPct;
   const printIncreaseFactor = rawPrintDiscountPct < 0 ? (1 + Math.abs(rawPrintDiscountPct) / 100) : 1;
@@ -5507,6 +5552,12 @@ export default function POSModule() {
           "--receipt-zoom": previewConfig.printer_zoom ? `scale(${parseFloat(previewConfig.printer_zoom) / 100})` : "scale(1)"
         } as any}
       >
+        {printIsCancelled && (
+          <div style={{ textAlign: "center", fontWeight: "bold", border: "2px solid #ef4444", color: "#ef4444", padding: "8px", marginBottom: "12px", fontSize: "14px" }}>
+            🚫 TICKET CANCELADO
+            <div style={{ fontWeight: "normal", fontSize: "11px" }}>No válido como comprobante de venta</div>
+          </div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", alignItems: marginAlign === "center" ? "center" : "flex-start", borderBottom: "1px dashed #000", paddingBottom: "10px", marginBottom: "15px", textAlign: marginAlign as any }}>
           {showPreviewLogo && <img src={businessProfile.logo} alt="Logo" style={{ maxHeight: "60px", marginBottom: "10px" }} />}
           {showPreviewName && <h2 style={{ margin: "5px 0", fontSize: "18px", fontWeight: "bold" }}>{businessProfile.name}</h2>}
@@ -5680,7 +5731,7 @@ export default function POSModule() {
             })
           );
         }}
-        onSuccess={(customer, realTicketId) => {
+        onSuccess={(customer, realTicketId, quoteUuid) => {
           // Antes una venta a crédito nunca disparaba ninguna impresión
           // (ni siquiera el primer ticket) — PosCreditModal solo cerraba
           // el modal. "Doble copia para Apartados y Crédito" nunca podía
@@ -5697,6 +5748,8 @@ export default function POSModule() {
               type: "ticket",
               data: {
                 realTicketId,
+                quoteUuid,
+                invoiceToken,
                 items: [...activeTicket.items],
                 finalTotal,
                 paymentMethod: PAYMENT_METHOD_CREDITO,
@@ -6107,91 +6160,7 @@ export default function POSModule() {
         </div>
       )}
 
-      {showPinModal && (
-        <div style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: "rgba(0,0,0,0.75)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          // getPinAsync() se puede disparar desde CUALQUIER pantalla,
-          // incluyendo modales que ya están abiertos (ej. Cancelación de
-          // Tickets, zIndex 99999) -- con 9999 el PIN quedaba renderizado
-          // DETRÁS de esos modales: invisible e imposible de tocar, así
-          // que el usuario nunca podía autorizar nada (reporte de
-          // Ferretería Erika, 2026-08-24: la ventana de autorización se
-          // veía detrás y el ticket nunca se cancelaba). Debe quedar por
-          // encima de cualquier otro zIndex del archivo.
-          zIndex: Z_INDEX.AUTHORIZATION,
-          backdropFilter: "blur(5px)"
-        }}>
-          <div className="glass-panel" style={{
-            padding: "25px",
-            width: "350px",
-            textAlign: "center",
-            display: "flex",
-            flexDirection: "column",
-            gap: "15px",
-            background: "rgba(22, 22, 34, 0.95)",
-            border: "1px solid var(--glass-border)",
-            boxShadow: "0 20px 50px rgba(0,0,0,0.5)"
-          }}>
-            <h3 style={{ color: "var(--color-primary)", margin: 0 }}>{pinModalTitle}</h3>
-            <p style={{ fontSize: "0.85rem", opacity: 0.9, whiteSpace: "pre-line" }}>{pinModalMessage}</p>
-            <input
-              type="password"
-              placeholder="PIN de 4 dígitos"
-              maxLength={6}
-              value={pinValue}
-              onChange={(e) => setPinValue(e.target.value.replace(/\D/g, ""))}
-              style={{
-                width: "100%",
-                padding: "12px",
-                textAlign: "center",
-                fontSize: "1.2rem",
-                borderRadius: "6px",
-                border: "1px solid var(--glass-border)",
-                background: "rgba(0,0,0,0.3)",
-                color: "white",
-                letterSpacing: "4px"
-              }}
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  if (pinModalCallback) pinModalCallback(pinValue);
-                  setShowPinModal(false);
-                }
-              }}
-            />
-            <div style={{ display: "flex", gap: "10px" }}>
-              <button
-                className="btn-primary inactive"
-                style={{ flex: 1, padding: "10px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "white" }}
-                onClick={() => {
-                  setShowPinModal(false);
-                  if (pinModalCallback) pinModalCallback("");
-                }}
-              >
-                Cancelar
-              </button>
-              <button
-                className="btn-primary"
-                style={{ flex: 1, padding: "10px" }}
-                onClick={() => {
-                  if (pinModalCallback) pinModalCallback(pinValue);
-                  setShowPinModal(false);
-                }}
-              >
-                Autorizar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {PinModal}
 
       {showSyncLogModal && (
         <div style={{

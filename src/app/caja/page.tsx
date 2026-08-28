@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import toast from "react-hot-toast";
 import { supabase } from "../../lib/supabaseClient";
 import { useAuth, useBusinessProfile } from "../../components/AuthProvider";
 import ProtectedRoute from "../../components/ProtectedRoute";
@@ -97,6 +98,20 @@ export default function CajaModule() {
         }
         return alert("Error al abrir caja: " + (json.error || "Error desconocido"));
       }
+
+      // Si llegamos aquí desde "Vender" en una cotización con la caja
+      // cerrada (ver handleSellQuote en QuotesModule.tsx), las banderas de
+      // restauración ya quedaron guardadas en localStorage antes de
+      // redirigir a /caja. Con la caja recién abierta, regresamos directo a
+      // Punto de Venta para que restoreQuote() en POSModule.tsx complete el
+      // cobro, en vez de dejar al cajero varado en esta pantalla.
+      if (localStorage.getItem("ERIKA_RESTORE_QUOTE")) {
+        const quoteNumber = localStorage.getItem("ERIKA_RESTORE_QUOTE_NUMBER");
+        toast.success(`Caja abierta. Regresando a Punto de Venta para cobrar la Cotización #${quoteNumber || ""}.`);
+        window.location.href = "/";
+        return;
+      }
+
       fetchSession();
     } catch (e: any) {
       alert("Error al abrir caja: " + e.message);

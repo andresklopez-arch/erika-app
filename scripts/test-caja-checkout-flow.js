@@ -59,6 +59,7 @@ async function apiCall(cookie, urlPath, body) {
 
 let createdSessionId = null;
 let createdCustomerId = null;
+let createdQuoteId = null;
 let testsPassed = 0;
 let testsFailed = 0;
 
@@ -77,6 +78,9 @@ async function cleanup() {
   if (createdCustomerId) {
     await admin.from("credit_transactions").delete().eq("customer_id", createdCustomerId);
     await admin.from("customers").delete().eq("id", createdCustomerId);
+  }
+  if (createdQuoteId) {
+    await admin.from("quotes").delete().eq("id", createdQuoteId);
   }
   if (createdSessionId) {
     await admin.from("cash_transactions").delete().eq("session_id", createdSessionId);
@@ -159,16 +163,74 @@ async function main() {
       check("El abono bajó el saldo a 120", payment.json?.newBalance === 120, `newBalance: ${payment.json?.newBalance}`);
     }
 
-    // 5. Cerrar caja con el PIN del admin de prueba (buscar su PIN real)
+    // 5. Flujo cotización -> venta: crear una cotización "pending" vía
+    //    /api/quotes/save (la misma ruta que usa QuotesModule.tsx), cobrarla
+    //    como una venta normal, y marcarla "converted" -- exactamente lo que
+    //    hace POSModule.tsx al completar un cobro con quoteId. Verifica de
+    //    punta a punta que /api/quotes/save funciona en vivo, que era el
+    //    pendiente que bloqueaba correr el lockdown RLS de `quotes` (ver
+    //    AGENTS.md, sección "quotes: código ya migrado...").
+    const quoteItems = [{ name: "[TEST AUTOMATIZADO] Producto de prueba", qty: 1, price: 90, unit: "pza" }];
+    const quoteCreate = await apiCall(cookie, "/api/quotes/save", {
+      fields: {
+        customer_name: "[TEST AUTOMATIZADO] Cliente cotización",
+        items: quoteItems,
+        total: 90,
+        status: "pending",
+        discount_pct: 0,
+        apply_iva: false,
+      },
+    });
+    check("POST /api/quotes/save (crear cotización) responde 200", quoteCreate.ok, JSON.stringify(quoteCreate.json));
+    createdQuoteId = quoteCreate.json?.item?.id || null;
+    // `quotes.id` SIEMPRE debe ser un uuid real (gen_random_uuid()) -- el
+    // folio impreso y el link de auto-facturación dependen de eso desde el
+    // fix del 2026-08-27 (antes se calculaba Number(quotes.id), que da NaN
+    // para cualquier uuid y volvía el folio/link inservibles en cada
+    // ticket). Si esto alguna vez regresa a ser un entero (o cualquier cosa
+    // que no sea uuid), ese bug reaparece en silencio.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    check("El id de la cotización creada es un uuid real", UUID_RE.test(String(createdQuoteId)), `id: ${createdQuoteId}`);
+    let quoteSaleAmount = 0;
+
+    if (createdQuoteId) {
+      const quoteSale = await apiCall(cookie, "/api/caja/transaction", {
+        type: "sale",
+        amount: 90,
+        description: `[TEST AUTOMATIZADO] Venta Cotización #${quoteCreate.json.item.quote_number}`,
+        payment_method: "efectivo",
+        cash_amount: 90,
+        card_amount: 0,
+        transfer_amount: 0,
+      });
+      check("POST /api/caja/transaction (venta de cotización) responde 200", quoteSale.ok, JSON.stringify(quoteSale.json));
+      if (quoteSale.ok) quoteSaleAmount = 90;
+
+      const quoteConvert = await apiCall(cookie, "/api/quotes/save", {
+        id: createdQuoteId,
+        fields: { status: "converted" },
+      });
+      check("POST /api/quotes/save (marcar 'converted') responde 200", quoteConvert.ok, JSON.stringify(quoteConvert.json));
+
+      const { data: quoteRow } = await admin.from("quotes").select("status").eq("id", createdQuoteId).single();
+      check("La cotización quedó con status 'converted' en la base", quoteRow?.status === "converted", `status: ${quoteRow?.status}`);
+    } else {
+      console.warn("⚠️ No se pudo crear la cotización de prueba — se omite el resto del flujo cotización -> venta.");
+    }
+
+    // 6. Cerrar caja con el PIN del admin de prueba (buscar su PIN real)
     const { data: cred } = await admin.from("user_credentials").select("pin").eq("user_id", adminUser.id).maybeSingle();
     if (!cred?.pin) {
       console.warn("⚠️ El usuario admin de prueba no tiene PIN en user_credentials — se omite el cierre de caja.");
     } else {
-      // Fondo inicial (500) + venta efectivo (150) + ingreso (50) = 700 esperado
-      const close = await apiCall(cookie, "/api/caja/close", { sessionId: createdSessionId, countedTotal: 700, adminPin: cred.pin });
+      // Fondo inicial (500) + venta efectivo (150) + ingreso (50) + venta de
+      // la cotización convertida (90, si el paso 5 la registró) = esperado
+      const expectedCashSales = 150 + quoteSaleAmount;
+      const expectedTotal = 500 + expectedCashSales + 50;
+      const close = await apiCall(cookie, "/api/caja/close", { sessionId: createdSessionId, countedTotal: expectedTotal, adminPin: cred.pin });
       check("POST /api/caja/close responde 200", close.ok, JSON.stringify(close.json));
-      check("El corte calculó descuadre = 0 (700 esperado = 700 contado)", close.json?.ticket?.descuadre === 0, `descuadre: ${close.json?.ticket?.descuadre}`);
-      check("El corte calculó ventas en efectivo = 150", close.json?.ticket?.ventasEfectivo === 150);
+      check(`El corte calculó descuadre = 0 (${expectedTotal} esperado = ${expectedTotal} contado)`, close.json?.ticket?.descuadre === 0, `descuadre: ${close.json?.ticket?.descuadre}`);
+      check(`El corte calculó ventas en efectivo = ${expectedCashSales}`, close.json?.ticket?.ventasEfectivo === expectedCashSales, `ventasEfectivo: ${close.json?.ticket?.ventasEfectivo}`);
     }
   } finally {
     await cleanup();
