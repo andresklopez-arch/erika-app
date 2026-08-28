@@ -7,14 +7,14 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # Patrón: cerrar una tabla de Supabase con RLS abierta
 
 Todas las tablas de dinero (cajas, créditos, apartados, deudas a
-proveedores, gastos), `users` y `inventory` (+ el RPC
-`reduce_inventory_stock`) ya están cerradas — ver
-`supabase/migrations/2026082*`. Quedan 9 tablas de menor riesgo sin cerrar
-(`services`, `suppliers`, `supplier_orders`, `quotes`, `business_settings`,
+proveedores, gastos), `users`, `inventory` (+ el RPC
+`reduce_inventory_stock`) y `quotes` ya están cerradas — ver
+`supabase/migrations/2026082*`. Quedan 8 tablas de menor riesgo sin cerrar
+(`services`, `suppliers`, `supplier_orders`, `business_settings`,
 `error_logs`, `internal_tasks`, `inventory_audit_logs`,
 `inventory_movements` — ver `knownOpenPending` en
 `scripts/check-rls-lockdown.js`). Si se agrega una tabla nueva con datos
-sensibles, o se retoma alguna de las 9 pendientes, seguir este mismo
+sensibles, o se retoma alguna de las 8 pendientes, seguir este mismo
 patrón (no crear políticas nuevas a mano ni copiar el bloque completo):
 
 **Para una tabla con MUCHOS puntos de escritura distintos** (como
@@ -88,7 +88,7 @@ migración antes del `CREATE TABLE`.
   políticas RLS con estas llaves se quedaron como scripts manuales
   (`npm run check-rls` usa solo la llave pública y sí corre en CI).
 
-# `quotes`: código ya migrado a /api/quotes/save, falta correr el lockdown
+# `quotes`: ya cerrada (lockdown corrido y confirmado)
 
 Todas las escrituras directas a `quotes` desde el navegador (había 8, no 2
 — la nota vieja de esta sección estaba desactualizada) ya se movieron a
@@ -105,12 +105,14 @@ Todas las escrituras directas a `quotes` desde el navegador (había 8, no 2
 El webhook de Facturama (`src/app/api/webhooks/facturama/route.ts`) ya
 usaba `supabaseAdmin`, no necesitó cambios.
 
-**`quotes` sigue en `knownOpenPending` a propósito**: la migración SQL
-(`supabase/migrations/20260828000000_lock_quotes_writes.sql`) existe pero
-NO se ha corrido contra producción todavía — falta confirmar en vivo que
-cobrar/cotizar/cancelar sigue funcionando de punta a punta con las rutas
-nuevas antes de correr `admin_reset_table_to_select_only('quotes')` y
-mover la tabla a `mustBeBlocked` en `scripts/check-rls-lockdown.js`.
+La migración SQL (`supabase/migrations/20260828000000_lock_quotes_writes.sql`,
+`SELECT admin_reset_table_to_select_only('quotes')`) ya se corrió contra
+producción y `npm run check-rls` confirma `quotes (INSERT)` como bloqueado
+para la llave pública — por eso ya aparece en `mustBeBlocked`, no en
+`knownOpenPending`, en `scripts/check-rls-lockdown.js`. Esta nota se quedó
+desactualizada un tiempo (seguía diciendo "falta correr el lockdown"
+después de que ya se había corrido) — si vuelve a pasar, `npm run
+check-rls` es la fuente de verdad, no esta nota.
 
 # Avisos operativos con OPERATIONAL_WARNING_EVENT
 
