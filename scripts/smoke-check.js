@@ -77,6 +77,46 @@ const checks = [
       if (res.status !== 401) throw new Error(`status ${res.status}, se esperaba 401`);
     },
   },
+  // Estos 3 responden con datos inválidos/sin sesión a propósito -- no
+  // guardan ninguna cotización, abono ni movimiento de caja real. Existen
+  // para detectar un deploy roto en las 3 rutas del incidente del
+  // 2026-08-27 (cancelación de ticket sin desplegar) antes de que un
+  // cajero lo reporte por WhatsApp: si cualquiera de las 3 deja de exigir
+  // sesión (ej. una ruta nueva que se les olvidó proteger, o un deploy que
+  // no levantó bien las variables de entorno), esto lo marca en rojo.
+  {
+    name: "quotes/save rechaza sin sesión",
+    run: async () => {
+      const res = await fetch(`${baseUrl}/api/quotes/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fields: { customer_name: "smoke-test", total: 1 } }),
+      });
+      if (res.status !== 401) throw new Error(`status ${res.status}, se esperaba 401`);
+    },
+  },
+  {
+    name: "credit/payment rechaza sin sesión",
+    run: async () => {
+      const res = await fetch(`${baseUrl}/api/credit/payment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId: "00000000-0000-0000-0000-000000000000", amount: 1 }),
+      });
+      if (res.status !== 401) throw new Error(`status ${res.status}, se esperaba 401`);
+    },
+  },
+  {
+    name: "caja/transaction rechaza sin sesión",
+    run: async () => {
+      const res = await fetch(`${baseUrl}/api/caja/transaction`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "deposit", amount: 1, description: "smoke-test" }),
+      });
+      if (res.status !== 401) throw new Error(`status ${res.status}, se esperaba 401`);
+    },
+  },
 ];
 
 (async () => {

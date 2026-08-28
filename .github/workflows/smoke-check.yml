@@ -1,0 +1,34 @@
+name: Smoke Check (post-deploy)
+
+# Corre scripts/smoke-check.js contra la URL real de producción cuando
+# Vercel confirma que un deploy quedó exitoso (evento deployment_status
+# de GitHub, que Vercel dispara automáticamente vía su integración), y
+# también una vez al día como red de seguridad por si algún deploy no
+# generó el evento. No modifica ningún dato real -- solo prueba que las
+# rutas sensibles (login, quotes/save, credit/payment, caja/transaction,
+# etc.) siguen exigiendo sesión/PIN válidos.
+#
+# Nace del incidente del 2026-08-27: un fix de cancelación de ticket se
+# quedó sin desplegar durante un día completo sin que nada lo detectara
+# hasta que un cajero volvió a reportar el mismo bug por WhatsApp. Esto
+# no habría atrapado ESE caso puntual (el código viejo seguía
+# funcionando, solo con el bug ya corregido en el repo) -- pero sí
+# atrapa el caso más grave: un deploy que rompe por completo una de
+# estas rutas (variable de entorno faltante, error de build que Vercel
+# no bloqueó, etc.).
+on:
+  deployment_status: {}
+  schedule:
+    - cron: "0 14 * * *" # ~8am hora CDMX
+  workflow_dispatch: {}
+
+jobs:
+  smoke-check:
+    if: github.event_name != 'deployment_status' || (github.event.deployment_status.state == 'success' && github.event.deployment_status.environment == 'production')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/smoke-check.js https://erika-app.vercel.app
