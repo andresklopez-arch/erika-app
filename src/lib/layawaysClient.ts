@@ -21,7 +21,7 @@ export async function createLayaway(fields: Record<string, any>): Promise<Result
   }
 }
 
-export async function payLayaway(layawayId: string, payment: number): Promise<Result & { newBalance?: number; isCompleted?: boolean }> {
+export async function payLayaway(layawayId: string, payment: number): Promise<Result & { newBalance?: number; isCompleted?: boolean; cashRegistered?: boolean }> {
   try {
     const res = await fetch("/api/layaways/pay", {
       method: "POST",
@@ -30,7 +30,7 @@ export async function payLayaway(layawayId: string, payment: number): Promise<Re
     });
     const json = await res.json();
     if (!res.ok) return { data: null, error: { message: json.error || "Error desconocido" } };
-    return { data: null, error: null, newBalance: json.newBalance, isCompleted: json.isCompleted };
+    return { data: null, error: null, newBalance: json.newBalance, isCompleted: json.isCompleted, cashRegistered: json.cashRegistered };
   } catch (e: any) {
     return { data: null, error: { message: e.message || "Error de red" } };
   }

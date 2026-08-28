@@ -8,10 +8,12 @@ import { fetchActiveCustomers } from "../lib/customersClient";
 import { saveQuote } from "../lib/quotesClient";
 import { getSmartVolumeDiscount } from "./POSModule";
 import { getQuoteTotalMismatch } from "../lib/quoteTotalCheck";
+import { useSellQuoteToPOS } from "../hooks/useSellQuoteToPOS";
 
 export default function QuotesModule() {
   const businessProfile = useBusinessProfile();
   const { currentUser, businessSettings } = useAuth();
+  const { sellQuoteToSale, PinModal } = useSellQuoteToPOS();
   const followUpThresholdDays = businessSettings?.config?.quote_followup_days || 2;
   const [quotes, setQuotes] = useState<any[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
@@ -72,71 +74,7 @@ export default function QuotesModule() {
     return { daysSinceSent, needsFollowUp };
   };
 
-  // Verifica el PIN capturado contra el usuario actual o la tabla de
-  // personal. Devuelve true si es válido. Compartida por convertToSale y
-  // handleDirectCharge — antes handleDirectCharge no pedía NINGÚN PIN,
-  // evadiendo por completo el control que sí protege al botón "Vender".
-  const verifyStaffPin = async (pass: string) => {
-    // Siempre se verifica del lado del servidor (Service Role Key). Un
-    // atajo previo aceptaba el PIN si coincidía con `currentUser.pin` (que
-    // vive sin firma en localStorage) sin llamar al servidor — cualquiera
-    // podía forjar ese valor en localStorage y saltarse el PIN por completo.
-    try {
-      const res = await fetch("/api/auth/verify-pin", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pin: pass }),
-      });
-      const json = await res.json();
-      return res.ok && json.valid === true;
-    } catch (e) {
-      console.error("Error al verificar PIN:", e);
-      return false;
-    }
-  };
-
-  const handleSellQuote = async (quote: any) => {
-    const pass = window.prompt(
-      `¿Deseas enviar la Cotización #${quote.quote_number} a Caja para cobrar e imprimir ticket? (Ingresa tu PIN):`
-    );
-    if (!pass) return;
-    if (!(await verifyStaffPin(pass))) {
-      return alert("❌ PIN incorrecto. Operación cancelada.");
-    }
-
-    localStorage.setItem("ERIKA_PRINTER_CONNECTED", "true");
-    localStorage.setItem("ERIKA_RESTORE_QUOTE", JSON.stringify(quote.items));
-    localStorage.setItem("ERIKA_RESTORE_QUOTE_ID", quote.id);
-    // Antes solo se restauraban los items (precios base, sin ajuste) --
-    // si la cotización se guardó con IVA activado y/o un % de descuento o
-    // aumento sobre el total del ticket, ese ajuste se perdía por completo
-    // al mandarla a caja: se recobraba un total distinto (más bajo, sin el
-    // aumento) al que realmente se le había cotizado al cliente. Ver
-    // restoreQuote() en POSModule.tsx.
-    localStorage.setItem("ERIKA_RESTORE_QUOTE_DISCOUNT_PCT", String(quote.discount_pct ?? 0));
-    localStorage.setItem("ERIKA_RESTORE_QUOTE_APPLY_IVA", String(quote.apply_iva ?? false));
-    if (quote.customer_id) {
-      localStorage.setItem("ERIKA_RESTORE_CUSTOMER_ID", quote.customer_id);
-    } else if (quote.customer_name) {
-      try {
-        const { data: customer } = await supabase
-          .from("customers")
-          .select("id")
-          .eq("name", quote.customer_name)
-          .eq("deleted", false)
-          .single();
-        if (customer) {
-          localStorage.setItem("ERIKA_RESTORE_CUSTOMER_ID", customer.id);
-        }
-      } catch (e) {
-        console.error("Error al buscar cliente por nombre:", e);
-      }
-    }
-    localStorage.setItem("ERIKA_AUTO_OPEN_CHECKOUT", "true");
-
-    toast.success(`Cotización #${quote.quote_number} enviada a caja para cobro.`);
-    window.location.href = "/caja";
-  };
+  const handleSellQuote = (quote: any) => sellQuoteToSale(quote);
 
   const printQuote = (quote: any) => {
     const printWindow = window.open("", "_blank");
@@ -225,7 +163,17 @@ export default function QuotesModule() {
       return alert("❌ Número inválido. Por favor ingresa un número de 10 dígitos (ej: 5512345678).");
     }
 
+    // Esta lista incluye tickets ya cancelados (fetchQuotes solo excluye
+    // status="ticket", no "cancelled" -- ver comentario ahí), así que un
+    // reenvío por WhatsApp podía mandar un ticket anulado con el mismo
+    // texto que uno vigente. Mismo criterio que ya se aplicó a las 3 rutas
+    // de impresión: se puede reenviar, pero nunca sin dejarlo claro.
+    const cancelledNotice = quote.status === "cancelled"
+      ? "🚫 *ESTE TICKET FUE CANCELADO* — no es válido como comprobante de venta.\n\n"
+      : "";
+
     const text =
+      cancelledNotice +
       `Hola ${quote.customer_name}, te enviamos tu cotización de *${businessProfile.name}* por un total de *$${quote.total.toFixed(2)}*.\n\n` +
       quote.items.map((i: any) => `- ${i.qty} ${i.unit} ${i.name}`).join("\n") +
       `\n\nVálida por 7 días. ¡Quedamos a tus órdenes!`;
@@ -721,6 +669,7 @@ export default function QuotesModule() {
           )}
         </div>
       </div>
+      {PinModal}
     </div>
   );
 }

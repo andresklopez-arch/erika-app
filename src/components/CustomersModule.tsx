@@ -11,10 +11,12 @@ import { printEscPosBytes, sanitizeForThermal } from "../utils/bluetoothPrinter"
 import { LoggerService } from "../services/loggerService";
 import { showPrintFailureToast } from "../lib/printFailureToast";
 import { getQuoteTotalMismatch } from "../lib/quoteTotalCheck";
+import { useSellQuoteToPOS } from "../hooks/useSellQuoteToPOS";
 
 export default function CustomersModule() {
   const businessProfile = useBusinessProfile();
   const { currentUser } = useAuth();
+  const { sellQuoteToSale, PinModal: SellQuotePinModal } = useSellQuoteToPOS();
   const [customers, setCustomers] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [customerServices, setCustomerServices] = useState<any[]>([]);
@@ -635,40 +637,11 @@ export default function CustomersModule() {
     toast.success("🖨️ Mandando a imprimir Estado de Cuenta en ticket...");
   };
 
-  const convertQuoteToSale = async (quote: any) => {
-    const pass = window.prompt(
-      `¿Deseas enviar la Cotización #${quote.quote_number || ''} a Caja para cobrar e imprimir ticket? (Ingresa tu PIN):`,
-    );
-    if (!pass) return;
-
-    const res = await fetch("/api/auth/verify-pin", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin: pass }),
-    });
-    const json = await res.json();
-    if (!res.ok || json.valid !== true) {
-      return alert("❌ PIN incorrecto. Operación cancelada.");
-    }
-
-    localStorage.setItem("ERIKA_PRINTER_CONNECTED", "true");
-    localStorage.setItem("ERIKA_RESTORE_QUOTE", JSON.stringify(quote.items));
-    localStorage.setItem("ERIKA_RESTORE_QUOTE_ID", quote.id);
-    // Antes solo se restauraban los items (precios base) -- si la cotización
-    // se guardó con IVA activado y/o un % de descuento/aumento sobre el
-    // ticket, ese ajuste se perdía al mandarla a caja (ver restoreQuote()
-    // en POSModule.tsx). Bug real reportado por el cliente: cotización por
-    // $46.80, venta resultante por $45.00.
-    localStorage.setItem("ERIKA_RESTORE_QUOTE_DISCOUNT_PCT", String(quote.discount_pct ?? 0));
-    localStorage.setItem("ERIKA_RESTORE_QUOTE_APPLY_IVA", String(quote.apply_iva ?? false));
-    if (quote.customer_id || selectedCustomerId) {
-      localStorage.setItem("ERIKA_RESTORE_CUSTOMER_ID", quote.customer_id || selectedCustomerId);
-    }
-    localStorage.setItem("ERIKA_AUTO_OPEN_CHECKOUT", "true");
-
-    toast.success(`✅ Cotización de ${quote.customer_name} enviada a caja para cobro.`);
-    window.location.href = "/caja";
-  };
+  // Antes esta función duplicaba (y desincronizaba con) handleSellQuote()
+  // de QuotesModule.tsx: usaba window.prompt en vez del modal de PIN
+  // compartido, y siempre mandaba a Arqueo de Caja sin checar si ya había
+  // una caja abierta. Ver useSellQuoteToPOS.ts.
+  const convertQuoteToSale = (quote: any) => sellQuoteToSale(quote, selectedCustomerId || undefined);
 
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -736,6 +709,7 @@ export default function CustomersModule() {
     // con la consola del navegador abierta podía forjar un abono a
     // cualquier cliente sin que el dinero hubiera entrado nunca a la caja.
     let effectiveNewBalance = customer.balance - amount;
+    let cashRegistered = false;
     try {
       const res = await fetch("/api/credit/payment", {
         method: "POST",
@@ -745,11 +719,18 @@ export default function CustomersModule() {
       const json = await res.json();
       if (!res.ok) return alert("Error: " + (json.error || "No se pudo registrar el abono."));
       effectiveNewBalance = json.newBalance;
+      cashRegistered = Boolean(json.cashRegistered);
     } catch (e: any) {
       return alert("Error: " + e.message);
     }
 
-    alert(`✅ Abono de $${amount.toFixed(2)} registrado exitosamente.`);
+    // El efectivo del abono ahora se registra solo (ver /api/credit/payment)
+    // en la caja actualmente abierta -- antes esto requería ir aparte a
+    // Arqueo de Caja a capturar un "Ingreso" manual, un paso desconectado
+    // del abono en sí. Si no hay caja abierta no se bloquea el abono, pero
+    // se avisa para que el cajero sepa que ese efectivo no quedó en ningún
+    // corte.
+    alert(`✅ Abono de $${amount.toFixed(2)} registrado exitosamente.${cashRegistered ? "" : "\n⚠️ La caja está cerrada: este efectivo no quedó registrado en ningún corte."}`);
     
     if (customer.phone) {
       if (confirm(`¿Deseas enviar un recibo por WhatsApp a ${customer.phone}?`)) {
@@ -1941,6 +1922,7 @@ export default function CustomersModule() {
           `}} />
         </div>
       )}
+      {SellQuotePinModal}
     </div>
   );
 }

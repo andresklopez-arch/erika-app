@@ -45,7 +45,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "El abono se registró, pero no se pudo actualizar el estado del apartado." }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, newBalance, isCompleted, customerName: layaway.customer_name });
+    // Igual que en /api/credit/payment: antes un abono a un apartado nunca
+    // se reflejaba en Arqueo de Caja, obligando a un "Ingreso" manual
+    // aparte para que el efectivo contara en el corte del día. Se registra
+    // aquí mismo si hay una caja abierta; si no la hay, no se bloquea el
+    // abono (el saldo del apartado ya se redujo legítimamente), solo se
+    // avisa al frontend.
+    let cashRegistered = false;
+    try {
+      const { data: session } = await supabaseAdmin
+        .from("cash_sessions")
+        .select("id")
+        .eq("status", "open")
+        .order("opened_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (session) {
+        const { error: cashError } = await supabaseAdmin.from("cash_transactions").insert({
+          session_id: session.id,
+          type: "deposit",
+          amount: payment,
+          description: `Abono a apartado - ${layaway.customer_name}`,
+        });
+        cashRegistered = !cashError;
+        if (cashError) console.error("Error al registrar abono en caja:", cashError.message);
+      }
+    } catch (e) {
+      console.error("Error al registrar abono en caja:", e);
+    }
+
+    return NextResponse.json({ success: true, newBalance, isCompleted, customerName: layaway.customer_name, cashRegistered });
   } catch (error: any) {
     console.error("Error en /api/layaways/pay:", error);
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });

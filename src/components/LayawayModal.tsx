@@ -33,17 +33,18 @@ export default function LayawayModal({ show, onClose }: { show: boolean; onClose
     if (payment === null || isNaN(payment) || payment <= 0) return;
     if (payment > layaway.balance) return alert("El abono no puede superar el saldo pendiente.");
 
-    const { error, newBalance: resultBalance, isCompleted } = await payLayaway(layaway.id, payment);
+    const { error, newBalance: resultBalance, isCompleted, cashRegistered } = await payLayaway(layaway.id, payment);
     if (error) return alert("Error al registrar el abono: " + error.message);
     const newBalance = resultBalance as number;
-    
+
     // Ticket térmico del abono
     printAbonoReceipt(
       { businessName: businessProfile.name, customerName: layaway.customer_name, payment, newBalance, isCompleted: Boolean(isCompleted) },
       businessSettings?.config
     );
 
-    alert(`✅ Abono registrado. ${isCompleted ? "¡APARTADO LIQUIDADO, puede entregar la mercancía!" : `Saldo restante: $${newBalance.toFixed(2)}`}`);
+    const cashNotice = cashRegistered ? "" : "\n⚠️ La caja está cerrada: este efectivo no quedó registrado en ningún corte.";
+    alert(`✅ Abono registrado. ${isCompleted ? "¡APARTADO LIQUIDADO, puede entregar la mercancía!" : `Saldo restante: $${newBalance.toFixed(2)}`}${cashNotice}`);
     fetchLayaways();
   };
 
