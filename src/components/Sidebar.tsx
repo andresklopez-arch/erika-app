@@ -25,6 +25,8 @@ export default function Sidebar() {
     return false;
   });
   const [commitShaShort, setCommitShaShort] = useState<string | null>(null);
+  const [latestCommitShaShort, setLatestCommitShaShort] = useState<string | null>(null);
+  const [checkingVersion, setCheckingVersion] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -36,11 +38,28 @@ export default function Sidebar() {
   // reproducir el bug que se supone que ya se corrigió. Si Vercel no
   // inyectó la variable (ej. corriendo local con `npm run dev`), se
   // omite el badge en vez de mostrar "null".
-  useEffect(() => {
+  //
+  // Antes solo se consultaba una vez al montar -- si el deploy terminaba
+  // mientras la pestaña seguía abierta (el caso típico: un cajero deja la
+  // app abierta todo el turno), nunca se enteraba de que hay una versión
+  // más nueva sin recargar a ciegas. Ahora se vuelve a chequear cada 10
+  // minutos y hay un botón para forzarlo.
+  const checkVersion = () => {
+    setCheckingVersion(true);
     fetch("/api/version")
       .then((res) => res.json())
-      .then((json) => setCommitShaShort(json.commitShaShort || null))
-      .catch(() => {});
+      .then((json) => {
+        setLatestCommitShaShort(json.commitShaShort || null);
+        setCommitShaShort((current) => current ?? (json.commitShaShort || null));
+      })
+      .catch(() => {})
+      .finally(() => setCheckingVersion(false));
+  };
+
+  useEffect(() => {
+    checkVersion();
+    const interval = setInterval(checkVersion, 10 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   // Aviso operativo (no de seguridad RLS) — reutiliza el mismo punto rojo
@@ -485,18 +504,59 @@ export default function Sidebar() {
       </nav>
       {commitShaShort && (
         <div
-          className="nav-text"
-          title={`Versión desplegada: ${commitShaShort}`}
           style={{
             marginTop: "auto",
             padding: "6px 10px",
-            fontSize: "0.65rem",
-            color: "var(--color-text-muted, rgba(255,255,255,0.35))",
-            opacity: 0.6,
-            userSelect: "text",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
           }}
         >
-          v{commitShaShort}
+          <span
+            className="nav-text"
+            title={`Versión desplegada al cargar esta pestaña: ${commitShaShort}`}
+            style={{
+              fontSize: "0.65rem",
+              color: "var(--color-text-muted, rgba(255,255,255,0.35))",
+              opacity: 0.6,
+              userSelect: "text",
+            }}
+          >
+            v{commitShaShort}
+          </span>
+          <button
+            type="button"
+            onClick={checkVersion}
+            disabled={checkingVersion}
+            title="Verificar si hay una versión más nueva desplegada"
+            className="nav-text"
+            style={{
+              background: "transparent",
+              border: "none",
+              cursor: checkingVersion ? "default" : "pointer",
+              fontSize: "0.7rem",
+              opacity: checkingVersion ? 0.4 : 0.6,
+              padding: "1px 3px",
+              lineHeight: 1,
+            }}
+          >
+            {checkingVersion ? "…" : "🔄"}
+          </button>
+          {latestCommitShaShort && latestCommitShaShort !== commitShaShort && (
+            <span
+              className="nav-text"
+              title={`Ya hay una versión más nueva desplegada (${latestCommitShaShort}). Recarga la página para usarla.`}
+              style={{
+                fontSize: "0.65rem",
+                color: "#fbbf24",
+                fontWeight: "bold",
+                cursor: "pointer",
+              }}
+              onClick={() => window.location.reload()}
+            >
+              🔔 Nueva versión, recargar
+            </span>
+          )}
         </div>
       )}
     </aside>
