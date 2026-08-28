@@ -1,7 +1,13 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabaseClient";
 import { saveSupplier } from "../lib/suppliersClient";
+
+// Un solo lugar para este número -- antes el .limit() de la consulta y el
+// texto "últimas N importaciones" de la interfaz se podían desincronizar
+// (pasó justo hoy al subir el límite de 10 a 30 sin actualizar el texto).
+const IMPORT_HISTORY_LIMIT = 30;
 
 interface SmartImporterProps {
   avgMargin: number;
@@ -76,6 +82,14 @@ export default function SmartImporter({
   // Paginación de la previsualización final
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Carga directa de archivo Excel/CSV (alternativa a copiar/pegar columna
+  // por columna en los pasos 1-6). Reduce el riesgo de seleccionar la
+  // columna equivocada al copiar en Excel -- exactamente lo que causó el
+  // incidente de VEKER (2026-08-27): al copiar "código" se incluyó sin
+  // querer la columna de marca, y todo el lote terminó con el mismo valor.
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isParsingFile, setIsParsingFile] = useState(false);
+
   // Historial de Bitácoras
   const [viewingHistory, setViewingHistory] = useState(false);
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
@@ -106,7 +120,7 @@ export default function SmartImporter({
         .from("import_logs")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(IMPORT_HISTORY_LIMIT);
       if (error) throw error;
       if (data) setHistoryLogs(data);
     } catch (err) {
@@ -174,6 +188,54 @@ export default function SmartImporter({
     }
   };
 
+  // Detecta las 2 señales de "esto no es un código único por producto"
+  // (mismo código repetido en el lote, o códigos sin ningún dígito) y
+  // pregunta antes de continuar. Compartido por el pegado manual (paso 1) y
+  // la carga directa de Excel -- ambos caminos terminan alimentando el mismo
+  // `codes[]`, así que ambos corren el mismo riesgo que causó el incidente
+  // de VEKER (2026-08-27): 8 medidas de tornillos con el mismo código
+  // colapsaron en un solo producto porque el importador fusiona por código.
+  // Devuelve true si se debe continuar.
+  const confirmCodeQuality = (parsed: string[]): boolean => {
+    const codeCounts = new Map<string, number>();
+    parsed.forEach((c) => {
+      const key = c.trim().toUpperCase();
+      if (key) codeCounts.set(key, (codeCounts.get(key) || 0) + 1);
+    });
+    const repeated = Array.from(codeCounts.entries()).filter(([, count]) => count > 1);
+    if (repeated.length > 0) {
+      const totalRepeatedRows = repeated.reduce((sum, [, count]) => sum + count, 0);
+      const sample = repeated.slice(0, 5).map(([code, count]) => `"${code}" (${count} veces)`).join(", ");
+      const proceed = window.confirm(
+        `⚠️ ${totalRepeatedRows} fila(s) de este lote comparten el mismo código: ${sample}${repeated.length > 5 ? "..." : ""}.\n\n` +
+        `Si esto NO es un código de barras único por producto (por ejemplo, pegaste la marca o el proveedor por error), estas filas se van a FUSIONAR entre sí como si fueran el mismo producto — solo la última medida/variante sobrevivirá.\n\n` +
+        `¿Estás seguro de que quieres continuar con estos códigos repetidos?`
+      );
+      if (!proceed) return false;
+    }
+
+    // Segunda señal, independiente de la anterior: un código de
+    // barras/SKU real casi siempre trae dígitos (EAN-13, UPC, folios
+    // internos numerados). Si la MAYORÍA de los códigos de este lote no
+    // traen ningún dígito, es probable que se haya pegado texto que no es
+    // un código único (marca, categoría, proveedor) aunque cada fila
+    // tenga un valor DISTINTO dentro de este lote mismo -- el riesgo de
+    // fusión aparece en la SIGUIENTE importación que vuelva a pegar un
+    // texto parecido. Mismo heurístico que scripts/audit-suspicious-inventory-codes.js.
+    const nonEmptyCodes = parsed.map((c) => c.trim()).filter(Boolean);
+    const codesWithoutDigits = nonEmptyCodes.filter((c) => !/[0-9]/.test(c));
+    if (repeated.length === 0 && nonEmptyCodes.length > 0 && codesWithoutDigits.length / nonEmptyCodes.length >= 0.5) {
+      const proceed = window.confirm(
+        `⚠️ ${codesWithoutDigits.length} de ${nonEmptyCodes.length} códigos de este lote no tienen ningún número (ej. "${codesWithoutDigits[0]}") -- no parecen códigos de barras/SKU reales.\n\n` +
+        `Si en realidad pegaste la marca, proveedor o categoría (no un código único por producto), una importación futura que use un texto parecido podría fusionarse por error con estos productos.\n\n` +
+        `¿Continuar de todos modos?`
+      );
+      if (!proceed) return false;
+    }
+
+    return true;
+  };
+
   // Manejador del botón Aceptar en cada paso
   const handleNextStep = () => {
     setErrorMsg("");
@@ -185,6 +247,7 @@ export default function SmartImporter({
     }
 
     if (step === 1) {
+      if (!confirmCodeQuality(parsed)) return;
       setCodes(parsed);
       setInputText("");
       setStep(2);
@@ -205,27 +268,15 @@ export default function SmartImporter({
         setInputText("");
         setStep(4);
       } else if (step === 4) {
-        const parsedNums = parsed.map((v) => {
-          const num = Number(v.replace(/[^0-9.-]/g, ""));
-          return isNaN(num) ? 0 : num;
-        });
-        setStocks(parsedNums);
+        setStocks(parsed.map(parseNumericCell));
         setInputText("");
         setStep(5);
       } else if (step === 5) {
-        const parsedNums = parsed.map((v) => {
-          const num = Number(v.replace(/[^0-9.-]/g, ""));
-          return isNaN(num) ? 0 : num;
-        });
-        setCosts(parsedNums);
+        setCosts(parsed.map(parseNumericCell));
         setInputText("");
         setStep(6);
       } else if (step === 6) {
-        const parsedNums = parsed.map((v) => {
-          const num = Number(v.replace(/[^0-9.-]/g, ""));
-          return isNaN(num) ? 0 : num;
-        });
-        setPrices(parsedNums);
+        setPrices(parsed.map(parseNumericCell));
         // Inicializar unidades con auto-detección inteligente basada en el nombre
         const detectedUnits = names.map((name) => detectUnitFromName(name));
         setUnits(detectedUnits);
@@ -233,6 +284,145 @@ export default function SmartImporter({
         setCurrentPage(1); // Reiniciar paginación al entrar a la vista previa
         setStep(7);
       }
+    }
+  };
+
+  // Palabras clave para detectar automáticamente qué columna del Excel
+  // corresponde a cada dato -- por nombre de encabezado, sin importar el
+  // orden de las columnas ni cómo se llame exactamente cada una.
+  // cost/price van primero por la frase compuesta ("Precio de Compra" /
+  // "Precio de Venta") -- antes ambos hints coincidían con cualquier header
+  // que dijera "precio", así que "Precio de Compra" y "Precio de Venta" se
+  // resolvían a LA MISMA columna (la que apareciera primero en el archivo)
+  // y una de las dos columnas reales nunca se leía. code ya no exige que el
+  // header sea EXACTAMENTE una de estas palabras (antes ^...$) -- así
+  // headers reales como "Código de Barras" o "Clave del Producto" sí se
+  // detectan, igual que el resto de los hints (todos por substring).
+  const COLUMN_HEADER_HINTS: Record<"code" | "name" | "supplier" | "stock" | "cost" | "price", RegExp> = {
+    code: /(codigo|código|sku|clave|barcode)/i,
+    name: /(nombre|descripcion|descripción|producto|articulo|artículo)/i,
+    supplier: /(proveedor|marca|supplier)/i,
+    stock: /(stock|existencia|cantidad)/i,
+    cost: /(costo|precio\s*de?\s*compra|compra)/i,
+    price: /(^precio$|precio\s*de?\s*venta|venta|pvp)/i,
+  };
+
+  const parseNumericCell = (v: unknown): number => {
+    const num = Number(String(v ?? "").replace(/[^0-9.-]/g, ""));
+    return isNaN(num) ? 0 : num;
+  };
+
+  // Carga directa del archivo Excel/CSV: lee la primera hoja, detecta las
+  // columnas por su encabezado y llena directamente codes/names/suppliers/
+  // stocks/costs/prices -- salta por completo los pasos 1-6 (copiar/pegar
+  // columna por columna), que es donde ocurrió el incidente de VEKER: al
+  // copiar en Excel se incluyó sin querer una columna distinta a la
+  // pretendida. Leer las columnas por SU NOMBRE, no por selección manual,
+  // elimina esa clase de error.
+  const handleFileUpload = async (file: File) => {
+    setErrorMsg("");
+    setIsParsingFile(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheetName = workbook.SheetNames[0];
+      if (!firstSheetName) {
+        setErrorMsg("⚠️ El archivo no tiene ninguna hoja con datos.");
+        return;
+      }
+      const sheet = workbook.Sheets[firstSheetName];
+      const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+      if (rows.length < 2) {
+        setErrorMsg("⚠️ El archivo no tiene filas de datos (solo encabezados, o está vacío).");
+        return;
+      }
+
+      const headerRow = rows[0].map((h) => String(h || "").trim());
+      const findColumn = (hint: RegExp) => headerRow.findIndex((h) => hint.test(h));
+
+      const colIdx = {
+        code: findColumn(COLUMN_HEADER_HINTS.code),
+        name: findColumn(COLUMN_HEADER_HINTS.name),
+        supplier: findColumn(COLUMN_HEADER_HINTS.supplier),
+        stock: findColumn(COLUMN_HEADER_HINTS.stock),
+        cost: findColumn(COLUMN_HEADER_HINTS.cost),
+        price: findColumn(COLUMN_HEADER_HINTS.price),
+      };
+
+      // Un header ambiguo puede coincidir con dos hints a la vez (ej. "Clave
+      // del Producto" trae tanto "clave" -> code como "producto" -> name).
+      // NOMBRE es el único campo obligatorio, así que gana la columna en
+      // cualquier empate -- el campo perdedor se trata como "no encontrado"
+      // (mismo criterio que código vacío: mejor un valor en blanco/auto que
+      // adivinar una columna que en realidad es otra cosa).
+      (["code", "supplier", "stock", "cost", "price"] as const).forEach((field) => {
+        if (colIdx[field] !== -1 && colIdx[field] === colIdx.name) {
+          colIdx[field] = -1;
+        }
+      });
+
+      if (colIdx.name === -1) {
+        setErrorMsg(
+          "⚠️ No se encontró una columna de NOMBRE/DESCRIPCIÓN en el archivo (se buscó un encabezado como \"Nombre\", \"Descripción\" o \"Producto\"). Revisa que la primera fila tenga los títulos de cada columna."
+        );
+        return;
+      }
+
+      const dataRows = rows.slice(1).filter((r) => r.some((cell) => String(cell ?? "").trim() !== ""));
+      const parsedNames = dataRows.map((r) => String(r[colIdx.name] ?? "").trim());
+      // Sin columna de código real (muy común en este negocio: no todos los
+      // productos traen barcode), se deja vacío a propósito -- el
+      // importador ya genera un SKU único automático por fila cuando el
+      // código viene vacío. Eso es MÁS seguro que adivinar una columna
+      // equivocada, que es justo lo que causó el incidente de VEKER.
+      const parsedCodes = colIdx.code !== -1
+        ? dataRows.map((r) => String(r[colIdx.code] ?? "").trim())
+        : dataRows.map(() => "");
+      const parsedSuppliers = colIdx.supplier !== -1 ? dataRows.map((r) => String(r[colIdx.supplier] ?? "").trim()) : dataRows.map(() => "");
+      const parsedStocks = colIdx.stock !== -1 ? dataRows.map((r) => parseNumericCell(r[colIdx.stock])) : dataRows.map(() => 0);
+      const parsedCosts = colIdx.cost !== -1 ? dataRows.map((r) => parseNumericCell(r[colIdx.cost])) : dataRows.map(() => 0);
+      const parsedPrices = colIdx.price !== -1 ? dataRows.map((r) => parseNumericCell(r[colIdx.price])) : dataRows.map(() => 0);
+
+      const missingCols: string[] = [];
+      if (colIdx.code === -1) missingCols.push("Código");
+      if (colIdx.supplier === -1) missingCols.push("Proveedor");
+      if (colIdx.stock === -1) missingCols.push("Existencias");
+      if (colIdx.cost === -1) missingCols.push("Costo");
+      if (colIdx.price === -1) missingCols.push("Precio");
+
+      if (parsedCodes.some((c) => c) && !confirmCodeQuality(parsedCodes)) {
+        return;
+      }
+
+      if (missingCols.length > 0) {
+        const defaultsUsed = [
+          ...(missingCols.includes("Código") ? ["código vacío (se genera automático)"] : []),
+          ...missingCols.filter((c) => c !== "Código").map((c) => `${c.toLowerCase()} en 0`),
+        ];
+        const proceed = window.confirm(
+          `No se encontraron estas columnas por su encabezado: ${missingCols.join(", ")}.\n\n` +
+          `Se va a continuar con ${defaultsUsed.join(", ")} para esas columnas.\n\n` +
+          `¿Continuar de todos modos?`
+        );
+        if (!proceed) return;
+      }
+
+      setCodes(parsedCodes);
+      setNames(parsedNames);
+      setSuppliers(parsedSuppliers);
+      setStocks(parsedStocks);
+      setCosts(parsedCosts);
+      setPrices(parsedPrices);
+      setUnits(parsedNames.map((name) => detectUnitFromName(name)));
+      setCurrentPage(1);
+      setStep(7);
+    } catch (err) {
+      console.error("Error al leer el archivo:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      setErrorMsg(`⚠️ No se pudo leer el archivo: ${message}. Verifica que sea un .xlsx, .xls o .csv válido.`);
+    } finally {
+      setIsParsingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -297,12 +487,30 @@ export default function SmartImporter({
     }
   }
 
+  // Índice código -> producto existente, construido UNA sola vez por cambio
+  // de existingItems (no en cada render mientras se revisa el lote). Antes
+  // el chequeo de colisiones hacía existingItems.some(...) DENTRO de un
+  // forEach sobre codes, dando O(filas × productos existentes) en el cuerpo
+  // del componente -- con un lote de 5000 filas contra un catálogo de unos
+  // miles de productos, eso son millones de comparaciones en CADA render
+  // mientras el cajero solo está revisando la tabla (cualquier tecla,
+  // cambio de página o de unidad). Con este mapa, cada fila del lote es una
+  // búsqueda O(1).
+  const existingByCode = useMemo(() => {
+    const map = new Map<string, (typeof existingItems)[number]>();
+    for (const item of existingItems) {
+      if (item.code) map.set(item.code.trim().toUpperCase(), item);
+    }
+    return map;
+  }, [existingItems]);
+
   // Lógica de cálculo de advertencias y alertas del lote
   const warningsList: string[] = [];
   let lossCount = 0;
   let zeroOrNegativeMoneyCount = 0;
   let negativeStockCount = 0;
   let emptyNameOrCodeCount = 0;
+  let codeCollisionCount = 0;
 
   if (step === 7) {
     codes.forEach((code, idx) => {
@@ -311,7 +519,12 @@ export default function SmartImporter({
       const cost = costs[idx] || 0;
       const price = prices[idx] || 0;
 
-      if (!code || !name) {
+      // Código vacío NO es un error bloqueante: el importador genera un SKU
+      // único automático cuando falta (ver inserts.push en el import real,
+      // más abajo) -- de hecho es el comportamiento esperado cuando se sube
+      // un archivo sin columna de código (ver handleFileUpload). Nombre
+      // vacío sí bloquea: no hay un valor de respaldo razonable para eso.
+      if (!name) {
         emptyNameOrCodeCount++;
       }
       if (stock < 0) {
@@ -323,8 +536,25 @@ export default function SmartImporter({
       if (cost >= price && cost > 0 && price > 0) {
         lossCount++;
       }
+      // Mismo chequeo que el aviso por fila más abajo: código ya usado por
+      // un producto con OTRO nombre en la BD -- la señal directa del
+      // incidente de VEKER (2026-08-27). Se cuenta aparte para que también
+      // aparezca en el diálogo de confirmación, no solo en la tabla (fácil
+      // de pasar por alto en lotes grandes).
+      const trimmedCode = code.trim();
+      if (trimmedCode) {
+        const existingMatch = existingByCode.get(trimmedCode.toUpperCase());
+        if (existingMatch && normalizeString(existingMatch.name) !== normalizeString(name)) {
+          codeCollisionCount++;
+        }
+      }
     });
 
+    if (codeCollisionCount > 0) {
+      warningsList.push(
+        `🚨 Códigos en Conflicto: Hay ${codeCollisionCount} producto(s) cuyo código ya pertenece a OTRO producto distinto en tu inventario -- van a SOBRESCRIBIRLO (nombre, precio y costo cambiarán). Revísalos en la tabla de abajo antes de continuar.`
+      );
+    }
     if (lossCount > 0) {
       warningsList.push(
         `⚠️ Margen de Ganancia: Hay ${lossCount} producto(s) donde el costo es mayor o igual al precio de venta.`
@@ -342,7 +572,7 @@ export default function SmartImporter({
     }
     if (emptyNameOrCodeCount > 0) {
       warningsList.push(
-        `⚠️ Datos Faltantes: Hay ${emptyNameOrCodeCount} producto(s) sin código o sin nombre.`
+        `⚠️ Datos Faltantes: Hay ${emptyNameOrCodeCount} producto(s) sin nombre.`
       );
     }
   }
@@ -427,7 +657,7 @@ export default function SmartImporter({
     // porque pueden ser decisiones de negocio legítimas.
     if (emptyNameOrCodeCount > 0) {
       alert(
-        `❌ No se puede importar: ${emptyNameOrCodeCount} producto(s) no tienen código o nombre. Corrige esas filas antes de continuar.`
+        `❌ No se puede importar: ${emptyNameOrCodeCount} producto(s) no tienen nombre. Corrige esas filas antes de continuar.`
       );
       return;
     }
@@ -612,7 +842,7 @@ export default function SmartImporter({
                 📋 Historial de Cargas Masivas
               </h2>
               <p style={{ color: "rgba(255, 255, 255, 0.6)", fontSize: "0.9rem", marginTop: "4px" }}>
-                Bitácora de las últimas 10 importaciones desde Supabase.
+                Bitácora de las últimas {IMPORT_HISTORY_LIMIT} importaciones desde Supabase.
               </p>
             </div>
             <button
@@ -928,6 +1158,55 @@ export default function SmartImporter({
               </p>
             </div>
 
+            {step === 1 && (
+              <div
+                style={{
+                  border: "1px dashed var(--glass-border)",
+                  borderRadius: "8px",
+                  padding: "16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "8px",
+                  background: "rgba(255,255,255,0.02)",
+                }}
+              >
+                <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.7)", textAlign: "center", margin: 0 }}>
+                  📂 O sube el Excel/CSV completo directo (recomendado) — detecta las columnas por su encabezado, sin tener que copiar/pegar una por una.
+                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={isParsingFile}
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{ padding: "8px 20px", fontSize: "0.9rem" }}
+                >
+                  {isParsingFile ? "⏳ Leyendo archivo..." : "📤 Subir archivo Excel/CSV"}
+                </button>
+                <p style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.4)", textAlign: "center", margin: 0 }}>
+                  La primera fila debe traer los títulos de columna (ej. &quot;Nombre&quot;, &quot;Proveedor&quot;, &quot;Existencias&quot;, &quot;Costo&quot;, &quot;Precio&quot;).
+                </p>
+              </div>
+            )}
+
+            {step === 1 && (
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "rgba(255,255,255,0.4)", fontSize: "0.8rem" }}>
+                <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }} />
+                <span>o pega columna por columna</span>
+                <div style={{ flex: 1, height: "1px", background: "rgba(255,255,255,0.1)" }} />
+              </div>
+            )}
+
             <textarea
               value={inputText}
               onChange={(e) => {
@@ -1157,6 +1436,19 @@ export default function SmartImporter({
                           i.code.trim().toUpperCase() !== code.trim().toUpperCase()
                       );
 
+                      // El caso que de verdad causó el incidente de VEKER: el
+                      // CÓDIGO coincide con un producto YA EXISTENTE, pero el
+                      // NOMBRE es distinto. Sin este aviso, esa fila
+                      // reemplaza en silencio los datos de ese otro producto
+                      // (fusión "sustituir") sin que el cajero se entere hasta
+                      // después de confirmar toda la importación.
+                      const codeMatchCandidate = code ? existingByCode.get(code.trim().toUpperCase()) : undefined;
+                      const codeMatch =
+                        codeMatchCandidate && normalizeString(codeMatchCandidate.name) !== normalizeString(name)
+                          ? codeMatchCandidate
+                          : undefined;
+                      const resultingStock = codeMatch ? (Number(codeMatch.stock) || 0) + stock : null;
+
                       return (
                         <tr
                           key={absoluteIdx}
@@ -1174,12 +1466,12 @@ export default function SmartImporter({
                             style={{
                               padding: "8px 15px",
                               fontWeight: "bold",
-                              color: "#fca5a5",
-                              backgroundColor: isCodeErr ? "rgba(239, 68, 68, 0.15)" : "transparent",
+                              color: isCodeErr ? "rgba(255,255,255,0.4)" : "#fca5a5",
+                              backgroundColor: "transparent",
                             }}
-                            title={isCodeErr ? "Código vacío o inválido" : ""}
+                            title={isCodeErr ? "Código vacío: se genera un SKU único automático al importar." : ""}
                           >
-                            {code || "---"}
+                            {code || "(auto)"}
                           </td>
                           <td
                             style={{
@@ -1201,6 +1493,14 @@ export default function SmartImporter({
                                 title={`Este producto ya existe con el código "${dbMatch.code}". Si continúas, se actualizará su código en la BD por "${code}".`}
                               >
                                 ⚠️ Existe en BD con código: {dbMatch.code}
+                              </span>
+                            )}
+                            {codeMatch && (
+                              <span
+                                style={{ display: "block", fontSize: "0.72rem", color: "#ef4444", fontWeight: "bold", marginTop: "2px" }}
+                                title={`El código "${code}" ya pertenece a "${codeMatch.name}" (stock actual: ${codeMatch.stock}). Si continúas, esta fila SOBRESCRIBE ese producto: nombre/precio/costo cambiarán a los de esta fila y el stock quedará en ${resultingStock} (${codeMatch.stock} + ${stock}).`}
+                              >
+                                🚨 Código ya usado por: {codeMatch.name} (stock {codeMatch.stock} → {resultingStock})
                               </span>
                             )}
                           </td>
