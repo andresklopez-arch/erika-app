@@ -24,12 +24,24 @@ export default function Sidebar() {
     }
     return false;
   });
+  const [commitShaShort, setCommitShaShort] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       localStorage.setItem("erika_sidebar_pinned", String(isPinned));
     }
   }, [isPinned]);
+
+  // Para confirmar de un vistazo si un deploy ya llegó, sin tener que
+  // reproducir el bug que se supone que ya se corrigió. Si Vercel no
+  // inyectó la variable (ej. corriendo local con `npm run dev`), se
+  // omite el badge en vez de mostrar "null".
+  useEffect(() => {
+    fetch("/api/version")
+      .then((res) => res.json())
+      .then((json) => setCommitShaShort(json.commitShaShort || null))
+      .catch(() => {});
+  }, []);
 
   // Aviso operativo (no de seguridad RLS) — reutiliza el mismo punto rojo
   // de Configuración, en naranja, para otros avisos de "esto va a fallar
@@ -471,6 +483,22 @@ export default function Sidebar() {
           </>
         )}
       </nav>
+      {commitShaShort && (
+        <div
+          className="nav-text"
+          title={`Versión desplegada: ${commitShaShort}`}
+          style={{
+            marginTop: "auto",
+            padding: "6px 10px",
+            fontSize: "0.65rem",
+            color: "var(--color-text-muted, rgba(255,255,255,0.35))",
+            opacity: 0.6,
+            userSelect: "text",
+          }}
+        >
+          v{commitShaShort}
+        </div>
+      )}
     </aside>
   );
 }
