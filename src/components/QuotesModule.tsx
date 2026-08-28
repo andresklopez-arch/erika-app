@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useBusinessProfile, useAuth } from "./AuthProvider";
 import { cleanMexicanPhone, openWhatsAppChat, formatMexicanPhoneDisplay } from "../lib/whatsapp";
 import { fetchActiveCustomers } from "../lib/customersClient";
-import { saveQuote } from "../lib/quotesClient";
+import { saveQuote, deleteQuotes } from "../lib/quotesClient";
 import { getSmartVolumeDiscount } from "./POSModule";
 import { getQuoteTotalMismatch } from "../lib/quoteTotalCheck";
 import { useSellQuoteToPOS } from "../hooks/useSellQuoteToPOS";
@@ -22,12 +22,20 @@ export default function QuotesModule() {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("ERIKA_QUOTES_ONLY_FOLLOWUP") === "true";
   });
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+  const [isPurging, setIsPurging] = useState(false);
 
   const fetchQuotes = async () => {
     const { data } = await supabase
       .from("quotes")
       .select("*")
+      // "ticket" ya se excluía (es un registro de venta real, no una
+      // propuesta). "cancelled" también se excluye ahora: un ticket
+      // cancelado no debe seguir apareciendo mezclado en "Presupuestos
+      // Guardados" -- sigue existiendo en la base para auditoría, solo ya
+      // no se lista aquí.
       .neq("status", "ticket")
+      .neq("status", "cancelled")
       .order("created_at", { ascending: false });
     if (data) setQuotes(data);
   };
@@ -72,6 +80,71 @@ export default function QuotesModule() {
       : null;
     const needsFollowUp = quote.status === "pending" && daysSinceSent !== null && daysSinceSent >= followUpThresholdDays;
     return { daysSinceSent, needsFollowUp };
+  };
+
+  // Elimina UNA cotización (botón "🗑️" en la lista). No hace falta ser
+  // admin: es solo una propuesta, no un registro de venta -- el servidor
+  // (api/quotes/delete) igual se niega a borrar cualquier fila que ya sea
+  // status="ticket" (venta real), por si acaso.
+  const handleDeleteQuote = async (quote: any) => {
+    if (!window.confirm(`¿Eliminar la cotización #${quote.quote_number} de ${quote.customer_name} ($${quote.total.toFixed(2)})? Esta acción no se puede deshacer.`)) return;
+    setIsDeletingId(quote.id);
+    try {
+      const result = await deleteQuotes([quote.id]);
+      if (result.success) {
+        toast.success("🗑️ Cotización eliminada.");
+        if (selectedQuoteId === quote.id) setSelectedQuoteId("");
+        fetchQuotes();
+      } else {
+        toast.error(result.error || "No se pudo eliminar.");
+      }
+    } finally {
+      setIsDeletingId(null);
+    }
+  };
+
+  // "🧹 Depurar antiguas": limpieza rápida pedida explícitamente -- junta
+  // las cotizaciones "pending"/"expired" de más de PURGE_STALE_DAYS días
+  // que nunca se convirtieron en venta ("ya no regresaron") y muestra una
+  // vista previa antes de borrarlas todas juntas, en vez de que el cajero
+  // tenga que abrirlas una por una para depurarlas a mano.
+  const PURGE_STALE_DAYS = 30;
+  const getPurgeCandidates = () => {
+    const cutoff = Date.now() - PURGE_STALE_DAYS * 86400000;
+    return quotes.filter((q) => (q.status === "pending" || q.status === "expired") && new Date(q.created_at).getTime() < cutoff);
+  };
+
+  const handlePurgeStale = async () => {
+    const candidates = getPurgeCandidates();
+    if (candidates.length === 0) {
+      toast("No hay cotizaciones de más de " + PURGE_STALE_DAYS + " días sin convertir para depurar.", { icon: "ℹ️" });
+      return;
+    }
+    const preview = candidates
+      .slice(0, 8)
+      .map((q) => `• #${q.quote_number} ${q.customer_name} — $${q.total.toFixed(2)}`)
+      .join("\n");
+    const more = candidates.length > 8 ? `\n… y ${candidates.length - 8} más.` : "";
+    if (
+      !window.confirm(
+        `Se eliminarán ${candidates.length} cotización(es) pendiente(s)/expirada(s) con más de ${PURGE_STALE_DAYS} días sin convertirse en venta:\n\n${preview}${more}\n\nEsta acción no se puede deshacer. ¿Continuar?`,
+      )
+    ) {
+      return;
+    }
+    setIsPurging(true);
+    try {
+      const result = await deleteQuotes(candidates.map((q) => q.id));
+      if (result.success) {
+        toast.success(`🧹 ${result.deletedCount || candidates.length} cotización(es) depurada(s).`);
+        setSelectedQuoteId("");
+        fetchQuotes();
+      } else {
+        toast.error(result.error || "No se pudo depurar.");
+      }
+    } finally {
+      setIsPurging(false);
+    }
   };
 
   const handleSellQuote = (quote: any) => sellQuoteToSale(quote);
@@ -252,6 +325,28 @@ export default function QuotesModule() {
               ⏰ solo seguimiento
             </label>
           </div>
+          {getPurgeCandidates().length > 0 && (
+            <button
+              onClick={handlePurgeStale}
+              disabled={isPurging}
+              title={`Elimina las cotizaciones pendientes/expiradas de más de ${PURGE_STALE_DAYS} días que nunca se convirtieron en venta`}
+              style={{
+                width: "100%",
+                marginTop: "10px",
+                padding: "8px 12px",
+                background: "rgba(239, 68, 68, 0.08)",
+                border: "1px dashed rgba(239, 68, 68, 0.5)",
+                borderRadius: "8px",
+                color: "#ef4444",
+                fontSize: "0.8rem",
+                cursor: isPurging ? "wait" : "pointer",
+                textAlign: "left",
+                opacity: isPurging ? 0.6 : 1,
+              }}
+            >
+              {isPurging ? "⏳ Depurando..." : `🧹 Depurar antiguas sin convertir (${getPurgeCandidates().length})`}
+            </button>
+          )}
           {lastSentQuote && (
             <button
               onClick={() => sendWhatsApp(lastSentQuote)}
@@ -345,17 +440,38 @@ export default function QuotesModule() {
                   }}
                 >
                   <span>Cot: #{q.quote_number}</span>
-                  {q.status === "pending" && (
-                    <span style={{ color: "#eab308" }}>Pendiente</span>
-                  )}
-                  {q.status === "converted" && (
-                    <span style={{ color: "var(--color-primary)" }}>
-                      Pagada
-                    </span>
-                  )}
-                  {q.status === "expired" && (
-                    <span style={{ color: "#ef4444" }}>Expirada</span>
-                  )}
+                  <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {q.status === "pending" && (
+                      <span style={{ color: "#eab308" }}>Pendiente</span>
+                    )}
+                    {q.status === "converted" && (
+                      <span style={{ color: "var(--color-primary)" }}>
+                        Pagada
+                      </span>
+                    )}
+                    {q.status === "expired" && (
+                      <span style={{ color: "#ef4444" }}>Expirada</span>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteQuote(q);
+                      }}
+                      disabled={isDeletingId === q.id}
+                      title="Eliminar esta cotización (no se puede deshacer)"
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "rgba(239, 68, 68, 0.6)",
+                        cursor: isDeletingId === q.id ? "wait" : "pointer",
+                        fontSize: "0.85rem",
+                        padding: "2px 4px",
+                        lineHeight: 1,
+                      }}
+                    >
+                      {isDeletingId === q.id ? "⏳" : "🗑️"}
+                    </button>
+                  </span>
                 </div>
               </li>
               );
