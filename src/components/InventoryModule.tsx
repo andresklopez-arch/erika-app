@@ -343,6 +343,15 @@ export default function InventoryModule() {
         await saveInventoryItem({
           id: log.id,
           fields: {
+            // code/name/autoPriced/sale_unit solo vienen en la bitácora de
+            // importación (donde una "sustituir" sí puede cambiarlos) -- el
+            // undo de "combinar duplicados" no los guarda porque esa fusión
+            // nunca los toca; en ese caso quedan undefined y saveInventoryItem
+            // los ignora (solo escribe los campos presentes en `fields`).
+            ...(log.code !== undefined ? { code: log.code } : {}),
+            ...(log.name !== undefined ? { name: log.name } : {}),
+            ...(log.autoPriced !== undefined ? { autoPriced: log.autoPriced } : {}),
+            ...(log.sale_unit !== undefined ? { sale_unit: log.sale_unit } : {}),
             cost: log.cost,
             price: log.price,
             stock: log.stock,
@@ -888,7 +897,7 @@ export default function InventoryModule() {
       }
 
       setUndoStack(prev => {
-        const newStack = [...(prev || []), undoLog].slice(-5);
+        const newStack = [...(prev || []), undoLog].slice(-20);
         if (typeof window !== "undefined") {
           localStorage.setItem("erika_undo_stack", JSON.stringify(newStack));
         }
@@ -2820,12 +2829,16 @@ export default function InventoryModule() {
                     } else {
                       undoLog.push({
                         id: existing.id,
+                        code: existing.code,
+                        name: existing.name,
                         cost: existing.cost,
                         price: existing.price,
                         stock: existing.stock,
                         supplier: existing.supplier,
                         location: existing.location,
                         priceChanged: existing.priceChanged,
+                        autoPriced: existing.autoPriced,
+                        sale_unit: existing.sale_unit,
                         deleted: existing.deleted || false,
                         deleted_at: existing.deleted_at || null
                       });
@@ -2902,7 +2915,7 @@ export default function InventoryModule() {
 
               if (undoLog.length > 0) {
                 setUndoStack(prev => {
-                  const newStack = [...(prev || []), undoLog].slice(-5);
+                  const newStack = [...(prev || []), undoLog].slice(-20);
                   if (typeof window !== "undefined") {
                     localStorage.setItem("erika_undo_stack", JSON.stringify(newStack));
                   }
@@ -3421,12 +3434,20 @@ export default function InventoryModule() {
                           <span style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.7)" }}>piezas ➔</span>
                           <input
                             type="number"
-                            min="1"
+                            min="0"
                             max="100"
+                            step="0.01"
                             value={tier.discountPct}
                             onChange={(e) => {
                               const updated = [...newRuleTiers];
-                              updated[tIdx].discountPct = Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0));
+                              // parsePercentInput (no parseInt): mismo bug
+                              // que ya se corrigió en discount_pct (ver
+                              // scripts/test-decimal-discount.js) -- un
+                              // descuento de 12.5% se guardaba como 12. Esta
+                              // escala de volumen es un campo % hermano que
+                              // quedó fuera de aquel fix; reutiliza el mismo
+                              // helper en vez de truncar de nuevo con parseInt.
+                              updated[tIdx].discountPct = Math.min(100, Math.max(0, parsePercentInput(e.target.value)));
                               setNewRuleTiers(updated);
                             }}
                             style={{

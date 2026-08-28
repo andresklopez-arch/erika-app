@@ -5,11 +5,17 @@
 // la columna en la base ya es `numeric`. El fix extrajo el parseo a
 // src/lib/parsePercent.ts para que los 3 sitios compartan la misma lógica.
 //
+// 2026-08-27: el mismo bug apareció en un 4to sitio -- el % de las "Escalas
+// de Descuento" (Reglas de Descuento Inteligente por volumen, newRuleTiers)
+// seguía usando parseInt porque es un campo % hermano, no discount_pct, y
+// quedó fuera del escaneo original. Se agrega aquí para que un 5to sitio
+// futuro tampoco se escape.
+//
 // Parte 1 (lógica pura): importa parsePercentInput() REAL de producción.
 // Parte 2 (escaneo estático): confirma que ningún sitio de
-// InventoryModule.tsx relacionado a discount_pct volvió a usar `parseInt`
-// directo -- así una regresión futura (alguien "simplificando" el código)
-// se detecta aquí en vez de en un reporte de WhatsApp.
+// InventoryModule.tsx relacionado a un campo % de descuento volvió a usar
+// `parseInt` directo -- así una regresión futura (alguien "simplificando" el
+// código) se detecta aquí en vez de en un reporte de WhatsApp.
 //
 // Uso: npm run test-decimal-discount
 
@@ -44,7 +50,7 @@ const lines = src.split("\n");
 
 const offenders = [];
 lines.forEach((line, idx) => {
-  const isDiscountPctLine = /discount_pct|PromoDiscountPct|BulkPromoPct/.test(line);
+  const isDiscountPctLine = /discount_pct|PromoDiscountPct|BulkPromoPct|discountPct/.test(line);
   const usesParseInt = /parseInt\s*\(/.test(line);
   if (isDiscountPctLine && usesParseInt) {
     offenders.push(`  línea ${idx + 1}: ${line.trim()}`);
@@ -54,12 +60,12 @@ lines.forEach((line, idx) => {
 assert(
   offenders.length === 0,
   offenders.length === 0
-    ? "Ningún sitio relacionado a discount_pct en InventoryModule.tsx usa parseInt"
-    : `Se encontró parseInt en líneas relacionadas a discount_pct:\n${offenders.join("\n")}`,
+    ? "Ningún sitio relacionado a un % de descuento en InventoryModule.tsx usa parseInt"
+    : `Se encontró parseInt en líneas relacionadas a un % de descuento:\n${offenders.join("\n")}`,
 );
 
 const usesSharedHelper = (src.match(/parsePercentInput\(/g) || []).length;
-assert(usesSharedHelper >= 3, `InventoryModule.tsx usa parsePercentInput() en los 3 sitios esperados (encontrados: ${usesSharedHelper})`);
+assert(usesSharedHelper >= 4, `InventoryModule.tsx usa parsePercentInput() en los 4 sitios esperados (encontrados: ${usesSharedHelper})`);
 
 if (failures > 0) {
   console.error(`\n${failures} verificación(es) fallaron.`);
