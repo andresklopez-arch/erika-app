@@ -1,8 +1,15 @@
+// \u00danico punto de la app que quita acentos para comparar texto sin
+// importar may\u00fasculas/tilde -- antes esta misma l\u00f3gica de 4 l\u00edneas
+// estaba copiada 9 veces en 5 archivos (levenshtein.ts, SmartImporter.tsx,
+// InventoryModule.tsx x4, POSModule.tsx, smartVolumeDiscount.ts), cada
+// una arriesgando divergir con el tiempo (ej. alguna con .trim(), otra
+// sin \u00e9l, como pasaba aqu\u00ed).
 export function normalizeText(text: string): string {
-  return text
+  return (text || "")
+    .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
+    .trim();
 }
 
 export function levenshteinDistance(aStr: string, bStr: string): number {

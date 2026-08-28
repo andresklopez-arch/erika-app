@@ -15,14 +15,12 @@ import AuditModule from "./AuditModule";
 import { useAuth } from "./AuthProvider";
 import { LoggerService } from "../services/loggerService";
 import { parsePercentInput } from "../lib/parsePercent";
+import { normalizeText } from "../utils/levenshtein";
 import { saveInventoryItem, bulkUpdateInventory, deleteInventoryItem, reduceInventoryStock, bulkImportInventory } from "../lib/inventoryClient";
 
 const normalizeString = (str: string) => {
   if (!str) return "";
-  return str
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+  return normalizeText(str)
     .replace(/[^a-z0-9]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -49,10 +47,7 @@ const highlightText = (text: string | undefined, query: string) => {
   if (!text) return "";
   if (!query.trim()) return text;
   
-  const tokens = query
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+  const tokens = normalizeText(query)
     .split(/\s+/)
     .filter(Boolean);
   if (tokens.length === 0) return text;
@@ -65,8 +60,8 @@ const highlightText = (text: string | undefined, query: string) => {
     <>
       {parts.map((part, index) => {
         const isMatch = tokens.some(t => {
-          const normPart = part.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-          const normT = t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          const normPart = normalizeText(part);
+          const normT = normalizeText(t);
           return normPart === normT;
         });
         return isMatch ? (
@@ -232,8 +227,7 @@ export default function InventoryModule() {
     } catch (e) {}
   };
 
-  const normalizeRuleTarget = (s: string) =>
-    (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  const normalizeRuleTarget = normalizeText;
 
   const handleAddSmartRule = () => {
     if (!newRuleName.trim()) {
@@ -3411,10 +3405,36 @@ export default function InventoryModule() {
                           }}
                         />
                         <datalist id="smart-target-suggestions">
-                          {newRuleTargetType === "supplier"
-                            ? dbSuppliers.map((s) => <option key={s} value={s} />)
-                            : allItems.slice(0, 100).map((i) => <option key={i.id} value={i.name} />)}
+                          {newRuleTargetType === "supplier" ? (
+                            dbSuppliers.map((s) => <option key={s} value={s} />)
+                          ) : (
+                            <>
+                              {allItems.slice(0, 100).map((i) => <option key={i.id} value={i.name} />)}
+                              {newRuleTargetType === "product" &&
+                                allItems.slice(0, 100).filter((i) => i.code).map((i) => <option key={`code-${i.id}`} value={i.code} />)}
+                            </>
+                          )}
                         </datalist>
+                        {(() => {
+                          // "Producto Específico" empareja por código O por
+                          // nombre (ver getSmartVolumeDiscount). Si el texto
+                          // capturado coincide con el NOMBRE de más de un
+                          // producto (160+ grupos de nombre duplicado en el
+                          // catálogo real, ver test-pos-matching), la regla
+                          // aplicaría a todos ellos aunque la intención fuera
+                          // apuntar a uno solo -- se avisa para que use el
+                          // código en su lugar, que sí es único.
+                          if (newRuleTargetType !== "product" || !newRuleTargetValue.trim()) return null;
+                          const targetNorm = normalizeRuleTarget(newRuleTargetValue);
+                          const matchingByName = allItems.filter((i) => normalizeRuleTarget(i.name) === targetNorm);
+                          const matchingByCode = allItems.filter((i) => (i.code || "").toLowerCase().trim() === targetNorm);
+                          if (matchingByCode.length > 0 || matchingByName.length <= 1) return null;
+                          return (
+                            <div style={{ fontSize: "0.75rem", color: "#fbbf24", marginTop: "4px" }}>
+                              ⚠️ Ese nombre corresponde a {matchingByName.length} productos distintos -- la regla aplicaría a todos. Usa el código de uno específico si solo quieres afectar ese producto.
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
@@ -3560,6 +3580,67 @@ export default function InventoryModule() {
                     })()}
                     {(() => {
                       const maxDisc = Math.max(...newRuleTiers.map(t => Number(t.discountPct) || 0), 0);
+                      if (maxDisc <= 0) return null;
+
+                      // Antes "Margen Seguro" solo miraba el % (fijo a 25%)
+                      // sin ver el costo real de NINGÚN producto. Ahora, si
+                      // se puede identificar qué productos ya afectaría esta
+                      // regla, se calcula el margen real que quedaría con el
+                      // descuento máximo de las escalas -- un 15% puede ser
+                      // seguro para un producto con 60% de margen, o llevar
+                      // a vender con pérdida a uno con 18%; un aviso fijo al
+                      // 25% no distinguía esos dos casos.
+                      const targetNorm = normalizeRuleTarget(newRuleTargetValue);
+                      const matchingItems =
+                        newRuleTargetType === "all"
+                          ? allItems
+                          : targetNorm === ""
+                            ? []
+                            : allItems.filter((i) => {
+                                if (newRuleTargetType === "keyword") return normalizeRuleTarget(i.name).includes(targetNorm);
+                                if (newRuleTargetType === "supplier") return (i.supplier || "").toLowerCase().trim().includes(targetNorm);
+                                if (newRuleTargetType === "product") return (i.code || "").toLowerCase().trim() === targetNorm || normalizeRuleTarget(i.name) === targetNorm;
+                                return false;
+                              });
+                      const withCost = matchingItems.filter((i) => Number(i.cost) > 0 && Number(i.price) > 0);
+
+                      if (withCost.length > 0) {
+                        const impacted = withCost.map((i) => {
+                          const discountedPrice = Number(i.price) * (1 - maxDisc / 100);
+                          const marginPct = discountedPrice > 0 ? ((discountedPrice - Number(i.cost)) / discountedPrice) * 100 : -100;
+                          return { name: i.name, marginPct };
+                        });
+                        const losingMoney = impacted.filter((i) => i.marginPct < 0).sort((a, b) => a.marginPct - b.marginPct);
+                        const thinMargin = impacted.filter((i) => i.marginPct >= 0 && i.marginPct < 10);
+
+                        if (losingMoney.length > 0) {
+                          const examples = losingMoney.slice(0, 3).map((i) => `${i.name} (${i.marginPct.toFixed(0)}%)`).join(", ");
+                          return (
+                            <div style={{ marginTop: "10px", background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.4)", borderRadius: "6px", padding: "8px 10px", fontSize: "0.78rem", color: "#fca5a5", display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ fontSize: "1rem" }}>🚨</span>
+                              <span>
+                                <strong>Vendiendo con pérdida:</strong> con {maxDisc}% de descuento, {losingMoney.length} de {withCost.length} producto(s) quedarían por DEBAJO de su costo: {examples}{losingMoney.length > 3 ? "…" : ""}.
+                              </span>
+                            </div>
+                          );
+                        }
+                        if (thinMargin.length > 0) {
+                          return (
+                            <div style={{ marginTop: "10px", background: "rgba(245, 158, 11, 0.12)", border: "1px solid rgba(245, 158, 11, 0.35)", borderRadius: "6px", padding: "8px 10px", fontSize: "0.78rem", color: "#fde047", display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ fontSize: "1rem" }}>🛡️</span>
+                              <span>
+                                <strong>Margen Seguro:</strong> con {maxDisc}% de descuento, {thinMargin.length} de {withCost.length} producto(s) que coinciden quedarían con menos del 10% de margen. Verifica que valga la pena.
+                              </span>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }
+
+                      // Sin productos identificables para calcular el margen
+                      // real (ej. todavía no se terminó de escribir la
+                      // palabra clave) -- se cae de regreso al aviso
+                      // genérico anterior, mejor que no avisar nada.
                       if (maxDisc >= 25) {
                         return (
                           <div

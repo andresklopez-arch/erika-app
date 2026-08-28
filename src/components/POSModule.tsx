@@ -24,6 +24,7 @@ import { saveQuote } from "../lib/quotesClient";
 import { cleanMexicanPhone, openWhatsAppChat } from "../lib/whatsapp";
 import { matchesProduct } from "../lib/posItemMatch";
 import { getSmartVolumeDiscount, getNextSmartVolumeTier } from "../lib/smartVolumeDiscount";
+import { normalizeText } from "../utils/levenshtein";
 import { Z_INDEX } from "../lib/zIndex";
 import { usePinPrompt } from "../hooks/usePinPrompt";
 
@@ -1069,9 +1070,7 @@ export default function POSModule() {
     }
   };
 
-  const normalizeString = (str: string) => {
-    return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-  };
+  const normalizeString = normalizeText;
 
   const searchNormalized = normalizeString(searchInput);
   const queryWords = searchNormalized.split(/\s+/).filter(w => w.length > 0);

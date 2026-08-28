@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabaseClient";
 import { saveSupplier } from "../lib/suppliersClient";
+import { normalizeText } from "../utils/levenshtein";
 
 // Un solo lugar para este número -- antes el .limit() de la consulta y el
 // texto "últimas N importaciones" de la interfaz se podían desincronizar
@@ -23,10 +24,7 @@ interface SmartImporterProps {
 // Normalizador de cadenas para comparación de nombres
 const normalizeString = (str: string) => {
   if (!str) return "";
-  return str
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+  return normalizeText(str)
     .replace(/[^a-z0-9]/g, " ")
     .replace(/\s+/g, " ")
     .trim();

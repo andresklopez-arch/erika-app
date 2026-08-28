@@ -24,6 +24,13 @@ export interface SmartVolumeRule {
   active: boolean;
 }
 
+// No se importa normalizeText de ../utils/levenshtein aqui: este archivo
+// lo carga directo scripts/test-decimal-discount.js via require() bajo
+// --experimental-strip-types, y a diferencia del bundler de Next.js, Node
+// no resuelve imports relativos SIN extension entre dos archivos .ts (el
+// import de nivel superior en el propio require() si se resuelve bien,
+// pero uno anidado dentro del archivo requerido no). Se mantiene esta
+// copia minima en vez de arriesgar romper esa prueba.
 const normalize = (s: string) =>
   (s || "")
     .toLowerCase()
