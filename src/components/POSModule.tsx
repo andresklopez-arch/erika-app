@@ -168,12 +168,19 @@ export const formatTicketFolio = (rawId: any): string => {
 // romper el import existente en QuotesModule.tsx (`from "./POSModule"`).
 export { getSmartVolumeDiscount, getNextSmartVolumeTier };
 
-const getItemFinalPrice = (item: any, wholesaleRules: any, smartVolumeRules?: any[]): number => {
-  const isWholesale = item.qty >= wholesaleRules.minQty;
-  const wholesaleDiscountPct = isWholesale ? (wholesaleRules.discountPct || 0) : 0;
+// El "Mayoreo Automático" (descuento fijo global a partir de N piezas,
+// configurado en Configuración) se retiró: era redundante con el Descuento
+// Inteligente (que ya cubre el mismo caso con una regla targetType:"all")
+// y, al combinarse con Math.max, podía "ganarle" a la regla inteligente y
+// quedarse aplicado a un producto que no debía llevar ese descuento en
+// particular -- el "se queda fijado aunque se cambie de producto" que se
+// reportó. _wholesaleRules se deja en la firma (sin usarse) para no tener
+// que tocar sus ~20 sitios de llamada en este archivo; ya no influye en el
+// precio final.
+const getItemFinalPrice = (item: any, _wholesaleRules: any, smartVolumeRules?: any[]): number => {
   const productDiscountPct = item.discountPct || 0;
   const smartDisc = smartVolumeRules ? getSmartVolumeDiscount(item, smartVolumeRules).discountPct : 0;
-  const maxDiscountPct = Math.max(wholesaleDiscountPct, productDiscountPct, smartDisc);
+  const maxDiscountPct = Math.max(productDiscountPct, smartDisc);
   return item.price * (1 - maxDiscountPct / 100);
 };
 
@@ -2606,8 +2613,12 @@ export default function POSModule() {
   const totalCost = activeTicket.items.reduce((sum, item) => sum + (item.cost * item.qty), 0);
   
   // Ahorro por productos individual con descuento o volumen inteligente (Sugerencia 2)
+  // pNormal es el precio de lista, sin ningún descuento -- antes calculaba
+  // mal aquí mismo un descuento de Mayoreo (ya retirado) como si fuera el
+  // precio "normal", lo que habría restado mal el ahorro real en cuanto ese
+  // ajuste tuviera un valor distinto de cero.
   const itemDiscountsSavings = activeTicket.items.reduce((sum, item) => {
-    const pNormal = item.qty >= wholesaleRules.minQty ? item.price * (1 - wholesaleRules.discountPct / 100) : item.price;
+    const pNormal = item.price;
     const pDiscounted = getItemFinalPrice(item, wholesaleRules, smartVolumeRules);
     return sum + (pNormal - pDiscounted) * item.qty;
   }, 0);
@@ -4397,13 +4408,12 @@ export default function POSModule() {
                                 ⚡ VOLUMEN ({smartDisc.tierQty}+ {item.unit || 'pz'}): -{smartDisc.discountPct}%
                               </span>
                             );
-                          } else if (item.qty >= wholesaleRules.minQty) {
-                            return (
-                              <span style={{ marginLeft: "10px", background: "#3b82f6", color: "white", padding: "2px 6px", borderRadius: "4px", fontSize: "0.7rem", fontWeight: "bold" }}>
-                                 MAYOREO -{wholesaleRules.discountPct}%
-                              </span>
-                            );
                           }
+                          // El badge de "MAYOREO" se retiró junto con el
+                          // Mayoreo Automático (ver getItemFinalPrice):
+                          // Descuento Inteligente ya cubre este caso con
+                          // una regla targetType:"all", que sí se refleja
+                          // arriba como "⚡ VOLUMEN".
                           return null;
                         })()}
                         {selectedCustomerId && JSON.parse(localStorage.getItem(`ERIKA_CLIENT_HISTORY_${selectedCustomerId}`) || "{}")[item.name] && (

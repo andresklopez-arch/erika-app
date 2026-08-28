@@ -41,8 +41,6 @@ export default function SettingsModule() {
   const [earnPoints, setEarnPoints] = useState("1"); // Gana 1 punto
   const [redeemRate, setRedeemRate] = useState("10"); // 10 puntos = $1 de descuento
   const [theme, setTheme] = useState("dark");
-  const [wholesaleMinQty, setWholesaleMinQty] = useState("10");
-  const [wholesaleDiscount, setWholesaleDiscount] = useState("10");
   const [quoteFollowupDays, setQuoteFollowupDays] = useState("2");
   const [customerListWarnThreshold, setCustomerListWarnThreshold] = useState("2000");
   const [customerListDangerThreshold, setCustomerListDangerThreshold] = useState("4000");
@@ -613,8 +611,6 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
       setEarnPoints(String(businessSettings.config.earn_points));
       setRedeemRate(String(businessSettings.config.redeem_rate));
       setTheme(businessSettings.config.theme);
-      setWholesaleMinQty(String(businessSettings.config.wholesale_min_qty));
-      setWholesaleDiscount(String(businessSettings.config.wholesale_discount));
       setQuoteFollowupDays(String(businessSettings.config.quote_followup_days || 2));
       setCustomerListWarnThreshold(String(businessSettings.config.customer_list_warn_threshold || 2000));
       setCustomerListDangerThreshold(String(businessSettings.config.customer_list_danger_threshold || 4000));
@@ -707,19 +703,6 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
     });
     if (success) {
       alert("✅ Tasas del Programa de Lealtad actualizadas.");
-    }
-  };
-
-  const saveWholesaleConfig = async () => {
-    if (!checkAdmin()) return;
-    const success = await updateBusinessSettings({
-      config: {
-        wholesale_min_qty: parseNumOr(wholesaleMinQty, 10),
-        wholesale_discount: parseNumOr(wholesaleDiscount, 10),
-      }
-    });
-    if (success) {
-      alert("✅ Configuración de Mayoreo Automático guardada.");
     }
   };
 
@@ -1618,22 +1601,15 @@ WHERE schemaname = 'public' AND tablename = '${table}';`;
             </div>
           </div>
           
-          <div className="glass-panel" style={{ border: "1px solid #3b82f6" }}>
-            <h3 style={{ margin: "0 0 20px 0", color: "#3b82f6", display: "flex", alignItems: "center", gap: "10px" }}>
-              🛒 Descuentos Automáticos por Mayoreo
-            </h3>
-            <div style={{ marginBottom: "15px" }}>
-              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Cantidad Mínima para Mayoreo (piezas):</label>
-              <input type="number" value={wholesaleMinQty} onChange={e => setWholesaleMinQty(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
-            </div>
-            <div style={{ marginBottom: "20px" }}>
-              <label style={{ display: "block", marginBottom: "5px", fontSize: "0.9rem" }}>Descuento a aplicar (%):</label>
-              <input type="number" value={wholesaleDiscount} onChange={e => setWholesaleDiscount(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid var(--glass-border)", background: "rgba(0,0,0,0.3)", color: "var(--color-text)" }} />
-            </div>
-            <button className="btn-primary" onClick={saveWholesaleConfig} style={{ width: "100%", background: "transparent", border: "1px solid #3b82f6", color: "#3b82f6" }}>
-              💾 Guardar Reglas de Mayoreo
-            </button>
-          </div>
+          {/* "Descuentos Automáticos por Mayoreo" se retiró: era redundante
+              con Descuento Inteligente (Inventario -> Escalas por Volumen),
+              que ya cubre el mismo caso con una regla targetType:"all" y,
+              a diferencia de Mayoreo, sí distingue producto por producto en
+              vez de aplicar un % fijo a cualquier línea del carrito que
+              alcance la cantidad mínima -- eso era justo lo que causaba que
+              el descuento se sintiera "pegado" al cambiar de producto. La
+              lógica de precio en POSModule.tsx (getItemFinalPrice) ya no lee
+              wholesale_min_qty/wholesale_discount. */}
 
           <div className="glass-panel" style={{ border: "1px solid #f97316" }}>
             <h3 style={{ margin: "0 0 20px 0", color: "#f97316", display: "flex", alignItems: "center", gap: "10px" }}>
